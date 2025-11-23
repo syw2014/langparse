@@ -52,6 +52,37 @@ Once v0.1 is released, you will be able to install it via pip:
 pip install langparse
 ```
 
+## ⚡ Quick Start (Alpha)
+
+You can try the current alpha version by cloning the repository:
+
+```bash
+git clone https://github.com/syw2014/langparse.git
+cd langparse
+pip install -e .
+```
+
+### Basic Usage
+
+```python
+from langparse import MarkdownParser, SemanticChunker
+
+# 1. Initialize
+parser = MarkdownParser()
+chunker = SemanticChunker()
+
+# 2. Parse a file (currently supports .md)
+doc = parser.parse("README.md")
+
+# 3. Chunk it semantically
+chunks = chunker.chunk(doc)
+
+# 4. Inspect chunks
+for chunk in chunks:
+    print(f"Header Path: {chunk.metadata.get('header_path')}")
+    print(f"Content: {chunk.content[:50]}...")
+```
+
 ## 💬 Contact
 
 For questions, feature requests, or bug reports, the preferred method is to **open an issue** on this GitHub repository. This allows for transparent discussion and helps other users who might have the same question.

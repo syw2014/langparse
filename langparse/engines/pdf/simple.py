@@ -30,5 +30,10 @@ class SimplePDFEngine(BasePDFEngine):
                 
                 yield PageResult(
                     page_number=i + 1,
-                    markdown_content=text
+                    markdown_content=text,
+                    plain_text=text,
+                    elements=[],
+                    tables=[],
+                    images=[],
+                    metadata={"engine_name": "simple"},
                 )

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(npm install:*)",
+      "Bash(npx skills:*)",
+      "Bash(lark-cli config:*)",
+      "Bash(lark-cli auth:*)"
+    ]
+  }
+}

@@ -1,5 +1,7 @@
 import subprocess
 from contextlib import contextmanager
+import json
+from pathlib import Path
 
 import pytest
 
@@ -212,7 +214,11 @@ def test_service_manager_starts_local_service_when_api_url_missing(monkeypatch):
             return 0
 
     monkeypatch.setattr(manager, "_is_healthy", lambda client: False)
-    monkeypatch.setattr(manager, "_start_local_service", lambda: StubProcess())
+    monkeypatch.setattr(
+        manager,
+        "_start_local_service",
+        lambda home_override=None: StubProcess(),
+    )
     monkeypatch.setattr(manager, "_stop_process", lambda process: health_attempts.setdefault("stopped", True))
     monkeypatch.setattr(
         "langparse.engines.pdf.mineru_service.MinerUClient",
@@ -224,6 +230,64 @@ def test_service_manager_starts_local_service_when_api_url_missing(monkeypatch):
 
     assert health_attempts["count"] >= 2
     assert health_attempts["stopped"] is True
+
+
+def test_service_manager_uses_local_model_dir_via_generated_mineru_home(tmp_path):
+    model_dir = tmp_path / "models"
+    model_dir.mkdir()
+    (model_dir / "weights.bin").write_text("x", encoding="utf-8")
+    manager = MinerUServiceManager(model_dir=str(model_dir))
+
+    with manager._prepare_local_home() as home_override:
+        assert home_override is not None
+        config_path = Path(home_override) / "mineru.json"
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+
+    assert payload["models-dir"] == {
+        "pipeline": str(model_dir),
+        "vlm": str(model_dir),
+    }
+
+
+def test_service_manager_uses_download_dir_as_home_root(tmp_path):
+    download_dir = tmp_path / "downloads"
+    manager = MinerUServiceManager(download_dir=str(download_dir))
+
+    with manager._prepare_local_home() as home_override:
+        assert home_override == str(download_dir)
+
+
+def test_service_manager_sets_local_model_source_when_model_dir_present(tmp_path):
+    model_dir = tmp_path / "models"
+    model_dir.mkdir()
+    manager = MinerUServiceManager(model_dir=str(model_dir))
+
+    env = manager._build_process_env(home_override=str(tmp_path / "home"))
+
+    assert env["HOME"] == str(tmp_path / "home")
+    assert env["MINERU_MODEL_SOURCE"] == "local"
+
+
+def test_service_manager_require_existing_rejects_missing_model_dir(tmp_path):
+    manager = MinerUServiceManager(
+        model_dir=str(tmp_path / "missing"),
+        model_policy="require_existing",
+    )
+
+    with pytest.raises(RuntimeError, match="model_policy=require_existing"):
+        manager._validate_model_policy()
+
+
+def test_service_manager_require_existing_accepts_existing_download_home(tmp_path):
+    home_root = tmp_path / "mineru-home"
+    home_root.mkdir()
+    (home_root / ".mineru").mkdir()
+    manager = MinerUServiceManager(
+        download_dir=str(home_root),
+        model_policy="require_existing",
+    )
+
+    manager._validate_model_policy()
 
 
 def test_service_manager_raises_clear_error_when_command_missing():

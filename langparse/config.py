@@ -26,6 +26,8 @@ class Config:
         "LANGPARSE_MINERU_API_PORT": "engines.mineru.api_port",
         "LANGPARSE_MINERU_API_COMMAND": "engines.mineru.api_command",
         "LANGPARSE_MINERU_API_START_TIMEOUT": "engines.mineru.api_start_timeout",
+        "LANGPARSE_MINERU_MODEL_POLICY": "engines.mineru.model_policy",
+        "LANGPARSE_MINERU_MODEL_SOURCE": "engines.mineru.model_source",
     }
 
     DEFAULT_CONFIG = {
@@ -42,6 +44,8 @@ class Config:
                 "api_command": "mineru-api",
                 "api_start_timeout": 30.0,
                 "request_timeout": 300.0,
+                "model_policy": "download_if_missing",
+                "model_source": None,
                 "extra_options": {},
             },
             "vision_llm": {

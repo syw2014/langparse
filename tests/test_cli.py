@@ -20,6 +20,8 @@ def test_cli_accepts_parse_command():
             "markdown",
             "--api-url",
             "http://mineru.example:8000",
+            "--model-policy",
+            "require_existing",
         ]
     )
 
@@ -27,6 +29,7 @@ def test_cli_accepts_parse_command():
     assert args.engine == "mineru"
     assert args.format == "markdown"
     assert args.api_url == "http://mineru.example:8000"
+    assert args.model_policy == "require_existing"
 
 
 def test_cli_batch_command_supports_output_dir():
@@ -209,6 +212,10 @@ def test_cli_main_single_parse_passes_mineru_api_kwargs(monkeypatch):
             "mineru-api",
             "--api-start-timeout",
             "12",
+            "--model-policy",
+            "require_existing",
+            "--model-source",
+            "local",
         ]
     )
 
@@ -224,6 +231,8 @@ def test_cli_main_single_parse_passes_mineru_api_kwargs(monkeypatch):
                 "api_port": 8010,
                 "api_command": "mineru-api",
                 "api_start_timeout": 12.0,
+                "model_policy": "require_existing",
+                "model_source": "local",
             },
         )
     ]

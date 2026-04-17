@@ -100,6 +100,11 @@ Runtime selection works like this:
 
 You can still control CPU/GPU selection and model/download directories through runtime parameters or configuration.
 
+For local managed services:
+- `model_dir` means "use this already-downloaded MinerU model directory"
+- `download_dir` becomes the MinerU home root used by the local service, so MinerU will keep its default cache/config layout under that directory
+- `model_policy="require_existing"` disables first-run download fallback and requires an existing local model setup
+
 ```python
 from langparse import AutoParser
 
@@ -123,6 +128,17 @@ cpu_doc = AutoParser.parse(
 )
 ```
 
+```python
+from langparse import AutoParser
+
+local_doc = AutoParser.parse(
+    "paper.pdf",
+    engine="mineru",
+    model_dir="./preloaded-models",
+    model_policy="require_existing",
+)
+```
+
 Environment variables:
 
 ```bash
@@ -130,6 +146,7 @@ export LANGPARSE_MINERU_API_URL=http://127.0.0.1:8000
 export LANGPARSE_MINERU_DEVICE=cuda
 export LANGPARSE_MINERU_MODEL_DIR=./models
 export LANGPARSE_MINERU_DOWNLOAD_DIR=./downloads
+export LANGPARSE_MINERU_MODEL_POLICY=require_existing
 ```
 
 ### CLI Examples
@@ -150,6 +167,12 @@ If you want LangParse to manage a local MinerU service, omit `--api-url`. You ca
 
 ```bash
 langparse parse paper.pdf --engine mineru --api-command "mineru-api" --api-host 127.0.0.1 --api-port 8000
+```
+
+Use an existing local model directory without allowing implicit downloads:
+
+```bash
+langparse parse paper.pdf --engine mineru --model-dir ./preloaded-models --model-policy require_existing
 ```
 
 ## 💬 Contact

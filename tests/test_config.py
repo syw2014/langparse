@@ -18,6 +18,8 @@ def isolated_langparse_config_env(tmp_path, monkeypatch):
         "LANGPARSE_MINERU_API_PORT",
         "LANGPARSE_MINERU_API_COMMAND",
         "LANGPARSE_MINERU_API_START_TIMEOUT",
+        "LANGPARSE_MINERU_MODEL_POLICY",
+        "LANGPARSE_MINERU_MODEL_SOURCE",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -76,6 +78,8 @@ def test_default_mineru_values_are_exposed():
     assert settings.get("engines.mineru.api_port") == 8000
     assert settings.get("engines.mineru.api_command") == "mineru-api"
     assert settings.get("engines.mineru.api_start_timeout") == 30.0
+    assert settings.get("engines.mineru.model_policy") == "download_if_missing"
+    assert settings.get("engines.mineru.model_source") is None
     assert settings.get("engines.mineru.extra_options") == {}
 
 

@@ -26,6 +26,8 @@ class MinerUEngine(BasePDFEngine):
         api_command: str = "mineru-api",
         api_start_timeout: float = 30.0,
         request_timeout: float = 300.0,
+        model_policy: str = "download_if_missing",
+        model_source: str | None = None,
         extra_options: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
@@ -39,6 +41,8 @@ class MinerUEngine(BasePDFEngine):
         self.api_command = api_command
         self.api_start_timeout = api_start_timeout
         self.request_timeout = request_timeout
+        self.model_policy = model_policy
+        self.model_source = model_source
         self.extra_options = {**(extra_options or {}), **kwargs}
 
     def _cuda_available(self) -> bool:
@@ -83,6 +87,10 @@ class MinerUEngine(BasePDFEngine):
             "command": self.api_command,
             "start_timeout": self.api_start_timeout,
             "request_timeout": self.request_timeout,
+            "model_dir": self.model_dir,
+            "download_dir": self.download_dir,
+            "model_policy": self.model_policy,
+            "model_source": self.model_source,
         }
 
     def _create_client(self, base_url: str) -> MinerUClient:
@@ -136,9 +144,11 @@ class MinerUEngine(BasePDFEngine):
             metadata={
                 "device": runtime_config["device"],
                 "model_dir": runtime_config["model_dir"],
-                "download_dir": runtime_config["download_dir"],
-                "enable_ocr": runtime_config["enable_ocr"],
-            },
+            "download_dir": runtime_config["download_dir"],
+            "enable_ocr": runtime_config["enable_ocr"],
+            "model_policy": self.model_policy,
+            "model_source": self.model_source,
+        },
         )
 
     def process(self, file_path: Path, **kwargs) -> Iterator[PageResult]:

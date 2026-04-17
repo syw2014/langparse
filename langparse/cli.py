@@ -22,6 +22,8 @@ def build_parser():
     parse_cmd.add_argument("--api-port", type=int, default=None)
     parse_cmd.add_argument("--api-command", default=None)
     parse_cmd.add_argument("--api-start-timeout", type=float, default=None)
+    parse_cmd.add_argument("--model-policy", choices=["download_if_missing", "require_existing"], default=None)
+    parse_cmd.add_argument("--model-source", default=None)
     parse_cmd.add_argument("--format", default="markdown")
     parse_cmd.add_argument("--batch", action="store_true")
     parse_cmd.add_argument("--output", default=None)
@@ -49,6 +51,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "api_port": args.api_port,
             "api_command": args.api_command,
             "api_start_timeout": args.api_start_timeout,
+            "model_policy": args.model_policy,
+            "model_source": args.model_source,
         }.items()
         if value is not None
     }

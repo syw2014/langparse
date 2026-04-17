@@ -52,6 +52,13 @@ Once v0.1 is released, you will be able to install it via pip:
 pip install langparse
 ```
 
+If you need the MinerU runtime, install the optional extra:
+
+```bash
+pip install "langparse[mineru]"
+pip install "langparse[all]"
+```
+
 ## ⚡ Quick Start (Alpha)
 
 You can try the current alpha version by cloning the repository:
@@ -81,6 +88,50 @@ chunks = chunker.chunk(doc)
 for chunk in chunks:
     print(f"Header Path: {chunk.metadata.get('header_path')}")
     print(f"Content: {chunk.content[:50]}...")
+```
+
+### MinerU Runtime
+
+LangParse already exposes the MinerU engine interface, optional dependency group, and runtime parameters for CPU/GPU selection plus model/download directories.
+
+Current limitation: the real `magic-pdf` execution path is still a placeholder. Today this means you can wire configuration and integration code against the MinerU adapter, but actual MinerU parsing is not complete yet.
+
+Planned usage shape:
+
+```python
+from langparse import AutoParser
+
+doc = AutoParser.parse(
+    "paper.pdf",
+    engine="mineru",
+    device="cuda",
+    model_dir="./models",
+)
+```
+
+```python
+from langparse import AutoParser
+
+cpu_doc = AutoParser.parse(
+    "paper.pdf",
+    engine="mineru",
+    device="cpu",
+    download_dir="./downloads",
+)
+```
+
+### CLI Examples
+
+Single-file parsing:
+
+```bash
+langparse parse paper.pdf --engine mineru --device cuda --model-dir ./models --download-dir ./downloads --format json
+```
+
+Batch parsing:
+
+```bash
+langparse parse docs/ --engine mineru --batch --output-dir out --format json
 ```
 
 ## 💬 Contact

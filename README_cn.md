@@ -52,6 +52,59 @@
 pip install langparse
 ```
 
+如果需要 MinerU 运行时，请安装可选依赖：
+
+```bash
+pip install "langparse[mineru]"
+pip install "langparse[all]"
+```
+
+## ⚡ 快速开始 (Alpha)
+
+### MinerU 运行时
+
+LangParse 目前已经提供了 MinerU 引擎接口、可选依赖安装方式，以及 CPU / GPU 目标、模型目录、下载目录等运行时参数。
+
+当前限制：真实的 `magic-pdf` 执行链路仍然是占位实现。也就是说，现在可以先按这个接口完成配置、集成和调用路径接入，但实际 MinerU 解析能力还没有完全落地。
+
+预期使用形态如下：
+
+```python
+from langparse import AutoParser
+
+doc = AutoParser.parse(
+    "paper.pdf",
+    engine="mineru",
+    device="cuda",
+    model_dir="./models",
+)
+```
+
+```python
+from langparse import AutoParser
+
+cpu_doc = AutoParser.parse(
+    "paper.pdf",
+    engine="mineru",
+    device="cpu",
+    download_dir="./downloads",
+)
+```
+
+### CLI 示例
+
+单文件解析：
+
+```bash
+langparse parse paper.pdf --engine mineru --device cuda --model-dir ./models --download-dir ./downloads --format json
+```
+
+批量解析：
+
+```bash
+langparse parse docs/ --engine mineru --batch --output-dir out --format json
+```
+
 ## 📝 引用 LangParse
 
 如果您在您的研究、产品或出版物中使用了 LangParse，我们非常欢迎您的引用！您可以使用以下 BibTeX 条目：

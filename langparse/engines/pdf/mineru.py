@@ -2,8 +2,10 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from langparse.core.engine import PageResult
+from langparse.engines.pdf.mineru_client import MinerUClient
+from langparse.engines.pdf.mineru_service import MinerUServiceManager
 from langparse.engines.pdf.simple import BasePDFEngine
-from langparse.types import ParsedDocumentResult, ParsedPageResult
+from langparse.types import ParsedDocumentResult, ParsedElement, ParsedPageResult
 
 
 class MinerUEngine(BasePDFEngine):
@@ -18,6 +20,12 @@ class MinerUEngine(BasePDFEngine):
         model_dir: str | None = None,
         download_dir: str | None = None,
         enable_ocr: bool = True,
+        api_url: str | None = None,
+        api_host: str = "127.0.0.1",
+        api_port: int = 8000,
+        api_command: str = "mineru-api",
+        api_start_timeout: float = 30.0,
+        request_timeout: float = 300.0,
         extra_options: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
@@ -25,6 +33,12 @@ class MinerUEngine(BasePDFEngine):
         self.model_dir = model_dir
         self.download_dir = download_dir
         self.enable_ocr = enable_ocr
+        self.api_url = api_url
+        self.api_host = api_host
+        self.api_port = api_port
+        self.api_command = api_command
+        self.api_start_timeout = api_start_timeout
+        self.request_timeout = request_timeout
         self.extra_options = {**(extra_options or {}), **kwargs}
 
     def _cuda_available(self) -> bool:
@@ -47,12 +61,9 @@ class MinerUEngine(BasePDFEngine):
         return requested_device
 
     def _ensure_runtime(self) -> None:
-        try:
-            import magic_pdf  # noqa: F401
-        except ImportError as exc:
-            raise RuntimeError(
-                "MinerU runtime is unavailable. Install the `magic-pdf` package to use the MinerU engine."
-            ) from exc
+        # The real runtime path is mineru-api. Dependency validation happens when
+        # starting or connecting to that service.
+        return None
 
     def _build_runtime_config(self, **kwargs: Any) -> dict[str, Any]:
         requested_device = kwargs.get("device", self.device)
@@ -64,11 +75,27 @@ class MinerUEngine(BasePDFEngine):
             "extra_options": {**self.extra_options, **kwargs.get("extra_options", {})},
         }
 
+    def _build_service_config(self) -> dict[str, Any]:
+        return {
+            "api_url": self.api_url,
+            "host": self.api_host,
+            "port": self.api_port,
+            "command": self.api_command,
+            "start_timeout": self.api_start_timeout,
+            "request_timeout": self.request_timeout,
+        }
+
+    def _create_client(self, base_url: str) -> MinerUClient:
+        return MinerUClient(base_url, timeout=self.request_timeout)
+
+    def _create_service_manager(self) -> MinerUServiceManager:
+        return MinerUServiceManager(**self._build_service_config())
+
     def _run_mineru(self, file_path: Path, runtime_config: dict[str, Any]) -> list[dict[str, Any]]:
-        raise NotImplementedError(
-            "MinerU runtime wiring is not implemented yet. Override `_run_mineru()` "
-            "or provide a concrete magic-pdf integration."
-        )
+        manager = self._create_service_manager()
+        with manager.running_service() as base_url:
+            client = self._create_client(base_url)
+            return client.parse_file(file_path, runtime_config)
 
     def process_document(self, file_path: Path, **kwargs: Any) -> ParsedDocumentResult:
         self._ensure_runtime()
@@ -79,7 +106,17 @@ class MinerUEngine(BasePDFEngine):
                 page_number=item["page_number"],
                 markdown_content=item.get("markdown", ""),
                 plain_text=item.get("plain_text", ""),
-                elements=item.get("elements", []),
+                elements=[
+                    element
+                    if isinstance(element, ParsedElement)
+                    else ParsedElement(
+                        kind=element.get("kind", "text"),
+                        text=element.get("text", ""),
+                        bbox=element.get("bbox"),
+                        metadata=element.get("metadata", {}),
+                    )
+                    for element in item.get("elements", [])
+                ],
                 tables=item.get("tables", []),
                 images=item.get("images", []),
                 metadata={

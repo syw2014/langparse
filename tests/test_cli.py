@@ -10,19 +10,32 @@ from langparse.types import ParsedDocumentResult, ParsedPageResult
 
 def test_cli_accepts_parse_command():
     parser = build_parser()
-    args = parser.parse_args(["parse", "sample.pdf", "--engine", "mineru", "--format", "markdown"])
+    args = parser.parse_args(
+        [
+            "parse",
+            "sample.pdf",
+            "--engine",
+            "mineru",
+            "--format",
+            "markdown",
+            "--api-url",
+            "http://mineru.example:8000",
+        ]
+    )
 
     assert args.command == "parse"
     assert args.engine == "mineru"
     assert args.format == "markdown"
+    assert args.api_url == "http://mineru.example:8000"
 
 
 def test_cli_batch_command_supports_output_dir():
     parser = build_parser()
-    args = parser.parse_args(["parse", "docs/", "--batch", "--output-dir", "out"])
+    args = parser.parse_args(["parse", "docs/", "--batch", "--output-dir", "out", "--api-port", "8010"])
 
     assert args.batch is True
     assert args.output_dir == "out"
+    assert args.api_port == 8010
 
 
 def test_cli_main_help_exits_cleanly(capsys):
@@ -169,6 +182,50 @@ def test_cli_main_single_parse_delegates_to_service(monkeypatch):
     assert calls == [
         ("parse_output", "sample.pdf", "mineru", "json", {"device": "cpu"}),
         ("write_output", "rendered", Path("out.json")),
+    ]
+
+
+def test_cli_main_single_parse_passes_mineru_api_kwargs(monkeypatch):
+    calls = []
+
+    class FakeService:
+        def parse_output(self, file_path, engine_name="simple", fmt="markdown", **kwargs):
+            calls.append(("parse_output", file_path, engine_name, fmt, kwargs))
+            return "rendered"
+
+    monkeypatch.setattr("langparse.cli.ParseService", FakeService)
+
+    exit_code = main(
+        [
+            "parse",
+            "sample.pdf",
+            "--engine",
+            "mineru",
+            "--api-url",
+            "http://mineru.example:8000",
+            "--api-port",
+            "8010",
+            "--api-command",
+            "mineru-api",
+            "--api-start-timeout",
+            "12",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        (
+            "parse_output",
+            "sample.pdf",
+            "mineru",
+            "markdown",
+            {
+                "api_url": "http://mineru.example:8000",
+                "api_port": 8010,
+                "api_command": "mineru-api",
+                "api_start_timeout": 12.0,
+            },
+        )
     ]
 
 

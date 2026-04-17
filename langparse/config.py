@@ -21,6 +21,11 @@ class Config:
         "LANGPARSE_MINERU_MODEL_DIR": "engines.mineru.model_dir",
         "LANGPARSE_MINERU_DOWNLOAD_DIR": "engines.mineru.download_dir",
         "LANGPARSE_MINERU_ENABLE_OCR": "engines.mineru.enable_ocr",
+        "LANGPARSE_MINERU_API_URL": "engines.mineru.api_url",
+        "LANGPARSE_MINERU_API_HOST": "engines.mineru.api_host",
+        "LANGPARSE_MINERU_API_PORT": "engines.mineru.api_port",
+        "LANGPARSE_MINERU_API_COMMAND": "engines.mineru.api_command",
+        "LANGPARSE_MINERU_API_START_TIMEOUT": "engines.mineru.api_start_timeout",
     }
 
     DEFAULT_CONFIG = {
@@ -31,6 +36,12 @@ class Config:
                 "model_dir": None,
                 "download_dir": None,
                 "enable_ocr": True,
+                "api_url": None,
+                "api_host": "127.0.0.1",
+                "api_port": 8000,
+                "api_command": "mineru-api",
+                "api_start_timeout": 30.0,
+                "request_timeout": 300.0,
                 "extra_options": {},
             },
             "vision_llm": {

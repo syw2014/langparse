@@ -92,11 +92,13 @@ for chunk in chunks:
 
 ### MinerU Runtime
 
-LangParse already exposes the MinerU engine interface, optional dependency group, and runtime parameters for CPU/GPU selection plus model/download directories.
+LangParse can run MinerU through `mineru-api`.
 
-Current limitation: the real `magic-pdf` execution path is still a placeholder. Today this means you can wire configuration and integration code against the MinerU adapter, but actual MinerU parsing is not complete yet.
+Runtime selection works like this:
+- If you pass or configure `api_url`, LangParse calls that MinerU service directly.
+- If `api_url` is not set, LangParse will try to start a local `mineru-api` service and manage its lifecycle for the current parse.
 
-Planned usage shape:
+You can still control CPU/GPU selection and model/download directories through runtime parameters or configuration.
 
 ```python
 from langparse import AutoParser
@@ -104,6 +106,7 @@ from langparse import AutoParser
 doc = AutoParser.parse(
     "paper.pdf",
     engine="mineru",
+    api_url="http://127.0.0.1:8000",
     device="cuda",
     model_dir="./models",
 )
@@ -120,18 +123,33 @@ cpu_doc = AutoParser.parse(
 )
 ```
 
+Environment variables:
+
+```bash
+export LANGPARSE_MINERU_API_URL=http://127.0.0.1:8000
+export LANGPARSE_MINERU_DEVICE=cuda
+export LANGPARSE_MINERU_MODEL_DIR=./models
+export LANGPARSE_MINERU_DOWNLOAD_DIR=./downloads
+```
+
 ### CLI Examples
 
 Single-file parsing:
 
 ```bash
-langparse parse paper.pdf --engine mineru --device cuda --model-dir ./models --download-dir ./downloads --format json
+langparse parse paper.pdf --engine mineru --api-url http://127.0.0.1:8000 --device cuda --model-dir ./models --download-dir ./downloads --format json
 ```
 
 Batch parsing:
 
 ```bash
 langparse parse docs/ --engine mineru --batch --output-dir out --format json
+```
+
+If you want LangParse to manage a local MinerU service, omit `--api-url`. You can also override the local launch command and bind address:
+
+```bash
+langparse parse paper.pdf --engine mineru --api-command "mineru-api" --api-host 127.0.0.1 --api-port 8000
 ```
 
 ## 💬 Contact

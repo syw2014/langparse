@@ -13,6 +13,11 @@ def isolated_langparse_config_env(tmp_path, monkeypatch):
         "LANGPARSE_MINERU_MODEL_DIR",
         "LANGPARSE_MINERU_DOWNLOAD_DIR",
         "LANGPARSE_MINERU_ENABLE_OCR",
+        "LANGPARSE_MINERU_API_URL",
+        "LANGPARSE_MINERU_API_HOST",
+        "LANGPARSE_MINERU_API_PORT",
+        "LANGPARSE_MINERU_API_COMMAND",
+        "LANGPARSE_MINERU_API_START_TIMEOUT",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -66,6 +71,11 @@ def test_default_mineru_values_are_exposed():
     assert settings.get("engines.mineru.model_dir") is None
     assert settings.get("engines.mineru.download_dir") is None
     assert settings.get("engines.mineru.enable_ocr") is True
+    assert settings.get("engines.mineru.api_url") is None
+    assert settings.get("engines.mineru.api_host") == "127.0.0.1"
+    assert settings.get("engines.mineru.api_port") == 8000
+    assert settings.get("engines.mineru.api_command") == "mineru-api"
+    assert settings.get("engines.mineru.api_start_timeout") == 30.0
     assert settings.get("engines.mineru.extra_options") == {}
 
 

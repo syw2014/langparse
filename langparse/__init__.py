@@ -1,4 +1,10 @@
-from langparse.types import Document, Chunk
+from langparse.types import (
+    Chunk,
+    Document,
+    ParsedDocumentResult,
+    ParsedElement,
+    ParsedPageResult,
+)
 from langparse.core.parser import BaseParser
 from langparse.core.chunker import BaseChunker
 from langparse.autoparser import AutoParser
@@ -11,6 +17,9 @@ from langparse.chunkers.semantic import SemanticChunker
 __all__ = [
     "Document",
     "Chunk",
+    "ParsedDocumentResult",
+    "ParsedPageResult",
+    "ParsedElement",
     "BaseParser",
     "BaseChunker",
     "AutoParser",

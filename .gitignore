@@ -134,4 +134,4 @@ dmypy.json
 
 .specstory/
 .cursorindexingignore
-
+models/

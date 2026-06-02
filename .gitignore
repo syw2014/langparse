@@ -135,3 +135,5 @@ dmypy.json
 .specstory/
 .cursorindexingignore
 models/
+samples/*.local.json
+samples/private/

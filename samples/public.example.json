@@ -1,0 +1,20 @@
+{
+  "samples": [
+    {
+      "id": "public-pdf-quality-example",
+      "path": "samples/public/public-pdf-quality-example.pdf",
+      "category": "report",
+      "features": ["tables", "multi_column", "figures", "headers_footers"],
+      "engine": "mineru",
+      "checks": {
+        "min_pages": 1,
+        "min_chars": 100,
+        "min_tables": 1,
+        "require_page_markers": true,
+        "require_table_markdown": true,
+        "require_multi_column_check": false,
+        "require_captions_for_images": false
+      }
+    }
+  ]
+}

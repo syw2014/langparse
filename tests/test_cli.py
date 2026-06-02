@@ -261,3 +261,122 @@ def test_cli_main_batch_parse_delegates_to_service(monkeypatch, capsys):
     assert calls == [
         ("parse_batch_outputs", ["docs"], "simple", "markdown", {}),
     ]
+
+
+def test_cli_parse_accepts_batch_metrics_options():
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "parse",
+            "docs/",
+            "--batch",
+            "--output-dir",
+            "out",
+            "--max-workers",
+            "4",
+            "--skip-existing",
+            "--metrics",
+        ]
+    )
+
+    assert args.max_workers == 4
+    assert args.skip_existing is True
+    assert args.metrics is True
+
+
+def test_cli_benchmark_command_accepts_manifest_and_output_dir():
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "benchmark",
+            "samples/public.example.json",
+            "--engine",
+            "mineru",
+            "--output-dir",
+            "reports",
+            "--max-workers",
+            "2",
+        ]
+    )
+
+    assert args.command == "benchmark"
+    assert args.manifest == "samples/public.example.json"
+    assert args.engine == "mineru"
+    assert args.output_dir == "reports"
+    assert args.max_workers == 2
+
+
+def test_cli_main_batch_metrics_delegates_to_batch_service(monkeypatch):
+    calls = []
+
+    class FakeBatchService:
+        def run(
+            self,
+            inputs,
+            engine_name="simple",
+            output_dir="out",
+            fmt="markdown",
+            max_workers=None,
+            skip_existing=False,
+            **kwargs,
+        ):
+            calls.append((inputs, engine_name, output_dir, fmt, max_workers, skip_existing, kwargs))
+            return None
+
+    monkeypatch.setattr("langparse.cli.BatchParseService", FakeBatchService)
+
+    exit_code = main(
+        [
+            "parse",
+            "docs/",
+            "--batch",
+            "--output-dir",
+            "out",
+            "--engine",
+            "mineru",
+            "--format",
+            "json",
+            "--max-workers",
+            "4",
+            "--skip-existing",
+            "--metrics",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [(["docs/"], "mineru", "out", "json", 4, True, {"collect_metrics": True})]
+
+
+def test_cli_main_benchmark_delegates_to_benchmark_service(monkeypatch):
+    calls = []
+
+    class FakeBenchmarkService:
+        def run(
+            self,
+            manifest,
+            output_dir="reports",
+            engine_name=None,
+            fmt="json",
+            max_workers=1,
+            **kwargs,
+        ):
+            calls.append((manifest, output_dir, engine_name, fmt, max_workers, kwargs))
+            return {"summary": {"total_samples": 1}}
+
+    monkeypatch.setattr("langparse.cli.BenchmarkService", FakeBenchmarkService)
+
+    exit_code = main(
+        [
+            "benchmark",
+            "samples/public.example.json",
+            "--engine",
+            "mineru",
+            "--output-dir",
+            "reports",
+            "--max-workers",
+            "2",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [("samples/public.example.json", "reports", "mineru", "json", 2, {})]

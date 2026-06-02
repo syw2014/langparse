@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from langparse.services.batch_service import BatchParseService
+from langparse.services.benchmark_service import BenchmarkService
 from langparse.services.parse_service import ParseService
 
 
@@ -28,12 +30,47 @@ def build_parser():
     parse_cmd.add_argument("--batch", action="store_true")
     parse_cmd.add_argument("--output", default=None)
     parse_cmd.add_argument("--output-dir", default=None)
+    parse_cmd.add_argument("--max-workers", type=int, default=None)
+    parse_cmd.add_argument("--skip-existing", action="store_true")
+    parse_cmd.add_argument("--metrics", action="store_true")
+
+    benchmark_cmd = subparsers.add_parser("benchmark")
+    benchmark_cmd.add_argument("manifest")
+    benchmark_cmd.add_argument("--engine", default=None)
+    benchmark_cmd.add_argument("--output-dir", default="reports")
+    benchmark_cmd.add_argument("--format", default="json")
+    benchmark_cmd.add_argument("--max-workers", type=int, default=1)
+    benchmark_cmd.add_argument("--api-url", default=None)
+    benchmark_cmd.add_argument("--device", default=None)
+    benchmark_cmd.add_argument("--model-dir", default=None)
+    benchmark_cmd.add_argument("--download-dir", default=None)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "benchmark":
+        benchmark_kwargs = {
+            key: value
+            for key, value in {
+                "api_url": args.api_url,
+                "device": args.device,
+                "model_dir": args.model_dir,
+                "download_dir": args.download_dir,
+            }.items()
+            if value is not None
+        }
+        BenchmarkService().run(
+            args.manifest,
+            output_dir=args.output_dir,
+            engine_name=args.engine,
+            fmt=args.format,
+            max_workers=args.max_workers,
+            **benchmark_kwargs,
+        )
+        return 0
 
     if args.command != "parse":
         parser.error(f"Unsupported command: {args.command}")
@@ -58,6 +95,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
 
     if args.batch:
+        if args.metrics or args.max_workers is not None or args.skip_existing:
+            BatchParseService().run(
+                args.inputs,
+                engine_name=engine_name,
+                output_dir=args.output_dir or "out",
+                fmt=args.format,
+                max_workers=args.max_workers,
+                skip_existing=args.skip_existing,
+                collect_metrics=args.metrics,
+                **parse_kwargs,
+            )
+            return 0
+
         outputs = service.parse_batch_outputs(
             args.inputs,
             engine_name=engine_name,

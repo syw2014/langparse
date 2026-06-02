@@ -27,6 +27,7 @@ class BatchParseService:
         max_workers: int | None = None,
         skip_existing: bool = False,
         fail_fast: bool = False,
+        collect_metrics: bool = True,
         **kwargs,
     ) -> BatchRunResult:
         output_dir = Path(output_dir)
@@ -36,7 +37,16 @@ class BatchParseService:
 
         if worker_count == 1:
             items = [
-                self._run_one(path, output_dir, engine_name, fmt, skip_existing, fail_fast, **kwargs)
+                self._run_one(
+                    path,
+                    output_dir,
+                    engine_name,
+                    fmt,
+                    skip_existing,
+                    fail_fast,
+                    collect_metrics,
+                    **kwargs,
+                )
                 for path in paths
             ]
         else:
@@ -51,6 +61,7 @@ class BatchParseService:
                         fmt,
                         skip_existing,
                         fail_fast,
+                        collect_metrics,
                         **kwargs,
                     ): path
                     for path in paths
@@ -90,6 +101,7 @@ class BatchParseService:
         fmt: str,
         skip_existing: bool,
         fail_fast: bool,
+        collect_metrics: bool,
         **kwargs,
     ) -> BatchItemResult:
         started_at = self._utc_now()
@@ -111,7 +123,7 @@ class BatchParseService:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(rendered, encoding="utf-8")
             elapsed = time.perf_counter() - start
-            metrics = collect_parse_metrics(parsed, elapsed)
+            metrics = collect_parse_metrics(parsed, elapsed) if collect_metrics else None
             return BatchItemResult(
                 source=str(path),
                 status="success",

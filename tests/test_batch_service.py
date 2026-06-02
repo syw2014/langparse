@@ -61,6 +61,21 @@ def test_batch_service_skip_existing_marks_item_skipped(tmp_path):
     assert parse_service.calls == []
 
 
+def test_batch_service_does_not_forward_collect_metrics_to_parser(tmp_path):
+    pdf = tmp_path / "a.pdf"
+    pdf.write_text("x", encoding="utf-8")
+
+    parse_service = StubParseService()
+    BatchParseService(parse_service=parse_service).run(
+        [pdf],
+        output_dir=tmp_path / "out",
+        max_workers=1,
+        collect_metrics=True,
+    )
+
+    assert parse_service.calls == [(pdf, "simple", {})]
+
+
 def test_batch_service_records_failure_when_fail_fast_false(tmp_path):
     class FailingParseService(StubParseService):
         def parse_result(self, file_path, engine_name="simple", engine=None, **kwargs):

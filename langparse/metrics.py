@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from langparse.types import ParsedDocumentResult
+
 
 def pages_per_second(page_count: int, elapsed_seconds: float) -> float:
     if elapsed_seconds <= 0:
@@ -70,3 +72,33 @@ class BatchRunResult:
     @property
     def skipped_count(self) -> int:
         return sum(1 for item in self.items if item.status == "skipped")
+
+
+def collect_parse_metrics(parsed: ParsedDocumentResult, elapsed_seconds: float) -> ParseMetrics:
+    markdown = parsed.markdown_content or ""
+    page_count = len(parsed.pages)
+    image_count = sum(len(page.images) for page in parsed.pages)
+    table_count = sum(len(page.tables) for page in parsed.pages) or count_markdown_tables(markdown)
+    caption_count = sum(
+        1
+        for page in parsed.pages
+        for image in page.images
+        if image.get("caption")
+    )
+
+    return ParseMetrics(
+        elapsed_seconds=round(elapsed_seconds, 4),
+        page_count=page_count,
+        pages_per_second=pages_per_second(page_count, elapsed_seconds),
+        output_bytes=len(markdown.encode("utf-8")),
+        markdown_chars=len(markdown),
+        table_count=table_count,
+        image_count=image_count,
+        ocr_applied=bool(parsed.metadata.get("ocr_applied", False)),
+        ocr_text_chars=int(parsed.metadata.get("ocr_text_chars", 0) or 0),
+        multi_column_detected=bool(parsed.metadata.get("multi_column_detected", False)),
+        reading_order_warnings=int(parsed.metadata.get("reading_order_warnings", 0) or 0),
+        header_footer_removed_count=int(parsed.metadata.get("header_footer_removed_count", 0) or 0),
+        caption_count=caption_count,
+        images_with_caption_ratio=round(caption_count / image_count, 4) if image_count else 0.0,
+    )

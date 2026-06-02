@@ -104,8 +104,16 @@ class ParseService:
                 paths.append(path)
         return paths
 
+    def parse_result(self, file_path, engine_name="simple", engine=None, **kwargs):
+        return self._collect_pdf_document_result(
+            file_path,
+            engine_name=engine_name,
+            engine=engine,
+            **kwargs,
+        )
+
     def parse_file(self, file_path, engine_name="simple", engine=None, **kwargs):
-        parsed = self._collect_pdf_document_result(
+        parsed = self.parse_result(
             file_path,
             engine_name=engine_name,
             engine=engine,

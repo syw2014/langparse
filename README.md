@@ -163,6 +163,20 @@ Batch parsing:
 langparse parse docs/ --engine mineru --batch --output-dir out --format json
 ```
 
+Batch parsing with lightweight metrics and skip-existing behavior:
+
+```bash
+langparse parse docs/ --engine mineru --batch --output-dir out --format json --max-workers 4 --skip-existing --metrics
+```
+
+Run a product-readiness benchmark:
+
+```bash
+langparse benchmark samples/public.example.json --engine mineru --output-dir reports --max-workers 2
+```
+
+Benchmark reports include success rate, elapsed time, pages per second, table counts, OCR indicators, reading-order warnings, header/footer filtering counts, and image/caption metadata coverage.
+
 If you want LangParse to manage a local MinerU service, omit `--api-url`. You can also override the local launch command and bind address:
 
 ```bash

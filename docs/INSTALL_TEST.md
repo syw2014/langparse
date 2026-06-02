@@ -106,7 +106,12 @@ for chunk in chunks:
 
 ### MinerU 运行时示例
 
-注意：下面展示的是当前预留的 MinerU 接口形态。`magic-pdf` 的真实执行链路尚未完成，因此现阶段安装 `langparse[mineru]` 后，主要可用于提前接通依赖、配置和调用参数，而不是完成真实 MinerU 解析。
+MinerU 支持两种运行方式：
+
+- 远程或已有本地服务：传入 `api_url`
+- 本地托管服务：省略 `api_url`，LangParse 会尝试启动 `mineru-api`
+
+批量解析和 benchmark 会记录耗时、页数/秒、成功率、失败原因，以及 PDF 质量专项指标。
 
 ```python
 from langparse import AutoParser
@@ -114,6 +119,7 @@ from langparse import AutoParser
 gpu_doc = AutoParser.parse(
     "paper.pdf",
     engine="mineru",
+    api_url="http://127.0.0.1:8000",
     device="cuda",
     model_dir="./models",
 )
@@ -134,6 +140,12 @@ langparse parse paper.pdf --engine mineru --device cuda --model-dir ./models --d
 
 # 批量
 langparse parse docs/ --engine mineru --batch --output-dir out --format json
+
+# 带指标的批量解析
+langparse parse docs/ --engine mineru --batch --output-dir out --format json --max-workers 4 --skip-existing --metrics
+
+# 产品可用性 benchmark
+langparse benchmark samples/public.example.json --engine mineru --output-dir reports --max-workers 2
 ```
 
 ## 在新环境中测试

@@ -63,11 +63,11 @@ pip install "langparse[all]"
 
 ### MinerU 运行时
 
-LangParse 目前已经提供了 MinerU 引擎接口、可选依赖安装方式，以及 CPU / GPU 目标、模型目录、下载目录等运行时参数。
+LangParse 现在可以通过 `mineru-api` 调用 MinerU。你可以传入 `api_url` 连接已有服务，也可以省略 `api_url` 让 LangParse 尝试启动本地 `mineru-api` 并在当前解析任务结束后关闭。
 
-当前限制：真实的 `magic-pdf` 执行链路仍然是占位实现。也就是说，现在可以先按这个接口完成配置、集成和调用路径接入，但实际 MinerU 解析能力还没有完全落地。
+第一阶段产品化重点是 PDF 解析质量和 RAG 可用性：表格 Markdown、页码引用、多列布局风险、OCR 指标、页眉页脚过滤统计、图像/图表 metadata，以及批量解析耗时和页数/秒。
 
-预期使用形态如下：
+使用形态如下：
 
 ```python
 from langparse import AutoParser
@@ -75,6 +75,7 @@ from langparse import AutoParser
 doc = AutoParser.parse(
     "paper.pdf",
     engine="mineru",
+    api_url="http://127.0.0.1:8000",
     device="cuda",
     model_dir="./models",
 )
@@ -104,6 +105,20 @@ langparse parse paper.pdf --engine mineru --device cuda --model-dir ./models --d
 ```bash
 langparse parse docs/ --engine mineru --batch --output-dir out --format json
 ```
+
+带指标的批量解析：
+
+```bash
+langparse parse docs/ --engine mineru --batch --output-dir out --format json --max-workers 4 --skip-existing --metrics
+```
+
+产品可用性 benchmark：
+
+```bash
+langparse benchmark samples/public.example.json --engine mineru --output-dir reports --max-workers 2
+```
+
+benchmark 报告会记录成功率、耗时、页数/秒、表格数量、OCR 指标、多列顺序告警、页眉页脚过滤数量，以及图像/图表 metadata 覆盖情况。
 
 ## 📝 引用 LangParse
 

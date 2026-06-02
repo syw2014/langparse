@@ -44,7 +44,7 @@ pip install "langparse[all]"
 - `docx`: Word 文档解析支持 (python-docx)
 - `excel`: Excel 解析支持 (pandas, openpyxl)
 - `ocr`: OCR 支持 (rapidocr_onnxruntime)
-- `mineru`: MinerU PDF 运行时支持 (magic-pdf)
+- `mineru`: MinerU PDF 运行时支持 (`mineru[all]`)
 - `all`: 安装所有可选依赖
 - `dev`: 开发依赖 (pytest)
 
@@ -110,6 +110,7 @@ MinerU 支持两种运行方式：
 
 - 远程或已有本地服务：传入 `api_url`
 - 本地托管服务：省略 `api_url`，LangParse 会尝试启动 `mineru-api`
+- 当前环境缺少 `mineru-api`：传入 `--auto-install-runtime` 或 Python 参数 `auto_install_runtime=True`，LangParse 会先安装配置的 runtime 包
 
 批量解析和 benchmark 会记录耗时、页数/秒、成功率、失败原因，以及 PDF 质量专项指标。
 
@@ -143,6 +144,9 @@ langparse parse docs/ --engine mineru --batch --output-dir out --format json
 
 # 带指标的批量解析
 langparse parse docs/ --engine mineru --batch --output-dir out --format json --max-workers 4 --skip-existing --metrics
+
+# 自动安装本地 MinerU runtime 后解析
+langparse parse paper.pdf --engine mineru --auto-install-runtime --device cpu --format json
 
 # 产品可用性 benchmark
 langparse benchmark samples/public.example.json --engine mineru --output-dir reports --max-workers 2

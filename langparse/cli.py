@@ -26,6 +26,8 @@ def build_parser():
     parse_cmd.add_argument("--api-start-timeout", type=float, default=None)
     parse_cmd.add_argument("--model-policy", choices=["download_if_missing", "require_existing"], default=None)
     parse_cmd.add_argument("--model-source", default=None)
+    parse_cmd.add_argument("--auto-install-runtime", action="store_true")
+    parse_cmd.add_argument("--runtime-package", default=None)
     parse_cmd.add_argument("--format", default="markdown")
     parse_cmd.add_argument("--batch", action="store_true")
     parse_cmd.add_argument("--output", default=None)
@@ -44,6 +46,8 @@ def build_parser():
     benchmark_cmd.add_argument("--device", default=None)
     benchmark_cmd.add_argument("--model-dir", default=None)
     benchmark_cmd.add_argument("--download-dir", default=None)
+    benchmark_cmd.add_argument("--auto-install-runtime", action="store_true")
+    benchmark_cmd.add_argument("--runtime-package", default=None)
     return parser
 
 
@@ -59,8 +63,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "device": args.device,
                 "model_dir": args.model_dir,
                 "download_dir": args.download_dir,
+                "auto_install_runtime": args.auto_install_runtime,
+                "runtime_package": args.runtime_package,
             }.items()
-            if value is not None
+            if value is not None and value is not False
         }
         BenchmarkService().run(
             args.manifest,
@@ -90,8 +96,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "api_start_timeout": args.api_start_timeout,
             "model_policy": args.model_policy,
             "model_source": args.model_source,
+            "auto_install_runtime": args.auto_install_runtime,
+            "runtime_package": args.runtime_package,
         }.items()
-        if value is not None
+        if value is not None and value is not False
     }
 
     if args.batch:

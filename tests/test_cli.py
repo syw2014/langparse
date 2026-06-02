@@ -32,6 +32,24 @@ def test_cli_accepts_parse_command():
     assert args.model_policy == "require_existing"
 
 
+def test_cli_accepts_mineru_runtime_install_options():
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "parse",
+            "sample.pdf",
+            "--engine",
+            "mineru",
+            "--auto-install-runtime",
+            "--runtime-package",
+            "mineru[all]",
+        ]
+    )
+
+    assert args.auto_install_runtime is True
+    assert args.runtime_package == "mineru[all]"
+
+
 def test_cli_batch_command_supports_output_dir():
     parser = build_parser()
     args = parser.parse_args(["parse", "docs/", "--batch", "--output-dir", "out", "--api-port", "8010"])
@@ -216,6 +234,9 @@ def test_cli_main_single_parse_passes_mineru_api_kwargs(monkeypatch):
             "require_existing",
             "--model-source",
             "local",
+            "--auto-install-runtime",
+            "--runtime-package",
+            "mineru[all]",
         ]
     )
 
@@ -233,6 +254,8 @@ def test_cli_main_single_parse_passes_mineru_api_kwargs(monkeypatch):
                 "api_start_timeout": 12.0,
                 "model_policy": "require_existing",
                 "model_source": "local",
+                "auto_install_runtime": True,
+                "runtime_package": "mineru[all]",
             },
         )
     ]

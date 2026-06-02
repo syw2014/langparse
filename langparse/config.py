@@ -28,6 +28,8 @@ class Config:
         "LANGPARSE_MINERU_API_START_TIMEOUT": "engines.mineru.api_start_timeout",
         "LANGPARSE_MINERU_MODEL_POLICY": "engines.mineru.model_policy",
         "LANGPARSE_MINERU_MODEL_SOURCE": "engines.mineru.model_source",
+        "LANGPARSE_MINERU_AUTO_INSTALL_RUNTIME": "engines.mineru.auto_install_runtime",
+        "LANGPARSE_MINERU_RUNTIME_PACKAGE": "engines.mineru.runtime_package",
     }
 
     DEFAULT_CONFIG = {
@@ -46,6 +48,8 @@ class Config:
                 "request_timeout": 300.0,
                 "model_policy": "download_if_missing",
                 "model_source": None,
+                "auto_install_runtime": False,
+                "runtime_package": "mineru[all]",
                 "extra_options": {},
             },
             "vision_llm": {

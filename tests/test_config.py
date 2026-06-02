@@ -20,6 +20,8 @@ def isolated_langparse_config_env(tmp_path, monkeypatch):
         "LANGPARSE_MINERU_API_START_TIMEOUT",
         "LANGPARSE_MINERU_MODEL_POLICY",
         "LANGPARSE_MINERU_MODEL_SOURCE",
+        "LANGPARSE_MINERU_AUTO_INSTALL_RUNTIME",
+        "LANGPARSE_MINERU_RUNTIME_PACKAGE",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -80,6 +82,8 @@ def test_default_mineru_values_are_exposed():
     assert settings.get("engines.mineru.api_start_timeout") == 30.0
     assert settings.get("engines.mineru.model_policy") == "download_if_missing"
     assert settings.get("engines.mineru.model_source") is None
+    assert settings.get("engines.mineru.auto_install_runtime") is False
+    assert settings.get("engines.mineru.runtime_package") == "mineru[all]"
     assert settings.get("engines.mineru.extra_options") == {}
 
 
@@ -93,3 +97,12 @@ def test_get_engine_config_merges_runtime_kwargs():
 
     assert merged["device"] == "cpu"
     assert merged["model_dir"] == "/tmp/models"
+
+
+def test_env_enables_mineru_runtime_auto_install(monkeypatch):
+    monkeypatch.setenv("LANGPARSE_MINERU_AUTO_INSTALL_RUNTIME", "true")
+
+    Config = load_config_class()
+    settings = Config()
+
+    assert settings.get("engines.mineru.auto_install_runtime") is True

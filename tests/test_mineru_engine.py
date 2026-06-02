@@ -330,6 +330,44 @@ def test_service_manager_raises_clear_error_when_command_missing():
         manager._start_local_service()
 
 
+def test_service_manager_auto_installs_runtime_when_command_missing(monkeypatch):
+    manager = MinerUServiceManager(command="mineru-api", auto_install_runtime=True)
+    calls = []
+    availability = {"ready": False}
+
+    class StubProcess:
+        def poll(self):
+            return None
+
+    def fake_command_available(command):
+        return availability["ready"]
+
+    def fake_install_runtime():
+        calls.append("install")
+        availability["ready"] = True
+
+    def fake_popen(args, stdout=None, stderr=None, env=None):
+        calls.append(("popen", args))
+        return StubProcess()
+
+    monkeypatch.setattr(manager, "_command_available", fake_command_available)
+    monkeypatch.setattr(manager, "_install_runtime", fake_install_runtime)
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    process = manager._start_local_service()
+
+    assert isinstance(process, StubProcess)
+    assert calls == ["install", ("popen", ["mineru-api", "--host", "127.0.0.1", "--port", "8000"])]
+
+
+def test_service_manager_missing_command_message_mentions_auto_install(monkeypatch):
+    manager = MinerUServiceManager(command="mineru-api", auto_install_runtime=False)
+    monkeypatch.setattr(manager, "_command_available", lambda command: False)
+
+    with pytest.raises(RuntimeError, match="auto_install_runtime=True"):
+        manager._start_local_service()
+
+
 def test_client_normalizes_content_list_response(tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")

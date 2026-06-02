@@ -28,6 +28,8 @@ class MinerUEngine(BasePDFEngine):
         request_timeout: float = 300.0,
         model_policy: str = "download_if_missing",
         model_source: str | None = None,
+        auto_install_runtime: bool = False,
+        runtime_package: str = "mineru[all]",
         extra_options: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
@@ -43,6 +45,8 @@ class MinerUEngine(BasePDFEngine):
         self.request_timeout = request_timeout
         self.model_policy = model_policy
         self.model_source = model_source
+        self.auto_install_runtime = auto_install_runtime
+        self.runtime_package = runtime_package
         self.extra_options = {**(extra_options or {}), **kwargs}
 
     def _cuda_available(self) -> bool:
@@ -91,6 +95,8 @@ class MinerUEngine(BasePDFEngine):
             "download_dir": self.download_dir,
             "model_policy": self.model_policy,
             "model_source": self.model_source,
+            "auto_install_runtime": self.auto_install_runtime,
+            "runtime_package": self.runtime_package,
         }
 
     def _create_client(self, base_url: str) -> MinerUClient:

@@ -97,6 +97,7 @@ LangParse can run MinerU through `mineru-api`.
 Runtime selection works like this:
 - If you pass or configure `api_url`, LangParse calls that MinerU service directly.
 - If `api_url` is not set, LangParse will try to start a local `mineru-api` service and manage its lifecycle for the current parse.
+- If `mineru-api` is not installed, pass `--auto-install-runtime` or `auto_install_runtime=True` to let LangParse install the configured runtime package in the current Python environment before starting the local service.
 
 You can still control CPU/GPU selection and model/download directories through runtime parameters or configuration.
 
@@ -147,6 +148,7 @@ export LANGPARSE_MINERU_DEVICE=cuda
 export LANGPARSE_MINERU_MODEL_DIR=./models
 export LANGPARSE_MINERU_DOWNLOAD_DIR=./downloads
 export LANGPARSE_MINERU_MODEL_POLICY=require_existing
+export LANGPARSE_MINERU_AUTO_INSTALL_RUNTIME=true
 ```
 
 ### CLI Examples
@@ -181,6 +183,12 @@ If you want LangParse to manage a local MinerU service, omit `--api-url`. You ca
 
 ```bash
 langparse parse paper.pdf --engine mineru --api-command "mineru-api" --api-host 127.0.0.1 --api-port 8000
+```
+
+Install MinerU automatically in the current Python environment if `mineru-api` is missing:
+
+```bash
+langparse parse paper.pdf --engine mineru --auto-install-runtime --device cpu --format json
 ```
 
 Use an existing local model directory without allowing implicit downloads:

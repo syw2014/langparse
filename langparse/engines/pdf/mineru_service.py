@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import shlex
+import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 from contextlib import contextmanager
@@ -26,6 +28,8 @@ class MinerUServiceManager:
         download_dir: str | None = None,
         model_policy: str = "download_if_missing",
         model_source: str | None = None,
+        auto_install_runtime: bool = False,
+        runtime_package: str = "mineru[all]",
     ):
         self.api_url = api_url.rstrip("/") if api_url else None
         self.host = host
@@ -37,6 +41,8 @@ class MinerUServiceManager:
         self.download_dir = download_dir
         self.model_policy = model_policy
         self.model_source = model_source
+        self.auto_install_runtime = auto_install_runtime
+        self.runtime_package = runtime_package
 
     @contextmanager
     def running_service(self):
@@ -70,6 +76,15 @@ class MinerUServiceManager:
     def _start_local_service(self, home_override: str | None = None) -> subprocess.Popen:
         args = shlex.split(self.command) + ["--host", self.host, "--port", str(self.port)]
         env = self._build_process_env(home_override=home_override)
+        if not self._command_available(self.command):
+            if self.auto_install_runtime:
+                self._install_runtime()
+            else:
+                raise RuntimeError(
+                    "Unable to start local mineru-api service using command: "
+                    f"{self.command}. MinerU runtime was not found. Install it with "
+                    '`pip install -U "mineru[all]"` or retry with auto_install_runtime=True.'
+                )
         try:
             return subprocess.Popen(
                 args,
@@ -80,6 +95,21 @@ class MinerUServiceManager:
         except FileNotFoundError as exc:
             raise RuntimeError(
                 f"Unable to start local mineru-api service using command: {self.command}"
+            ) from exc
+
+    def _command_available(self, command: str) -> bool:
+        executable = shlex.split(command)[0]
+        return shutil.which(executable) is not None
+
+    def _install_runtime(self) -> None:
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-U", self.runtime_package],
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(
+                f"Failed to install MinerU runtime package: {self.runtime_package}"
             ) from exc
 
     def _wait_until_ready(self, client: MinerUClient) -> None:

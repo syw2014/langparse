@@ -65,6 +65,8 @@ pip install "langparse[all]"
 
 LangParse 现在可以通过 `mineru-api` 调用 MinerU。你可以传入 `api_url` 连接已有服务，也可以省略 `api_url` 让 LangParse 尝试启动本地 `mineru-api` 并在当前解析任务结束后关闭。
 
+如果当前 Python 环境没有安装 `mineru-api`，可以传入 `--auto-install-runtime` 或 Python 参数 `auto_install_runtime=True`，LangParse 会先在当前环境中安装配置的 MinerU runtime 包，再启动本地服务。
+
 第一阶段产品化重点是 PDF 解析质量和 RAG 可用性：表格 Markdown、页码引用、多列布局风险、OCR 指标、页眉页脚过滤统计、图像/图表 metadata，以及批量解析耗时和页数/秒。
 
 使用形态如下：
@@ -98,6 +100,12 @@ cpu_doc = AutoParser.parse(
 
 ```bash
 langparse parse paper.pdf --engine mineru --device cuda --model-dir ./models --download-dir ./downloads --format json
+```
+
+本地缺少 MinerU runtime 时自动安装：
+
+```bash
+langparse parse paper.pdf --engine mineru --auto-install-runtime --device cpu --format json
 ```
 
 批量解析：

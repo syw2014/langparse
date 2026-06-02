@@ -135,6 +135,20 @@ class MinerUEngine(BasePDFEngine):
             )
             for item in raw_pages
         ]
+        engine_specific_items = [page.metadata.get("engine_specific", {}) for page in pages]
+        quality_metadata = {
+            "ocr_applied": any(bool(item.get("ocr_applied")) for item in engine_specific_items),
+            "ocr_text_chars": sum(int(item.get("ocr_text_chars", 0) or 0) for item in engine_specific_items),
+            "multi_column_detected": any(
+                bool(item.get("multi_column_detected")) for item in engine_specific_items
+            ),
+            "reading_order_warnings": sum(
+                int(item.get("reading_order_warnings", 0) or 0) for item in engine_specific_items
+            ),
+            "header_footer_removed_count": sum(
+                int(item.get("header_footer_removed_count", 0) or 0) for item in engine_specific_items
+            ),
+        }
         return ParsedDocumentResult(
             source=str(file_path),
             filename=file_path.name,
@@ -144,11 +158,12 @@ class MinerUEngine(BasePDFEngine):
             metadata={
                 "device": runtime_config["device"],
                 "model_dir": runtime_config["model_dir"],
-            "download_dir": runtime_config["download_dir"],
-            "enable_ocr": runtime_config["enable_ocr"],
-            "model_policy": self.model_policy,
-            "model_source": self.model_source,
-        },
+                "download_dir": runtime_config["download_dir"],
+                "enable_ocr": runtime_config["enable_ocr"],
+                "model_policy": self.model_policy,
+                "model_source": self.model_source,
+                **quality_metadata,
+            },
         )
 
     def process(self, file_path: Path, **kwargs) -> Iterator[PageResult]:

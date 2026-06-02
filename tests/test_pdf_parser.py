@@ -72,6 +72,34 @@ def test_simple_engine_populates_plain_text_metadata(monkeypatch, tmp_path):
     assert pages[0].metadata["engine_name"] == "simple"
 
 
+def test_simple_pdf_engine_extracts_tables(monkeypatch, tmp_path):
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4")
+
+    class StubPage:
+        def extract_text(self):
+            return "Report"
+
+        def extract_tables(self):
+            return [[["A", "B"], ["1", "2"]]]
+
+    class StubPDF:
+        pages = [StubPage()]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setitem(sys.modules, "pdfplumber", types.SimpleNamespace(open=lambda _: StubPDF()))
+
+    page = next(SimplePDFEngine().process(pdf_path))
+
+    assert page.tables == [{"rows": [["A", "B"], ["1", "2"]]}]
+    assert "| A | B |" in page.markdown_content
+
+
 def test_pdf_parser_returns_document_with_metadata():
     with patch("langparse.engines.pdf.simple.SimplePDFEngine.process") as mock_process:
         mock_process.return_value = iter(

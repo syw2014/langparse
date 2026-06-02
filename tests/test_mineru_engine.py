@@ -43,6 +43,40 @@ def test_process_document_returns_normalized_result(monkeypatch, tmp_path):
     assert parsed.pages[0].markdown_content == "# Title"
 
 
+def test_process_document_preserves_pdf_quality_metadata(monkeypatch, tmp_path):
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4")
+    engine = MinerUEngine(device="cpu")
+    monkeypatch.setattr(engine, "_ensure_runtime", lambda: None)
+    monkeypatch.setattr(
+        engine,
+        "_run_mineru",
+        lambda path, runtime_config: [
+            {
+                "page_number": 1,
+                "markdown": "# Title",
+                "images": [{"bbox": [0, 0, 10, 10], "caption": "Figure 1"}],
+                "tables": [{"rows": [["A"], ["1"]]}],
+                "engine_specific": {
+                    "ocr_applied": True,
+                    "ocr_text_chars": 10,
+                    "multi_column_detected": True,
+                    "reading_order_warnings": 1,
+                    "header_footer_removed_count": 2,
+                },
+            }
+        ],
+    )
+
+    parsed = engine.process_document(pdf_path)
+
+    assert parsed.metadata["ocr_applied"] is True
+    assert parsed.metadata["ocr_text_chars"] == 10
+    assert parsed.metadata["multi_column_detected"] is True
+    assert parsed.metadata["reading_order_warnings"] == 1
+    assert parsed.metadata["header_footer_removed_count"] == 2
+
+
 def test_process_document_passes_normalized_runtime_config(monkeypatch, tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")

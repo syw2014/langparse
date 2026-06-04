@@ -128,6 +128,51 @@ langparse benchmark samples/public.example.json --engine mineru --output-dir rep
 
 benchmark 报告会记录成功率、耗时、页数/秒、表格数量、OCR 指标、多列顺序告警、页眉页脚过滤数量，以及图像/图表 metadata 覆盖情况。
 
+## 🛠️ 本地开发与测试
+
+LangParse 使用 [`uv`](https://github.com/astral-sh/uv) 管理环境和依赖。仓库内的 `.venv` 由 uv 管理，**不含 `pip`**，因此请统一通过 `uv run` 运行命令（直接用 shell 里的 `pip`/`python` 可能指向其他解释器，例如 Anaconda）。
+
+### 准备环境
+
+```bash
+# 按 uv.lock 安装全部依赖（含开发/测试）
+uv sync --all-extras
+
+# 或按需安装
+uv sync                      # 仅核心依赖（loguru）
+uv pip install -e ".[pdf]"   # PDF 解析（pdfplumber）
+uv pip install -e ".[docx]"  # Word 解析（python-docx）
+uv pip install -e ".[excel]" # Excel 解析（pandas + openpyxl）
+uv pip install -e ".[ocr]"   # OCR（rapidocr_onnxruntime）
+uv pip install -e ".[mineru]"# MinerU 运行时（体积较大）
+uv pip install -e ".[all]"   # 以上全部
+```
+
+> 注意：核心安装只包含 `loguru`。真实的 PDF/DOCX/Excel 解析需要上面对应的可选依赖——不装就无法运行这些解析器，即使单元测试能通过（测试对重依赖做了 mock 或跳过）。
+
+### 运行测试
+
+```bash
+uv run pytest -q
+```
+
+### 本地冒烟测试
+
+仓库自带可直接使用的示例输入：
+
+```bash
+# Markdown 解析 + 语义分块（无需额外依赖）
+uv run python examples/basic_usage.py
+
+# 解析真实 PDF（需要 [pdf] 可选依赖）
+uv run langparse parse data/domain/scan.pdf --engine simple --format json
+
+# 用自带清单运行 benchmark
+uv run langparse benchmark samples/public.example.json --engine simple --output-dir reports
+```
+
+示例素材：`data/domain/scan.pdf`、`data/domain/scan_pic.pdf`（扫描件 PDF，需 OCR/MinerU）以及 `samples/public.example.json`（benchmark 清单）。
+
 ## 📝 引用 LangParse
 
 如果您在您的研究、产品或出版物中使用了 LangParse，我们非常欢迎您的引用！您可以使用以下 BibTeX 条目：

@@ -22,7 +22,7 @@ from langparse.services.output_paths import (
     resolve_output_path,
     resolve_output_paths,
 )
-from langparse.types import Document, ParsedDocumentResult, ParsedPageResult
+from langparse.types import Chunk, Document, ParsedDocumentResult, ParsedPageResult
 
 ENGINE_MAP = {
     "simple": SimplePDFEngine,
@@ -34,21 +34,45 @@ ENGINE_MAP = {
 
 
 class ParseService:
-    def render_output(self, parsed: ParsedDocumentResult, fmt: str) -> str:
+    def chunk_result(self, parsed: ParsedDocumentResult, chunker=None) -> list[Chunk]:
+        """Chunk a parse result, rendering it to Markdown first."""
+        from langparse.chunkers.semantic import SemanticChunker
+
+        return (chunker or SemanticChunker()).chunk(document_from_result(parsed))
+
+    def render_output(
+        self,
+        parsed: ParsedDocumentResult,
+        fmt: str,
+        chunks: list[Chunk] | None = None,
+    ) -> str:
         if fmt == "markdown":
-            return parsed.markdown_content
+            if chunks is None:
+                return parsed.markdown_content
+            return "\n\n---\n\n".join(chunk.content for chunk in chunks)
         if fmt == "json":
-            return json.dumps(asdict(parsed), ensure_ascii=False, indent=2)
+            payload = asdict(parsed)
+            if chunks is not None:
+                payload["chunks"] = [asdict(chunk) for chunk in chunks]
+            return json.dumps(payload, ensure_ascii=False, indent=2)
         raise ValueError(f"Unsupported output format: {fmt}")
 
-    def parse_output(self, file_path, engine_name="simple", fmt="markdown", engine=None, **kwargs) -> str:
+    def parse_output(
+        self,
+        file_path,
+        engine_name="simple",
+        fmt="markdown",
+        engine=None,
+        chunk=False,
+        **kwargs,
+    ) -> str:
         parsed = self.parse_result(
             file_path,
             engine_name=engine_name,
             engine=engine,
             **kwargs,
         )
-        return self.render_output(parsed, fmt)
+        return self.render_output(parsed, fmt, chunks=self.chunk_result(parsed) if chunk else None)
 
     def parse_batch_outputs(
         self,

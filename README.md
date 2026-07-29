@@ -90,6 +90,41 @@ for chunk in chunks:
     print(f"Content: {chunk.content[:50]}...")
 ```
 
+### Chunking
+
+Chunks respect a size budget while following Markdown structure. Sections come
+from headings; within a section, blocks are packed up to `max_chunk_size`.
+
+```python
+SemanticChunker(max_chunk_size=1000, overlap=0, length_function=len)
+```
+
+- **`length_function`** measures chunk size. The default counts characters and
+  pulls in no dependencies; pass a tokenizer's encoder to budget in tokens:
+  ```python
+  import tiktoken
+  encoder = tiktoken.get_encoding("cl100k_base")
+  SemanticChunker(max_chunk_size=512, length_function=lambda t: len(encoder.encode(t)))
+  ```
+- **`overlap`** is off by default. It duplicates content into the vector store,
+  so it is opt-in.
+- **Tables** that exceed the budget split by row with the header row repeated in
+  each part, so every chunk stays readable on its own.
+- **Code blocks** are never split — splitting would leave unterminated fences.
+  An oversized one emits whole with `oversized: True` in its metadata.
+- A `#` inside a fenced code block is not treated as a heading.
+
+Each chunk carries `header`, `header_level`, `header_path`, `page_numbers` and
+`chunk_index`.
+
+From the CLI, `--chunk` adds a `chunks` array to JSON output (and separates
+chunks with `---` in Markdown output), and activates the chunk metrics:
+
+```bash
+langparse parse paper.pdf --chunk --format json
+langparse parse docs/ --batch --chunk --metrics --output-dir out
+```
+
 ### MinerU Runtime
 
 LangParse can run MinerU through `mineru-api`.

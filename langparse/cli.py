@@ -37,6 +37,11 @@ def build_parser():
     parse_cmd.add_argument("--max-workers", type=int, default=None)
     parse_cmd.add_argument("--skip-existing", action="store_true")
     parse_cmd.add_argument("--metrics", action="store_true")
+    parse_cmd.add_argument(
+        "--chunk",
+        action="store_true",
+        help="semantically chunk the parsed document and include chunks in the output",
+    )
 
     benchmark_cmd = subparsers.add_parser("benchmark")
     benchmark_cmd.add_argument("manifest")
@@ -114,7 +119,7 @@ def _run(args, parser) -> int:
     }
 
     if args.batch:
-        if args.metrics or args.max_workers is not None or args.skip_existing:
+        if args.metrics or args.max_workers is not None or args.skip_existing or args.chunk:
             BatchParseService().run(
                 args.inputs,
                 engine_name=engine_name,
@@ -123,6 +128,7 @@ def _run(args, parser) -> int:
                 max_workers=args.max_workers,
                 skip_existing=args.skip_existing,
                 collect_metrics=args.metrics,
+                chunk=args.chunk,
                 **parse_kwargs,
             )
             return 0
@@ -147,6 +153,7 @@ def _run(args, parser) -> int:
         args.inputs[0],
         engine_name=engine_name,
         fmt=args.format,
+        chunk=args.chunk,
         **parse_kwargs,
     )
 

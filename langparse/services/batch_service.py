@@ -30,6 +30,7 @@ class BatchParseService:
         skip_existing: bool = False,
         fail_fast: bool = False,
         collect_metrics: bool = True,
+        chunk: bool = False,
         **kwargs,
     ) -> BatchRunResult:
         output_dir = Path(output_dir)
@@ -56,6 +57,7 @@ class BatchParseService:
                     skip_existing,
                     fail_fast,
                     collect_metrics,
+                    chunk,
                     **kwargs,
                 )
                 for path, output_path in zip(paths, output_paths)
@@ -74,6 +76,7 @@ class BatchParseService:
                         skip_existing,
                         fail_fast,
                         collect_metrics,
+                        chunk,
                         **kwargs,
                     ): path
                     for path, output_path in zip(paths, output_paths)
@@ -115,6 +118,7 @@ class BatchParseService:
         skip_existing: bool,
         fail_fast: bool,
         collect_metrics: bool,
+        chunk: bool,
         **kwargs,
     ) -> BatchItemResult:
         started_at = self._utc_now()
@@ -133,11 +137,14 @@ class BatchParseService:
             parsed = self.parse_service.parse_result(
                 path, engine_name=engine_name, engine=engine, **kwargs
             )
-            rendered = self.parse_service.render_output(parsed, fmt)
+            chunks = self.parse_service.chunk_result(parsed) if chunk else None
+            rendered = self.parse_service.render_output(parsed, fmt, chunks=chunks)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(rendered, encoding="utf-8")
             elapsed = time.perf_counter() - start
-            metrics = collect_parse_metrics(parsed, elapsed) if collect_metrics else None
+            metrics = (
+                collect_parse_metrics(parsed, elapsed, chunks=chunks) if collect_metrics else None
+            )
             return BatchItemResult(
                 source=str(path),
                 status="success",

@@ -29,7 +29,10 @@ class StubParseService:
             metadata={},
         )
 
-    def render_output(self, parsed, fmt):
+    def chunk_result(self, parsed, chunker=None):
+        return []
+
+    def render_output(self, parsed, fmt, chunks=None):
         return parsed.markdown_content if fmt == "markdown" else "{}"
 
 

@@ -61,6 +61,34 @@ pip install "langparse[all]"
 
 ## ⚡ 快速开始 (Alpha)
 
+### 分块
+
+分块在遵循 Markdown 结构的同时受尺寸预算约束：标题决定分节，节内的块按 `max_chunk_size` 装箱。
+
+```python
+SemanticChunker(max_chunk_size=1000, overlap=0, length_function=len)
+```
+
+- **`length_function`** 决定尺寸如何计量。默认按字符数，不引入任何依赖；需要按 token 预算时传入分词器的编码函数：
+  ```python
+  import tiktoken
+  encoder = tiktoken.get_encoding("cl100k_base")
+  SemanticChunker(max_chunk_size=512, length_function=lambda t: len(encoder.encode(t)))
+  ```
+- **`overlap`** 默认关闭。它会让内容在向量库中重复存储，因此设计为按需开启。
+- **表格**超出预算时按行切分，每一片都重复表头，保证每个 chunk 单独检索出来也可读。
+- **代码块**永不切分——切开会留下未闭合的围栏。超长的代码块整块输出，metadata 标记 `oversized: True`。
+- 代码围栏内的 `#` 不会被当作标题。
+
+每个 chunk 携带 `header`、`header_level`、`header_path`、`page_numbers` 和 `chunk_index`。
+
+CLI 侧用 `--chunk` 在 JSON 输出中加入 `chunks` 数组（Markdown 输出用 `---` 分隔），并激活 chunk 相关指标：
+
+```bash
+langparse parse paper.pdf --chunk --format json
+langparse parse docs/ --batch --chunk --metrics --output-dir out
+```
+
 ### MinerU 运行时
 
 LangParse 现在可以通过 `mineru-api` 调用 MinerU。你可以传入 `api_url` 连接已有服务，也可以省略 `api_url` 让 LangParse 尝试启动本地 `mineru-api` 并在当前解析任务结束后关闭。

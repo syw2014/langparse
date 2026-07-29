@@ -201,7 +201,7 @@ def test_cli_main_single_parse_delegates_to_service(monkeypatch):
 
     assert exit_code == 0
     assert calls == [
-        ("parse_output", "sample.pdf", "mineru", "json", {"device": "cpu"}),
+        ("parse_output", "sample.pdf", "mineru", "json", {"chunk": False, "device": "cpu"}),
         ("write_output", "rendered", Path("out.json")),
     ]
 
@@ -248,6 +248,7 @@ def test_cli_main_single_parse_passes_mineru_api_kwargs(monkeypatch):
             "mineru",
             "markdown",
             {
+                "chunk": False,
                 "api_url": "http://mineru.example:8000",
                 "api_port": 8010,
                 "api_command": "mineru-api",
@@ -367,7 +368,7 @@ def test_cli_main_batch_metrics_delegates_to_batch_service(monkeypatch):
     )
 
     assert exit_code == 0
-    assert calls == [(["docs/"], "mineru", "out", "json", 4, True, {"collect_metrics": True})]
+    assert calls == [(["docs/"], "mineru", "out", "json", 4, True, {"collect_metrics": True, "chunk": False})]
 
 
 def test_cli_main_benchmark_delegates_to_benchmark_service(monkeypatch):

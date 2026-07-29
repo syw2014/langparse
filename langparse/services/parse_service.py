@@ -233,8 +233,17 @@ class ParseService:
             engine=engine_name,
             pages=pages,
             markdown_content="\n".join(page.markdown_content for page in pages),
-            metadata={},
+            metadata=self._document_metadata_from_pages(pages),
         )
+
+    def _document_metadata_from_pages(self, pages: list[ParsedPageResult]) -> dict:
+        """Roll per-page engine signals up to the document, where metrics read them."""
+        return {
+            "ocr_applied": any(page.metadata.get("ocr_applied") for page in pages),
+            "ocr_text_chars": sum(
+                int(page.metadata.get("ocr_text_chars", 0) or 0) for page in pages
+            ),
+        }
 
     def create_engine(self, engine_name: str = "simple", **kwargs):
         """

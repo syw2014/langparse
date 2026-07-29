@@ -59,3 +59,134 @@ def test_benchmark_service_loads_manifest_and_writes_reports(tmp_path):
     assert result["summary"]["quality_passed_count"] == 1
     assert (tmp_path / "reports" / "benchmark-results.jsonl").exists()
     assert (tmp_path / "reports" / "benchmark-summary.json").exists()
+
+
+def test_benchmark_scores_fidelity_against_a_reference(tmp_path):
+    source = tmp_path / "doc.md"
+    source.write_text("# Title\n\nthe quick brown fox\n", encoding="utf-8")
+    reference = tmp_path / "doc.expected.md"
+    reference.write_text("# Title\n\nthe quick brown fox\n", encoding="utf-8")
+
+    manifest = tmp_path / "m.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "samples": [
+                    {
+                        "id": "s1",
+                        "path": str(source),
+                        "expected_markdown": str(reference),
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = BenchmarkService().run(manifest, output_dir=tmp_path / "reports", fmt="markdown")
+
+    fidelity = report["results"][0]["fidelity"]
+    assert fidelity["text_similarity"] == 1.0
+    assert report["summary"]["mean_text_similarity"] == 1.0
+
+
+def test_benchmark_fidelity_drops_when_content_is_missing(tmp_path):
+    source = tmp_path / "doc.md"
+    source.write_text("# Title\n\nonly this\n", encoding="utf-8")
+    reference = tmp_path / "doc.expected.md"
+    reference.write_text("# Title\n\nonly this and much much more text here\n", encoding="utf-8")
+
+    manifest = tmp_path / "m.json"
+    manifest.write_text(
+        json.dumps(
+            {"samples": [{"id": "s1", "path": str(source), "expected_markdown": str(reference)}]}
+        ),
+        encoding="utf-8",
+    )
+
+    report = BenchmarkService().run(manifest, output_dir=tmp_path / "reports", fmt="markdown")
+
+    assert report["results"][0]["fidelity"]["text_similarity"] < 1.0
+
+
+def test_benchmark_scores_tables_with_teds(tmp_path):
+    source = tmp_path / "t.csv"
+    source.write_text("A,B\n1,2\n", encoding="utf-8")
+
+    manifest = tmp_path / "m.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "samples": [
+                    {
+                        "id": "s1",
+                        "path": str(source),
+                        "expected_tables": [[["A", "B"], ["1", "2"]]],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = BenchmarkService().run(manifest, output_dir=tmp_path / "reports", fmt="json")
+
+    assert report["results"][0]["fidelity"]["teds"] == 1.0
+    assert report["summary"]["mean_teds"] == 1.0
+
+
+def test_benchmark_omits_fidelity_when_no_reference_is_given(tmp_path):
+    source = tmp_path / "doc.md"
+    source.write_text("# Title\n", encoding="utf-8")
+    manifest = tmp_path / "m.json"
+    manifest.write_text(json.dumps({"samples": [{"id": "s1", "path": str(source)}]}), encoding="utf-8")
+
+    report = BenchmarkService().run(manifest, output_dir=tmp_path / "reports", fmt="markdown")
+
+    assert report["results"][0]["fidelity"] is None
+    assert report["summary"]["mean_text_similarity"] is None
+
+
+def test_text_fidelity_compares_markdown_regardless_of_output_format(tmp_path):
+    """A JSON run writes a dataclass dump; scoring must still compare prose."""
+    source = tmp_path / "doc.md"
+    source.write_text("# Doc\n\nthe quick brown fox jumps\n", encoding="utf-8")
+    reference = tmp_path / "doc.expected.md"
+    reference.write_text("# Doc\n\nthe quick brown fox jumps\n", encoding="utf-8")
+
+    manifest = tmp_path / "m.json"
+    manifest.write_text(
+        json.dumps(
+            {"samples": [{"id": "s1", "path": str(source), "expected_markdown": str(reference)}]}
+        ),
+        encoding="utf-8",
+    )
+
+    report = BenchmarkService().run(manifest, output_dir=tmp_path / "reports", fmt="json")
+
+    assert report["results"][0]["fidelity"]["text_similarity"] == 1.0
+
+
+def test_table_fidelity_works_from_markdown_output(tmp_path):
+    source = tmp_path / "t.csv"
+    source.write_text("A,B\n1,2\n", encoding="utf-8")
+
+    manifest = tmp_path / "m.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "samples": [
+                    {
+                        "id": "s1",
+                        "path": str(source),
+                        "expected_tables": [[["A", "B"], ["1", "2"]]],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = BenchmarkService().run(manifest, output_dir=tmp_path / "reports", fmt="markdown")
+
+    assert report["results"][0]["fidelity"]["teds"] == 1.0

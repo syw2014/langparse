@@ -125,6 +125,50 @@ langparse parse paper.pdf --chunk --format json
 langparse parse docs/ --batch --chunk --metrics --output-dir out
 ```
 
+### Scanned PDFs
+
+The `simple` engine falls back to OCR when a page turns out to be an image.
+Detection needs both a page-covering image and a thin text layer — a scanned
+page often carries a watermark, and that watermark text is enough to clear any
+threshold low enough to avoid firing on genuinely sparse text pages.
+
+```bash
+pip install "langparse[ocr]"
+```
+
+```python
+PDFParser(engine="simple", enable_ocr=True, ocr_min_chars=500)
+```
+
+Pages that took the fallback report `ocr_applied` and `ocr_text_chars` in their
+metadata, which surface in `ParseMetrics`. Without `rapidocr_onnxruntime`
+installed the parse still succeeds — the page simply keeps whatever text layer
+it had, rather than failing.
+
+### Measuring parse fidelity
+
+Quality checks measure structure: page counts, whether any tables were found.
+They say nothing about whether the content is *correct*. To measure that, give a
+benchmark sample a reference:
+
+```json
+{
+  "id": "report-01",
+  "path": "samples/report.pdf",
+  "expected_markdown": "samples/report.expected.md",
+  "expected_tables": [[["Header A", "Header B"], ["1", "2"]]]
+}
+```
+
+- **Text** is scored by word-level normalised edit distance. Words rather than
+  characters, because a reflowed line break is not an error but a dropped word
+  is.
+- **Tables** are scored by TEDS. Cell substitution costs the normalised
+  character distance between the two cells, so a typo scores better than a
+  wrong value, and a dropped row costs more than a changed cell.
+
+Samples without a reference are reported as unscored, never as perfect.
+
 ### MinerU Runtime
 
 LangParse can run MinerU through `mineru-api`.

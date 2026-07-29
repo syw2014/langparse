@@ -6,6 +6,9 @@
       "category": "report",
       "features": ["tables", "multi_column", "figures", "headers_footers"],
       "engine": "mineru",
+      "_comment": "expected_markdown and expected_tables are optional. Supply them to score fidelity (word-level edit distance for text, TEDS for tables); omit them and the sample is reported as unscored rather than as perfect.",
+      "expected_markdown": "samples/public/public-pdf-quality-example.expected.md",
+      "expected_tables": [[["Header A", "Header B"], ["1", "2"]]],
       "checks": {
         "min_pages": 1,
         "min_chars": 100,

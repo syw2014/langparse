@@ -2,7 +2,7 @@
 
 **版本**: 0.0.1（`pyproject.toml`，未发布 PyPI）
 **最后更新**: 2026-07-30
-**测试**: 143 passed
+**测试**: 174 passed
 
 > 本文档在 2026-07-30 重写。此前版本声称 v0.1.0、测试覆盖 100%、解析器完成度 100%，三项均与实际不符，已按代码现状订正。
 
@@ -14,15 +14,15 @@
 | --- | --- | --- |
 | 核心架构 | 可用 | 统一在 `ParsedDocumentResult` 上，扩展名路由集中在 `parsers/registry.py` |
 | Markdown / DOCX / Excel 解析 | 可用 | 均产出结构化 pages/tables/elements |
-| PDF 解析（simple） | 可用 | pdfplumber，含表格提取；**无 OCR 兜底** |
+| PDF 解析（simple） | 可用 | pdfplumber，含表格提取与扫描件 OCR 兜底 |
 | PDF 解析（MinerU） | 可用 | 经 `mineru-api`，含服务生命周期管理、表格/图片/caption 抽取 |
 | PDF 解析（vision_llm / deepdoc / paddle） | **未实现** | `ENGINE_MAP` 中注册但抛 `NotImplementedError` |
 | 语义分块 | 可用 | 块扫描器 + 尺寸装箱，见 `chunkers/blocks.py` |
 | 批处理 / 指标 / 质检 | 可用 | 全格式生效 |
-| Benchmark | 部分 | 只测结构，不测保真度 |
+| Benchmark | 可用 | 结构阈值 + 保真度（文本编辑距离 / 表格 TEDS），需 manifest 提供参考输出 |
 | 测试 CI | **缺失** | 仅有 `pypi-publish.yml` |
 
-**测试覆盖率未测量**（无 coverage 配置）。"143 passed" 指用例全部通过，不等同于覆盖率。
+**测试覆盖率未测量**（无 coverage 配置）。"174 passed" 指用例全部通过，不等同于覆盖率。
 
 ---
 
@@ -60,8 +60,8 @@ langparse/
 ## 已知缺口
 
 **P2**
-- **无 OCR 兜底**：`ocr` extra 声明了 `rapidocr_onnxruntime`，代码零引用。扫描件走 simple 引擎得到空文本，不降级、不告警。
-- **Benchmark 不测保真度**：只有页数/表格数等结构阈值，没有 ground truth，因此无法支撑 "high-fidelity" 的主张。缺 TEDS（表格）与编辑距离（文本）。
+- **无标注语料**：保真度评分机制已具备，但仓库不含 ground truth 样本，因此尚未产出可引用的质量数字。需要一批带参考输出的公开文档。
+- OCR 兜底目前只接在 `simple` 引擎；MinerU 自带 OCR，未做交叉验证。
 
 **P3**
 - 无测试 CI，无 ruff/mypy/coverage，无 `py.typed`。

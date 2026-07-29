@@ -89,6 +89,38 @@ langparse parse paper.pdf --chunk --format json
 langparse parse docs/ --batch --chunk --metrics --output-dir out
 ```
 
+### 扫描件
+
+`simple` 引擎在识别出某页实为图片时会降级到 OCR。触发条件是**整页图片覆盖**与**文本稀疏**同时成立——扫描件往往带水印，而水印文本足以越过任何"低到不会误伤稀疏正文页"的阈值，因此单看文本长度不可靠。
+
+```bash
+pip install "langparse[ocr]"
+```
+
+```python
+PDFParser(engine="simple", enable_ocr=True, ocr_min_chars=500)
+```
+
+走了兜底的页会在 metadata 里报告 `ocr_applied` 与 `ocr_text_chars`，并汇总进 `ParseMetrics`。未安装 `rapidocr_onnxruntime` 时解析不会失败，只是该页保留原有的文本层。
+
+### 度量解析保真度
+
+质检度量的是结构：页数、有没有表格。它不回答内容是否**正确**。要度量后者，给 benchmark 样本提供参考输出：
+
+```json
+{
+  "id": "report-01",
+  "path": "samples/report.pdf",
+  "expected_markdown": "samples/report.expected.md",
+  "expected_tables": [[["Header A", "Header B"], ["1", "2"]]]
+}
+```
+
+- **文本**按词级归一化编辑距离评分。用词而非字符，是因为重排的换行不算错误，而漏词算。
+- **表格**按 TEDS 评分。单元格替换的代价取二者的字符级归一化距离，因此错字比错值得分高，而丢一整行比改一个单元格代价更大。
+
+没有提供参考输出的样本会被报告为**未评分**，而不是满分。
+
 ### MinerU 运行时
 
 LangParse 现在可以通过 `mineru-api` 调用 MinerU。你可以传入 `api_url` 连接已有服务，也可以省略 `api_url` 让 LangParse 尝试启动本地 `mineru-api` 并在当前解析任务结束后关闭。

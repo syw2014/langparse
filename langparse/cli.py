@@ -119,31 +119,21 @@ def _run(args, parser) -> int:
     }
 
     if args.batch:
-        if args.metrics or args.max_workers is not None or args.skip_existing or args.chunk:
-            BatchParseService().run(
-                args.inputs,
-                engine_name=engine_name,
-                output_dir=args.output_dir or "out",
-                fmt=args.format,
-                max_workers=args.max_workers,
-                skip_existing=args.skip_existing,
-                collect_metrics=args.metrics,
-                chunk=args.chunk,
-                **parse_kwargs,
-            )
-            return 0
-
-        outputs = service.parse_batch_outputs(
+        # One implementation regardless of flags. Without --output-dir the run
+        # renders to memory and prints; with it, outputs and reports are written.
+        result = BatchParseService().run(
             args.inputs,
             engine_name=engine_name,
+            output_dir=args.output_dir,
             fmt=args.format,
+            max_workers=args.max_workers,
+            skip_existing=args.skip_existing,
+            collect_metrics=args.metrics,
+            chunk=args.chunk,
             **parse_kwargs,
         )
-        if args.output_dir:
-            service.write_batch_outputs(outputs, args.output_dir, args.format)
-        else:
-            for _, rendered in outputs:
-                print(rendered)
+        for rendered in result.rendered_outputs:
+            print(rendered)
         return 0
 
     if len(args.inputs) != 1:

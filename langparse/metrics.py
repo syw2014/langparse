@@ -56,6 +56,10 @@ class BatchItemResult:
 class BatchRunResult:
     items: list[BatchItemResult] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
+    #: Rendered documents, populated only when the run had no output directory
+    #: and therefore rendered to memory instead of to disk. Kept off
+    #: BatchItemResult so it never bloats the JSONL report.
+    rendered_outputs: list[str] = field(default_factory=list)
 
     @property
     def total_files(self) -> int:

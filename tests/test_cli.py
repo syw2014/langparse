@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from langparse.cli import build_parser, main
+from langparse.metrics import BatchRunResult
 from langparse.services.parse_service import ParseService
 from langparse.types import ParsedDocumentResult, ParsedPageResult
 
@@ -262,29 +263,23 @@ def test_cli_main_single_parse_passes_mineru_api_kwargs(monkeypatch):
     ]
 
 
-def test_cli_main_batch_parse_delegates_to_service(monkeypatch, capsys):
+def test_cli_main_batch_delegates_to_batch_service_and_prints(monkeypatch, capsys):
+    """Without --output-dir the batch run renders to memory and the CLI prints it."""
     calls = []
 
-    class FakeService:
-        def parse_batch_outputs(self, inputs, engine_name="simple", fmt="markdown", **kwargs):
-            calls.append(("parse_batch_outputs", inputs, engine_name, fmt, kwargs))
-            return [(Path("a.pdf"), "first"), (Path("b.pdf"), "second")]
+    class FakeBatchService:
+        def run(self, inputs, **kwargs):
+            calls.append((inputs, kwargs))
+            return BatchRunResult(rendered_outputs=["first", "second"])
 
-        def write_batch_outputs(self, outputs, output_dir, fmt):
-            calls.append(("write_batch_outputs", outputs, output_dir, fmt))
-            return []
-
-    monkeypatch.setattr("langparse.cli.ParseService", FakeService)
+    monkeypatch.setattr("langparse.cli.BatchParseService", FakeBatchService)
 
     exit_code = main(["parse", "docs", "--batch"])
 
-    captured = capsys.readouterr()
-
     assert exit_code == 0
-    assert captured.out == "first\nsecond\n"
-    assert calls == [
-        ("parse_batch_outputs", ["docs"], "simple", "markdown", {}),
-    ]
+    assert capsys.readouterr().out == "first\nsecond\n"
+    assert calls[0][0] == ["docs"]
+    assert calls[0][1]["output_dir"] is None
 
 
 def test_cli_parse_accepts_batch_metrics_options():
@@ -345,7 +340,7 @@ def test_cli_main_batch_metrics_delegates_to_batch_service(monkeypatch):
             **kwargs,
         ):
             calls.append((inputs, engine_name, output_dir, fmt, max_workers, skip_existing, kwargs))
-            return None
+            return BatchRunResult()
 
     monkeypatch.setattr("langparse.cli.BatchParseService", FakeBatchService)
 
@@ -434,3 +429,33 @@ def test_cli_reports_missing_file_without_a_traceback(tmp_path, capsys):
     captured = capsys.readouterr()
     assert exit_code == 2
     assert "File not found" in captured.err
+
+
+def test_cli_batch_always_uses_one_implementation(tmp_path, monkeypatch):
+    """Plain --batch and flagged --batch must not take different code paths."""
+    used = []
+
+    class FakeBatchService:
+        def run(self, inputs, **kwargs):
+            used.append(kwargs)
+            return BatchRunResult()
+
+    monkeypatch.setattr("langparse.cli.BatchParseService", FakeBatchService)
+    source = tmp_path / "a.md"
+    source.write_text("# A\n", encoding="utf-8")
+
+    assert main(["parse", str(source), "--batch", "--output-dir", str(tmp_path / "o")]) == 0
+    assert main(["parse", str(source), "--batch", "--metrics", "--output-dir", str(tmp_path / "o")]) == 0
+
+    assert len(used) == 2, "plain --batch bypassed BatchParseService"
+
+
+def test_cli_plain_batch_writes_into_the_output_dir(tmp_path):
+    source_dir = tmp_path / "in"
+    source_dir.mkdir()
+    (source_dir / "a.md").write_text("# A\n\nbody\n", encoding="utf-8")
+    out = tmp_path / "out"
+
+    assert main(["parse", str(source_dir), "--batch", "--output-dir", str(out)]) == 0
+
+    assert list(out.rglob("*.md")), "no output written"

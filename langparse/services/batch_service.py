@@ -33,61 +33,59 @@ class BatchParseService:
         chunk: bool = False,
         **kwargs,
     ) -> BatchRunResult:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # No output directory means render to memory and let the caller print;
+        # this is the same code path, not a second implementation.
+        output_dir = Path(output_dir) if output_dir is not None else None
+        if output_dir is not None:
+            output_dir.mkdir(parents=True, exist_ok=True)
+
         paths = self.expand_inputs(inputs)
         worker_count = max_workers or min(4, os.cpu_count() or 1)
 
         # Resolved up front, single-threaded: collision handling relies on shared
         # state and every worker needs a destination nobody else will claim.
         output_paths = [
-            output_dir / relative for relative in resolve_output_paths(paths, fmt)
+            output_dir / relative if output_dir is not None else None
+            for relative in resolve_output_paths(paths, fmt)
         ]
 
         engine = self.parse_service.create_engine(engine_name, **kwargs)
 
-        if worker_count == 1:
-            items = [
-                self._run_one(
-                    path,
-                    output_path,
-                    engine_name,
-                    engine,
-                    fmt,
-                    skip_existing,
-                    fail_fast,
-                    collect_metrics,
-                    chunk,
-                    **kwargs,
-                )
-                for path, output_path in zip(paths, output_paths)
-            ]
-        else:
-            items = []
-            with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                futures = {
-                    executor.submit(
-                        self._run_one,
-                        path,
-                        output_path,
-                        engine_name,
-                        engine,
-                        fmt,
-                        skip_existing,
-                        fail_fast,
-                        collect_metrics,
-                        chunk,
-                        **kwargs,
-                    ): path
-                    for path, output_path in zip(paths, output_paths)
-                }
-                for future in as_completed(futures):
-                    items.append(future.result())
-            items.sort(key=lambda item: item.source)
+        job_args = [
+            (
+                path,
+                output_path,
+                engine_name,
+                engine,
+                fmt,
+                skip_existing,
+                fail_fast,
+                collect_metrics,
+                chunk,
+            )
+            for path, output_path in zip(paths, output_paths)
+        ]
 
-        result = BatchRunResult(items=items, summary=self._build_summary(items))
-        self._write_jsonl(output_dir / "batch-results.jsonl", items)
-        self._write_json(output_dir / "batch-summary.json", result.summary)
+        if worker_count == 1:
+            results = [self._run_one(*args, **kwargs) for args in job_args]
+        else:
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                futures = [
+                    executor.submit(self._run_one, *args, **kwargs) for args in job_args
+                ]
+                # Indexed rather than as_completed: input order is what pairs
+                # rendered output with the source the caller asked for.
+                results = [future.result() for future in futures]
+
+        items = [item for item, _ in results]
+        result = BatchRunResult(
+            items=items,
+            summary=self._build_summary(items),
+            rendered_outputs=[text for _, text in results if text is not None],
+        )
+        if output_dir is not None:
+            self._write_jsonl(output_dir / "batch-results.jsonl", items)
+            self._write_json(output_dir / "batch-summary.json", result.summary)
         return result
 
     def expand_inputs(self, inputs) -> list[Path]:
@@ -111,7 +109,7 @@ class BatchParseService:
     def _run_one(
         self,
         path: Path,
-        output_path: Path,
+        output_path: Path | None,
         engine_name: str,
         engine,
         fmt: str,
@@ -120,16 +118,20 @@ class BatchParseService:
         collect_metrics: bool,
         chunk: bool,
         **kwargs,
-    ) -> BatchItemResult:
+    ) -> tuple[BatchItemResult, str | None]:
+        """Return the report item and, when nothing was written, the rendered text."""
         started_at = self._utc_now()
-        if skip_existing and output_path.exists():
-            return BatchItemResult(
-                source=str(path),
-                status="skipped",
-                output_path=str(output_path),
-                engine=engine_name,
-                started_at=started_at,
-                finished_at=self._utc_now(),
+        if skip_existing and output_path is not None and output_path.exists():
+            return (
+                BatchItemResult(
+                    source=str(path),
+                    status="skipped",
+                    output_path=str(output_path),
+                    engine=engine_name,
+                    started_at=started_at,
+                    finished_at=self._utc_now(),
+                ),
+                None,
             )
 
         start = time.perf_counter()
@@ -139,34 +141,41 @@ class BatchParseService:
             )
             chunks = self.parse_service.chunk_result(parsed) if chunk else None
             rendered = self.parse_service.render_output(parsed, fmt, chunks=chunks)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(rendered, encoding="utf-8")
+            if output_path is not None:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
             elapsed = time.perf_counter() - start
             metrics = (
                 collect_parse_metrics(parsed, elapsed, chunks=chunks) if collect_metrics else None
             )
-            return BatchItemResult(
-                source=str(path),
-                status="success",
-                output_path=str(output_path),
-                metrics=metrics,
-                engine=engine_name,
-                started_at=started_at,
-                finished_at=self._utc_now(),
+            return (
+                BatchItemResult(
+                    source=str(path),
+                    status="success",
+                    output_path=str(output_path) if output_path is not None else None,
+                    metrics=metrics,
+                    engine=engine_name,
+                    started_at=started_at,
+                    finished_at=self._utc_now(),
+                ),
+                None if output_path is not None else rendered,
             )
         except Exception as exc:
             if fail_fast:
                 raise
             classified = classify_exception(exc)
-            return BatchItemResult(
-                source=str(path),
-                status="failed",
-                engine=engine_name,
-                error_type=classified.error_type.value,
-                error_message=classified.message,
-                started_at=started_at,
-                finished_at=self._utc_now(),
-            )
+            return self._failed_item(path, engine_name, classified, started_at), None
+
+    def _failed_item(self, path, engine_name, classified, started_at) -> BatchItemResult:
+        return BatchItemResult(
+            source=str(path),
+            status="failed",
+            engine=engine_name,
+            error_type=classified.error_type.value,
+            error_message=classified.message,
+            started_at=started_at,
+            finished_at=self._utc_now(),
+        )
 
     def _build_summary(self, items: list[BatchItemResult]) -> dict:
         total_pages = sum((item.metrics.page_count if item.metrics else 0) for item in items)

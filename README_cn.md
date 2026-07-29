@@ -96,6 +96,17 @@ cpu_doc = AutoParser.parse(
 
 ### CLI 示例
 
+CLI 支持全部格式，不限于 PDF。`--engine` 仅对 PDF 生效，其他格式自动路由到对应解析器：
+
+```bash
+langparse parse report.docx --format json
+langparse parse notes.md --output notes.out.md
+langparse parse mixed_folder/ --batch --output-dir out --metrics
+```
+
+支持的扩展名：`.pdf`、`.docx`、`.doc`、`.xlsx`、`.xls`、`.csv`、`.md`、`.txt`。
+批处理的目录展开会全部识别；不支持的文件以退出码 2 和单行错误信息结束。
+
 单文件解析：
 
 ```bash

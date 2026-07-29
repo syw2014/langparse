@@ -153,6 +153,19 @@ export LANGPARSE_MINERU_AUTO_INSTALL_RUNTIME=true
 
 ### CLI Examples
 
+The CLI handles every supported format, not just PDF. `--engine` applies to
+PDFs only; other formats route to their own parser automatically:
+
+```bash
+langparse parse report.docx --format json
+langparse parse notes.md --output notes.out.md
+langparse parse mixed_folder/ --batch --output-dir out --metrics
+```
+
+Supported extensions: `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.csv`, `.md`, `.txt`.
+Batch directory expansion picks up all of them; unsupported files exit with
+code 2 and a one-line message.
+
 Single-file parsing:
 
 ```bash

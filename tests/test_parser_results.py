@@ -3,6 +3,7 @@ markdown blob, so metrics/quality/batch work for more than PDFs."""
 
 from pathlib import Path
 
+from langparse.core.rendering import document_from_result
 from langparse.metrics import collect_parse_metrics
 from langparse.parsers.docx_parser import DocxParser
 from langparse.parsers.excel_parser import ExcelParser
@@ -66,3 +67,32 @@ def test_parse_result_carries_source_identity(sample_docx_file):
     assert parsed.filename == "test.docx"
     assert Path(parsed.source) == Path(sample_docx_file)
     assert parsed.metadata["extension"] == ".docx"
+
+
+def test_csv_page_has_no_sheet_heading(tmp_path):
+    source = tmp_path / "rows.csv"
+    source.write_text("A,B\n1,2\n", encoding="utf-8")
+
+    parsed = ExcelParser().parse_result(source)
+
+    assert len(parsed.pages) == 1
+    assert "### Sheet:" not in parsed.pages[0].markdown_content
+
+
+def test_blank_cells_do_not_become_the_string_nan(tmp_path):
+    source = tmp_path / "rows.csv"
+    source.write_text("A,B\n1,\n", encoding="utf-8")
+
+    rows = ExcelParser().parse_result(source).pages[0].tables[0]["rows"]
+
+    assert rows == [["A", "B"], ["1", ""]]
+
+
+def test_document_metadata_does_not_alias_the_parse_result(sample_docx_file):
+    parser = DocxParser()
+    parsed = parser.parse_result(sample_docx_file)
+    document = document_from_result(parsed)
+
+    parsed.metadata["extension"] = ".mutated"
+
+    assert document.metadata["parsed_metadata"]["extension"] == ".docx"

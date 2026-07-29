@@ -137,3 +137,18 @@ def test_collect_parse_metrics_counts_pages_tables_and_output_size():
     assert metrics.image_count == 1
     assert metrics.ocr_applied is True
     assert metrics.ocr_text_chars == 12
+
+
+def test_write_batch_outputs_keeps_same_dir_siblings_together(tmp_path):
+    source_dir = tmp_path / "docs"
+    source_dir.mkdir()
+    outputs = [
+        (source_dir / "report.pdf", "from pdf"),
+        (source_dir / "report.docx", "from docx"),
+    ]
+
+    written = ParseService().write_batch_outputs(outputs, tmp_path / "out", "markdown")
+
+    assert len(set(written)) == 2
+    assert len({path.parent for path in written}) == 1
+    assert all("report" in path.name for path in written)

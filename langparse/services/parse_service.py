@@ -17,7 +17,11 @@ from langparse.parsers.registry import (
     parser_kind_for,
     unsupported_extension_error,
 )
-from langparse.services.output_paths import output_filename, resolve_output_path
+from langparse.services.output_paths import (
+    output_filename,
+    resolve_output_path,
+    resolve_output_paths,
+)
 from langparse.types import Document, ParsedDocumentResult, ParsedPageResult
 
 ENGINE_MAP = {
@@ -81,14 +85,14 @@ class ParseService:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        outputs = list(outputs)
+        # Resolve all destinations together so same-stem siblings are grouped
+        # the same way BatchParseService groups them.
+        relative_paths = resolve_output_paths([source for source, _ in outputs], fmt)
+
         written_paths = []
-        used_relative_paths = set()
-        for source_path, content in outputs:
-            destination = output_dir / self._output_path_for_batch_item(
-                source_path,
-                fmt,
-                used_relative_paths,
-            )
+        for (_, content), relative in zip(outputs, relative_paths):
+            destination = output_dir / relative
             self.write_output(content, destination)
             written_paths.append(destination)
         return written_paths

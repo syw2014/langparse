@@ -46,7 +46,7 @@ class ExcelParser(BaseParser):
         markdown_content = f"{heading}\n{table_markdown}\n" if heading else table_markdown
 
         rows = [[str(column) for column in frame.columns]]
-        rows.extend([["" if value is None else str(value) for value in row] for row in frame.values])
+        rows.extend([[self._cell_text(value) for value in row] for row in frame.values])
 
         return ParsedPageResult(
             page_number=page_number,
@@ -56,3 +56,19 @@ class ExcelParser(BaseParser):
             tables=[{"rows": rows, "sheet_name": sheet_name}],
             metadata={"sheet_name": sheet_name},
         )
+
+    def _cell_text(self, value) -> str:
+        """
+        Render one cell for the structured table.
+
+        Blank cells arrive as NaN rather than None, and a single blank promotes
+        an integer column to float -- so a naive str() yields "nan" and "1.0"
+        where the source held an empty cell and 1.
+        """
+        import pandas as pd
+
+        if value is None or pd.isna(value):
+            return ""
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value)

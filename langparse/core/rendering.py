@@ -42,5 +42,8 @@ def document_metadata(parsed: ParsedDocumentResult) -> dict:
         "filename": parsed.filename,
         "extension": parsed.metadata.get("extension") or Path(parsed.filename).suffix,
         "engine": parsed.engine,
-        "parsed_metadata": parsed.metadata,
+        # Copied, not aliased: SemanticChunker shallow-copies this dict into
+        # every chunk, so sharing one instance would let a later mutation of the
+        # parse result reach through into already-emitted chunks.
+        "parsed_metadata": dict(parsed.metadata),
     }

@@ -80,8 +80,12 @@ class ParseService:
         engine_name="simple",
         fmt="markdown",
         engine=None,
+        chunk=False,
         **kwargs,
     ) -> list[tuple[Path, str]]:
+        # `chunk` is named explicitly rather than left in **kwargs: kwargs also
+        # feed engine construction, and MinerU folds unknown kwargs into
+        # extra_options and sends them to its API as form fields.
         outputs = []
         active_engine = engine or self._create_engine(engine_name, **kwargs)
         for file_path in self.expand_inputs(inputs):
@@ -93,6 +97,7 @@ class ParseService:
                         engine_name=engine_name,
                         fmt=fmt,
                         engine=active_engine,
+                        chunk=chunk,
                         **kwargs,
                     ),
                 )

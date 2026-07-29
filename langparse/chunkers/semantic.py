@@ -133,20 +133,19 @@ class SemanticChunker(BaseChunker):
 
         header, *data_rows = block.rows
         header_markdown = [_row_markdown(header), _separator_markdown(len(header))]
-        header_size = self.length_function("\n".join(header_markdown))
 
         parts: List[str] = []
         pending: List[str] = []
-        pending_size = header_size
 
         for row in data_rows:
-            rendered = _row_markdown(row)
-            row_size = self.length_function(rendered) + 1
-            if pending and pending_size + row_size > self.max_chunk_size:
+            candidate = pending + [_row_markdown(row)]
+            # Measure the rendered candidate rather than summing row sizes: a
+            # token counter does not charge exactly one unit per newline.
+            if pending and not self._fits("\n".join(header_markdown + candidate)):
                 parts.append("\n".join(header_markdown + pending))
-                pending, pending_size = [], header_size
-            pending.append(rendered)
-            pending_size += row_size
+                pending = [_row_markdown(row)]
+            else:
+                pending = candidate
 
         if pending:
             parts.append("\n".join(header_markdown + pending))

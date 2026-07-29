@@ -75,3 +75,41 @@ def test_batch_metrics_count_chunks_when_chunking_is_on(tmp_path):
     metrics = result.items[0].metrics
     assert metrics.chunk_count == 2
     assert metrics.chunks_with_page_numbers_ratio == 1.0
+
+
+def test_library_batch_api_can_chunk_too(tmp_path):
+    source = tmp_path / "note.md"
+    source.write_text("# A\n\nbody\n\n# B\n\nbody\n", encoding="utf-8")
+
+    outputs = ParseService().parse_batch_outputs([source], fmt="json", chunk=True)
+
+    payload = json.loads(outputs[0][1])
+    assert len(payload["chunks"]) == 2
+
+
+def test_overlap_changes_the_output_relative_to_no_overlap():
+    from langparse.chunkers.semantic import SemanticChunker
+    from langparse.types import Document
+
+    content = "# T\n\n" + "\n\n".join(f"Para{i} " + "word " * 30 for i in range(4))
+    document = Document(content=content, metadata={})
+
+    without = SemanticChunker(max_chunk_size=250).chunk(document)
+    with_overlap = SemanticChunker(max_chunk_size=250, overlap=60).chunk(document)
+
+    assert [c.content for c in without] != [c.content for c in with_overlap]
+
+
+def test_oversized_paragraph_splits_on_sentence_boundaries():
+    from langparse.chunkers.semantic import SemanticChunker
+    from langparse.types import Document
+
+    sentences = [f"This is sentence number {i} and it carries some filler text." for i in range(8)]
+    document = Document(content="# T\n\n" + " ".join(sentences), metadata={})
+
+    chunks = SemanticChunker(max_chunk_size=200).chunk(document)
+
+    assert len(chunks) > 1
+    bodies = [c.content.replace("# T", "").strip() for c in chunks]
+    # Every chunk ends at a sentence terminator rather than mid-sentence.
+    assert all(body.endswith(".") for body in bodies), bodies

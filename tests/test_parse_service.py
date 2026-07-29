@@ -152,3 +152,33 @@ def test_write_batch_outputs_keeps_same_dir_siblings_together(tmp_path):
     assert len(set(written)) == 2
     assert len({path.parent for path in written}) == 1
     assert all("report" in path.name for path in written)
+
+
+def test_chunk_option_does_not_leak_into_engine_config(tmp_path):
+    """Rendering options must not be forwarded as engine construction kwargs.
+
+    MinerU folds unknown kwargs into extra_options and sends them to its API as
+    form fields, so a leak here becomes a bogus request parameter.
+    """
+    from langparse.services import parse_service as module
+
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+    seen = {}
+
+    class RecordingEngine:
+        def __init__(self, **config):
+            seen.update(config)
+
+        def process(self, file_path, **kwargs):
+            return iter(())
+
+    module.ENGINE_MAP["recording"] = RecordingEngine
+    try:
+        ParseService().parse_batch_outputs(
+            [pdf], engine_name="recording", fmt="json", chunk=True
+        )
+    finally:
+        module.ENGINE_MAP.pop("recording", None)
+
+    assert "chunk" not in seen

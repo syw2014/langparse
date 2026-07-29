@@ -1,45 +1,58 @@
-from typing import Union
 from pathlib import Path
+from typing import Union
+
 from langparse.core.parser import BaseParser
-from langparse.types import Document
+from langparse.types import ParsedDocumentResult, ParsedElement, ParsedPageResult
+
 
 class ExcelParser(BaseParser):
     """
     Parses .xlsx/.csv files to Markdown Tables.
     Each Sheet is treated as a separate 'Page'.
     """
-    
-    def parse(self, file_path: Union[str, Path], **kwargs) -> Document:
-        file_path = Path(file_path)
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-            
+
+    def parse_result(self, file_path: Union[str, Path], **kwargs) -> ParsedDocumentResult:
+        path = self._resolve_existing_path(file_path)
+
         try:
             import pandas as pd
         except ImportError:
-            raise ImportError("pandas and openpyxl are required. Install with `pip install pandas openpyxl`.")
-            
-        markdown_parts = []
-        
-        if file_path.suffix == '.csv':
-            df = pd.read_csv(file_path)
-            markdown_parts.append("<!-- page_number: 1 -->\n")
-            markdown_parts.append(df.to_markdown(index=False))
+            raise ImportError(
+                "pandas and openpyxl are required. Install with `pip install pandas openpyxl`."
+            )
+
+        if path.suffix.lower() == ".csv":
+            sheets = {None: pd.read_csv(path)}
         else:
-            # Excel with multiple sheets
-            sheets = pd.read_excel(file_path, sheet_name=None)
-            for i, (sheet_name, df) in enumerate(sheets.items()):
-                page_num = i + 1
-                markdown_parts.append(f"\n<!-- page_number: {page_num} -->")
-                markdown_parts.append(f"### Sheet: {sheet_name}\n")
-                markdown_parts.append(df.to_markdown(index=False))
-                markdown_parts.append("\n")
-                
-        return Document(
-            content="\n".join(markdown_parts),
-            metadata={
-                "source": str(file_path),
-                "filename": file_path.name,
-                "extension": file_path.suffix
-            }
+            sheets = pd.read_excel(path, sheet_name=None)
+
+        pages = [
+            self._page_for_sheet(index + 1, sheet_name, frame)
+            for index, (sheet_name, frame) in enumerate(sheets.items())
+        ]
+
+        return ParsedDocumentResult(
+            source=str(path),
+            filename=path.name,
+            engine="excel",
+            pages=pages,
+            markdown_content="\n".join(page.markdown_content for page in pages),
+            metadata={"extension": path.suffix, "sheet_count": len(pages)},
+        )
+
+    def _page_for_sheet(self, page_number: int, sheet_name, frame) -> ParsedPageResult:
+        table_markdown = frame.to_markdown(index=False)
+        heading = f"### Sheet: {sheet_name}\n" if sheet_name is not None else ""
+        markdown_content = f"{heading}\n{table_markdown}\n" if heading else table_markdown
+
+        rows = [[str(column) for column in frame.columns]]
+        rows.extend([["" if value is None else str(value) for value in row] for row in frame.values])
+
+        return ParsedPageResult(
+            page_number=page_number,
+            markdown_content=markdown_content,
+            plain_text=table_markdown,
+            elements=[ParsedElement(kind="table", text=table_markdown)],
+            tables=[{"rows": rows, "sheet_name": sheet_name}],
+            metadata={"sheet_name": sheet_name},
         )

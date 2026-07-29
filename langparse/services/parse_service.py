@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Iterator, Union
 
 from langparse.config import settings
+from langparse.core.rendering import document_from_result
 from langparse.engines.pdf.mineru import MinerUEngine
 from langparse.engines.pdf.other import DeepDocEngine, PaddleOCRVLEngine
 from langparse.engines.pdf.simple import SimplePDFEngine
 from langparse.engines.pdf.vision_llm import VisionLLMEngine
+from langparse.parsers.registry import parser_kind_for, unsupported_extension_error
 from langparse.services.output_paths import output_filename, resolve_output_path
 from langparse.types import Document, ParsedDocumentResult, ParsedPageResult
 
@@ -32,7 +34,7 @@ class ParseService:
         raise ValueError(f"Unsupported output format: {fmt}")
 
     def parse_output(self, file_path, engine_name="simple", fmt="markdown", engine=None, **kwargs) -> str:
-        parsed = self._collect_pdf_document_result(
+        parsed = self.parse_result(
             file_path,
             engine_name=engine_name,
             engine=engine,
@@ -106,12 +108,42 @@ class ParseService:
         return paths
 
     def parse_result(self, file_path, engine_name="simple", engine=None, **kwargs):
-        return self._collect_pdf_document_result(
-            file_path,
-            engine_name=engine_name,
-            engine=engine,
-            **kwargs,
-        )
+        """
+        Parse any supported format into a ParsedDocumentResult.
+
+        This is the one place extension routing happens; everything else reads
+        the mapping from `langparse.parsers.registry`.
+        """
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        kind = parser_kind_for(path)
+        if kind is None:
+            raise unsupported_extension_error(path)
+        if kind == "pdf":
+            return self._collect_pdf_document_result(
+                path,
+                engine_name=engine_name,
+                engine=engine,
+                **kwargs,
+            )
+        return self._parser_for_kind(kind).parse_result(path, **kwargs)
+
+    def _parser_for_kind(self, kind: str):
+        if kind == "docx":
+            from langparse.parsers.docx_parser import DocxParser
+
+            return DocxParser()
+        if kind == "excel":
+            from langparse.parsers.excel_parser import ExcelParser
+
+            return ExcelParser()
+        if kind == "markdown":
+            from langparse.parsers.markdown_parser import MarkdownParser
+
+            return MarkdownParser()
+        raise ValueError(f"No parser registered for kind: {kind}")
 
     def parse_file(self, file_path, engine_name="simple", engine=None, **kwargs):
         parsed = self.parse_result(
@@ -197,20 +229,7 @@ class ParseService:
         )
 
     def _build_document_from_result(self, parsed: ParsedDocumentResult) -> Document:
-        full_content = []
-        for page in parsed.pages:
-            full_content.append(f"\n<!-- page_number: {page.page_number} -->\n")
-            full_content.append(page.markdown_content)
-
-        return Document(
-            content="\n".join(full_content),
-            metadata={
-                "source": parsed.source,
-                "filename": parsed.filename,
-                "engine": parsed.engine,
-                "parsed_metadata": parsed.metadata,
-            },
-        )
+        return document_from_result(parsed)
 
     def _flatten_inputs(self, inputs) -> Iterator[Union[str, Path]]:
         if isinstance(inputs, (str, Path)):

@@ -54,3 +54,7 @@ class ParsedDocumentResult:
     pages: List[ParsedPageResult] = field(default_factory=list)
     markdown_content: str = ""
     metadata: StructuredData = field(default_factory=dict)
+    #: Whether page numbers are real boundaries. Flow formats without intrinsic
+    #: pagination (plain Markdown) set this False so downstream code neither
+    #: injects page markers nor scores page coverage against a fiction.
+    paginated: bool = True

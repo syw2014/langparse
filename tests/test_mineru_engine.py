@@ -385,3 +385,57 @@ def test_client_normalizes_content_list_response(tmp_path):
     assert [page["page_number"] for page in pages] == [1, 2]
     assert pages[0]["plain_text"] == "Title"
     assert pages[1]["elements"][0]["kind"] == "text"
+
+
+def _table_response():
+    return {
+        "markdown": "# Doc",
+        "content_list": [
+            {"page_idx": 0, "type": "text", "text": "Intro"},
+            {
+                "page_idx": 0,
+                "type": "table",
+                "table_body": "<table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table>",
+                "table_caption": ["Table 1: results"],
+                "img_path": "images/t0.jpg",
+            },
+            {
+                "page_idx": 0,
+                "type": "image",
+                "img_path": "images/f0.jpg",
+                "image_caption": ["Figure 1: overview"],
+            },
+        ],
+    }
+
+
+def test_client_extracts_tables_from_content_list():
+    client = MinerUClient("http://mineru.example")
+
+    pages = client._normalize_parse_response(_table_response())
+
+    assert len(pages[0]["tables"]) == 1
+    table = pages[0]["tables"][0]
+    assert table["caption"] == "Table 1: results"
+    assert table["rows"] == [["A", "B"], ["1", "2"]]
+
+
+def test_client_extracts_images_with_captions_from_content_list():
+    client = MinerUClient("http://mineru.example")
+
+    pages = client._normalize_parse_response(_table_response())
+
+    assert len(pages[0]["images"]) == 1
+    assert pages[0]["images"][0]["caption"] == "Figure 1: overview"
+    assert pages[0]["images"][0]["path"] == "images/f0.jpg"
+
+
+def test_client_keeps_table_content_in_page_markdown():
+    client = MinerUClient("http://mineru.example")
+
+    pages = client._normalize_parse_response(_table_response())
+
+    markdown = pages[0]["markdown"]
+    assert "| A | B |" in markdown
+    assert "| 1 | 2 |" in markdown
+    assert "Intro" in markdown

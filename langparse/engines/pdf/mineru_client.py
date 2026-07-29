@@ -3,10 +3,66 @@ from __future__ import annotations
 import json
 import mimetypes
 import uuid
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib import request
 from urllib.error import HTTPError, URLError
+
+
+class _HTMLTableReader(HTMLParser):
+    """Collects rows/cells from the HTML fragment MinerU returns as ``table_body``."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.rows: list[list[str]] = []
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "tr":
+            self._row = []
+        elif tag in ("td", "th"):
+            self._cell = []
+
+    def handle_endtag(self, tag):
+        if tag in ("td", "th") and self._cell is not None:
+            text = " ".join("".join(self._cell).split())
+            if self._row is None:
+                self._row = []
+            self._row.append(text)
+            self._cell = None
+        elif tag == "tr" and self._row is not None:
+            self.rows.append(self._row)
+            self._row = None
+
+    def handle_data(self, data):
+        if self._cell is not None:
+            self._cell.append(data)
+
+
+def parse_html_table(markup: str) -> list[list[str]]:
+    """Parse an HTML table fragment into rows of cell text. Returns [] if unparseable."""
+    if not markup:
+        return []
+    reader = _HTMLTableReader()
+    try:
+        reader.feed(markup)
+        reader.close()
+    except Exception:
+        return []
+    return [row for row in reader.rows if row]
+
+
+def rows_to_markdown(rows: list[list[str]]) -> str:
+    """Render rows as a Markdown table, padding short rows to the header width."""
+    if not rows:
+        return ""
+    width = max(len(row) for row in rows)
+    padded = [row + [""] * (width - len(row)) for row in rows]
+    lines = [f"| {' | '.join(padded[0])} |", f"| {' | '.join(['---'] * width)} |"]
+    lines.extend(f"| {' | '.join(row)} |" for row in padded[1:])
+    return "\n".join(lines)
 
 
 class MinerUClient:
@@ -123,25 +179,80 @@ class MinerUClient:
         pages = []
         for page_idx in sorted(page_map):
             items = page_map[page_idx]
-            text_lines = [item.get("text", "") for item in items if item.get("text")]
-            pages.append(
+            pages.append(self._build_page(page_idx, items, markdown))
+        return pages
+
+    def _build_page(
+        self, page_idx: int, items: list[dict[str, Any]], document_markdown: str
+    ) -> dict[str, Any]:
+        markdown_blocks: list[str] = []
+        text_lines: list[str] = []
+        tables: list[dict[str, Any]] = []
+        images: list[dict[str, Any]] = []
+        elements: list[dict[str, Any]] = []
+
+        for item in items:
+            kind = item.get("type", "text")
+            caption = self._join_caption(item.get(f"{kind}_caption"))
+
+            if kind == "table":
+                rows = parse_html_table(item.get("table_body", ""))
+                table_markdown = rows_to_markdown(rows)
+                tables.append(
+                    {
+                        "rows": rows,
+                        "caption": caption,
+                        "html": item.get("table_body", ""),
+                        "img_path": item.get("img_path"),
+                    }
+                )
+                block = "\n\n".join(part for part in (caption, table_markdown) if part)
+                if block:
+                    markdown_blocks.append(block)
+                element_text = table_markdown
+            elif kind == "image":
+                images.append(
+                    {
+                        "path": item.get("img_path"),
+                        "caption": caption,
+                        "footnote": self._join_caption(item.get("image_footnote")),
+                    }
+                )
+                block = f"![{caption}]({item.get('img_path') or ''})"
+                markdown_blocks.append(block)
+                element_text = caption
+            else:
+                text = item.get("text", "")
+                if text:
+                    markdown_blocks.append(text)
+                    text_lines.append(text)
+                element_text = text
+
+            elements.append(
                 {
-                    "page_number": page_idx + 1,
-                    "markdown": "\n".join(text_lines) or markdown,
-                    "plain_text": "\n".join(text_lines),
-                    "elements": [
-                        {
-                            "kind": item.get("type", "text"),
-                            "text": item.get("text", ""),
-                            "bbox": item.get("bbox"),
-                            "metadata": {"page_idx": page_idx},
-                        }
-                        for item in items
-                    ],
-                    "engine_specific": {"content_list": items},
+                    "kind": kind,
+                    "text": element_text,
+                    "bbox": item.get("bbox"),
+                    "metadata": {"page_idx": page_idx},
                 }
             )
-        return pages
+
+        return {
+            "page_number": page_idx + 1,
+            "markdown": "\n\n".join(markdown_blocks) or document_markdown,
+            "plain_text": "\n".join(text_lines),
+            "elements": elements,
+            "tables": tables,
+            "images": images,
+            "engine_specific": {"content_list": items},
+        }
+
+    def _join_caption(self, caption: Any) -> str:
+        if isinstance(caption, str):
+            return caption.strip()
+        if isinstance(caption, list):
+            return " ".join(str(part).strip() for part in caption if str(part).strip())
+        return ""
 
     def _extract_markdown(self, response: dict[str, Any]) -> str:
         candidates = [

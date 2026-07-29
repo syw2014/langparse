@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from langparse.types import ParsedDocumentResult
+from langparse.types import Chunk, ParsedDocumentResult
 
 
 def pages_per_second(page_count: int, elapsed_seconds: float) -> float:
@@ -74,9 +74,30 @@ class BatchRunResult:
         return sum(1 for item in self.items if item.status == "skipped")
 
 
-def collect_parse_metrics(parsed: ParsedDocumentResult, elapsed_seconds: float) -> ParseMetrics:
+def page_marker_coverage(parsed: ParsedDocumentResult) -> float:
+    """
+    Fraction of pages carrying a usable page number.
+
+    This is what makes a chunk citable back to a page, so the
+    ``require_page_markers`` quality check reads it directly.
+    """
+    if not getattr(parsed, "paginated", True) or not parsed.pages:
+        return 0.0
+    numbered = sum(1 for page in parsed.pages if page.page_number and page.page_number >= 1)
+    return round(numbered / len(parsed.pages), 4)
+
+
+def collect_parse_metrics(
+    parsed: ParsedDocumentResult,
+    elapsed_seconds: float,
+    chunks: list[Chunk] | None = None,
+) -> ParseMetrics:
     markdown = parsed.markdown_content or ""
     page_count = len(parsed.pages)
+    chunk_count = len(chunks) if chunks is not None else 0
+    chunks_with_pages = (
+        sum(1 for chunk in chunks if chunk.metadata.get("page_numbers")) if chunks else 0
+    )
     image_count = sum(len(page.images) for page in parsed.pages)
     table_count = sum(len(page.tables) for page in parsed.pages) or count_markdown_tables(markdown)
     caption_count = sum(
@@ -94,6 +115,11 @@ def collect_parse_metrics(parsed: ParsedDocumentResult, elapsed_seconds: float) 
         markdown_chars=len(markdown),
         table_count=table_count,
         image_count=image_count,
+        chunk_count=chunk_count,
+        chunks_with_page_numbers_ratio=round(chunks_with_pages / chunk_count, 4)
+        if chunk_count
+        else 0.0,
+        page_marker_coverage=page_marker_coverage(parsed),
         ocr_applied=bool(parsed.metadata.get("ocr_applied", False)),
         ocr_text_chars=int(parsed.metadata.get("ocr_text_chars", 0) or 0),
         multi_column_detected=bool(parsed.metadata.get("multi_column_detected", False)),

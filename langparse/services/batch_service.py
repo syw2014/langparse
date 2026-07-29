@@ -11,6 +11,7 @@ from typing import Iterable
 
 from langparse.errors import classify_exception
 from langparse.metrics import BatchItemResult, BatchRunResult, collect_parse_metrics
+from langparse.services.output_paths import resolve_output_paths
 from langparse.services.parse_service import ParseService
 
 
@@ -35,19 +36,28 @@ class BatchParseService:
         paths = self.expand_inputs(inputs)
         worker_count = max_workers or min(4, os.cpu_count() or 1)
 
+        # Resolved up front, single-threaded: collision handling relies on shared
+        # state and every worker needs a destination nobody else will claim.
+        output_paths = [
+            output_dir / relative for relative in resolve_output_paths(paths, fmt)
+        ]
+
+        engine = self.parse_service.create_engine(engine_name, **kwargs)
+
         if worker_count == 1:
             items = [
                 self._run_one(
                     path,
-                    output_dir,
+                    output_path,
                     engine_name,
+                    engine,
                     fmt,
                     skip_existing,
                     fail_fast,
                     collect_metrics,
                     **kwargs,
                 )
-                for path in paths
+                for path, output_path in zip(paths, output_paths)
             ]
         else:
             items = []
@@ -56,15 +66,16 @@ class BatchParseService:
                     executor.submit(
                         self._run_one,
                         path,
-                        output_dir,
+                        output_path,
                         engine_name,
+                        engine,
                         fmt,
                         skip_existing,
                         fail_fast,
                         collect_metrics,
                         **kwargs,
                     ): path
-                    for path in paths
+                    for path, output_path in zip(paths, output_paths)
                 }
                 for future in as_completed(futures):
                     items.append(future.result())
@@ -96,8 +107,9 @@ class BatchParseService:
     def _run_one(
         self,
         path: Path,
-        output_dir: Path,
+        output_path: Path,
         engine_name: str,
+        engine,
         fmt: str,
         skip_existing: bool,
         fail_fast: bool,
@@ -105,7 +117,6 @@ class BatchParseService:
         **kwargs,
     ) -> BatchItemResult:
         started_at = self._utc_now()
-        output_path = output_dir / self._output_filename(path, fmt)
         if skip_existing and output_path.exists():
             return BatchItemResult(
                 source=str(path),
@@ -118,7 +129,9 @@ class BatchParseService:
 
         start = time.perf_counter()
         try:
-            parsed = self.parse_service.parse_result(path, engine_name=engine_name, **kwargs)
+            parsed = self.parse_service.parse_result(
+                path, engine_name=engine_name, engine=engine, **kwargs
+            )
             rendered = self.parse_service.render_output(parsed, fmt)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(rendered, encoding="utf-8")
@@ -162,9 +175,6 @@ class BatchParseService:
             else 0.0,
             "failed_sources": [item.source for item in items if item.status == "failed"],
         }
-
-    def _output_filename(self, source: Path, fmt: str) -> str:
-        return f"{source.stem}{'.md' if fmt == 'markdown' else '.json'}"
 
     def _write_jsonl(self, path: Path, items: list[BatchItemResult]) -> None:
         with path.open("w", encoding="utf-8") as handle:

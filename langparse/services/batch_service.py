@@ -11,6 +11,7 @@ from typing import Iterable
 
 from langparse.errors import classify_exception
 from langparse.metrics import BatchItemResult, BatchRunResult, collect_parse_metrics
+from langparse.parsers.registry import is_supported
 from langparse.services.output_paths import resolve_output_paths
 from langparse.services.parse_service import ParseService
 
@@ -97,7 +98,7 @@ class BatchParseService:
                     sorted(
                         child
                         for child in path.iterdir()
-                        if child.is_file() and child.suffix.lower() == ".pdf"
+                        if child.is_file() and is_supported(child)
                     )
                 )
             else:

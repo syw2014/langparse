@@ -12,7 +12,11 @@ from langparse.engines.pdf.mineru import MinerUEngine
 from langparse.engines.pdf.other import DeepDocEngine, PaddleOCRVLEngine
 from langparse.engines.pdf.simple import SimplePDFEngine
 from langparse.engines.pdf.vision_llm import VisionLLMEngine
-from langparse.parsers.registry import parser_kind_for, unsupported_extension_error
+from langparse.parsers.registry import (
+    is_supported,
+    parser_kind_for,
+    unsupported_extension_error,
+)
 from langparse.services.output_paths import output_filename, resolve_output_path
 from langparse.types import Document, ParsedDocumentResult, ParsedPageResult
 
@@ -100,7 +104,7 @@ class ParseService:
                     sorted(
                         child
                         for child in path.iterdir()
-                        if child.is_file() and child.suffix.lower() == ".pdf"
+                        if child.is_file() and is_supported(child)
                     )
                 )
             else:

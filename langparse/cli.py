@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Sequence
 
+from langparse.errors import classify_exception
 from langparse.services.batch_service import BatchParseService
 from langparse.services.benchmark_service import BenchmarkService
 from langparse.services.parse_service import ParseService
@@ -55,6 +57,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    try:
+        return _run(args, parser)
+    except Exception as exc:  # noqa: BLE001 - CLI boundary: report, never traceback
+        classified = classify_exception(exc)
+        print(f"langparse: {classified.error_type.value}: {classified.message}", file=sys.stderr)
+        return 2
+
+
+def _run(args, parser) -> int:
     if args.command == "benchmark":
         benchmark_kwargs = {
             key: value

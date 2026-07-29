@@ -173,3 +173,32 @@ def test_batch_service_raises_when_fail_fast_true(tmp_path):
             max_workers=1,
             fail_fast=True,
         )
+
+
+def test_batch_expand_inputs_picks_up_every_supported_format(tmp_path):
+    for name in ("a.pdf", "b.docx", "c.md", "d.xlsx", "ignore.zip"):
+        (tmp_path / name).write_text("x", encoding="utf-8")
+
+    found = BatchParseService().expand_inputs([tmp_path])
+
+    assert [path.name for path in found] == ["a.pdf", "b.docx", "c.md", "d.xlsx"]
+
+
+def test_batch_keeps_same_stem_different_format_side_by_side(tmp_path):
+    source_dir = tmp_path / "docs"
+    source_dir.mkdir()
+    for name in ("report.pdf", "report.docx"):
+        (source_dir / name).write_text("x", encoding="utf-8")
+
+    result = BatchParseService(parse_service=StubParseService()).run(
+        [source_dir],
+        output_dir=tmp_path / "out",
+        fmt="markdown",
+        max_workers=1,
+    )
+
+    outputs = [Path(item.output_path) for item in result.items]
+    assert len({str(path) for path in outputs}) == 2
+    # Same source directory must not be split across different output directories.
+    assert len({path.parent for path in outputs}) == 1
+    assert all("report" in path.name for path in outputs)

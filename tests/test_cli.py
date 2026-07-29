@@ -403,3 +403,33 @@ def test_cli_main_benchmark_delegates_to_benchmark_service(monkeypatch):
 
     assert exit_code == 0
     assert calls == [("samples/public.example.json", "reports", "mineru", "json", 2, {})]
+
+
+def test_cli_parses_non_pdf_input_without_a_pdf_engine(tmp_path, capsys):
+    source = tmp_path / "note.md"
+    source.write_text("# Title\n\nBody\n", encoding="utf-8")
+
+    exit_code = main(["parse", str(source)])
+
+    assert exit_code == 0
+    assert "# Title" in capsys.readouterr().out
+
+
+def test_cli_reports_unsupported_extension_without_a_traceback(tmp_path, capsys):
+    source = tmp_path / "archive.zip"
+    source.write_bytes(b"PK")
+
+    exit_code = main(["parse", str(source)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "Unsupported file extension" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_cli_reports_missing_file_without_a_traceback(tmp_path, capsys):
+    exit_code = main(["parse", str(tmp_path / "nope.pdf")])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "File not found" in captured.err

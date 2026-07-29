@@ -47,24 +47,41 @@ def _edit_distance(left: list, right: list, substitution_cost=None) -> float:
     return previous[-1]
 
 
-def text_similarity(expected: str, actual: str) -> float:
+def text_similarity_detail(expected: str, actual: str) -> dict:
     """
-    Word-level normalised edit distance, as a similarity in [0, 1].
+    Word-level normalised edit distance, with the truncation flag.
 
     Compared on whitespace-separated tokens rather than characters: it is both
     far cheaper and closer to what matters for retrieval, where a reflowed line
-    break is not an error but a dropped word is. Inputs longer than MAX_TOKENS
-    are truncated to keep the quadratic DP bounded.
+    break is not an error but a dropped word is.
+
+    Inputs longer than MAX_TOKENS are truncated to keep the quadratic DP
+    bounded, and `truncated` says so -- a score over the first quarter of a
+    document must not be read as full-document fidelity.
     """
-    expected_tokens = _tokens(expected)[:MAX_TOKENS]
-    actual_tokens = _tokens(actual)[:MAX_TOKENS]
+    all_expected = _tokens(expected)
+    all_actual = _tokens(actual)
+    expected_tokens = all_expected[:MAX_TOKENS]
+    actual_tokens = all_actual[:MAX_TOKENS]
+    truncated = len(all_expected) > MAX_TOKENS or len(all_actual) > MAX_TOKENS
 
     if not expected_tokens and not actual_tokens:
-        return 1.0
+        score = 1.0
+    else:
+        distance = _edit_distance(expected_tokens, actual_tokens)
+        worst = max(len(expected_tokens), len(actual_tokens))
+        score = round(max(0.0, 1.0 - distance / worst), 4)
 
-    distance = _edit_distance(expected_tokens, actual_tokens)
-    worst = max(len(expected_tokens), len(actual_tokens))
-    return round(max(0.0, 1.0 - distance / worst), 4)
+    return {
+        "score": score,
+        "truncated": truncated,
+        "compared_tokens": max(len(expected_tokens), len(actual_tokens)),
+    }
+
+
+def text_similarity(expected: str, actual: str) -> float:
+    """Word-level normalised edit distance as a similarity in [0, 1]."""
+    return text_similarity_detail(expected, actual)["score"]
 
 
 def _cell_cost(expected: str, actual: str) -> float:

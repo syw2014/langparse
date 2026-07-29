@@ -188,3 +188,61 @@ def test_document_metadata_reports_ocr_so_metrics_can_see_it(monkeypatch):
 
     assert metrics.ocr_applied is True
     assert metrics.ocr_text_chars == len("recovered text")
+
+
+def test_recogniser_is_built_once_under_concurrent_pages(monkeypatch):
+    """Batch runs share one engine across threads; model loading costs ~40s."""
+    import threading
+    import time
+
+    from langparse.engines.pdf import simple as simple_module
+    from langparse.engines.pdf.simple import SimplePDFEngine
+
+    builds = []
+
+    def slow_load():
+        builds.append(1)
+        time.sleep(0.05)
+        return lambda image: ([], 0)
+
+    monkeypatch.setattr(simple_module, "load_recogniser", slow_load, raising=False)
+
+    engine = SimplePDFEngine(enable_ocr=True)
+    threads = [threading.Thread(target=engine._resolve_recogniser) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(builds) == 1
+
+
+def test_concurrent_recognition_is_serialised(monkeypatch):
+    """rapidocr documents no thread-safety guarantee, so calls must not overlap."""
+    import threading
+    import time
+
+    overlaps = []
+    active = []
+
+    def recogniser(image):
+        active.append(1)
+        if len(active) > 1:
+            overlaps.append(1)
+        # sleep releases the GIL, so unsynchronised threads reliably overlap here.
+        time.sleep(0.05)
+        active.pop()
+        return [[None, "text", 0.9]], 0.1
+
+    from langparse.engines.pdf.simple import SimplePDFEngine
+
+    engine = SimplePDFEngine(enable_ocr=True, recogniser=recogniser)
+    page = ScannedPage(text="", images=[full_page_image()])
+
+    threads = [threading.Thread(target=engine._run_ocr, args=(page,)) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert overlaps == []

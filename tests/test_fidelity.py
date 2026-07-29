@@ -81,3 +81,23 @@ def test_scores_stay_within_the_unit_interval():
 
     for expected, actual in cases:
         assert 0.0 <= teds(expected, actual) <= 1.0
+
+
+def test_truncation_is_reported_so_a_partial_score_is_not_read_as_full():
+    from langparse.services.fidelity import MAX_TOKENS, text_similarity_detail
+
+    long_text = " ".join(str(i) for i in range(MAX_TOKENS + 500))
+
+    detail = text_similarity_detail(long_text, long_text)
+
+    assert detail["truncated"] is True
+    assert detail["compared_tokens"] == MAX_TOKENS
+
+
+def test_short_input_is_not_marked_truncated():
+    from langparse.services.fidelity import text_similarity_detail
+
+    detail = text_similarity_detail("a b c", "a b c")
+
+    assert detail["truncated"] is False
+    assert detail["score"] == 1.0

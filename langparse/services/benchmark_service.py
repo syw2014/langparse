@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from langparse.services.batch_service import BatchParseService
-from langparse.services.fidelity import teds, text_similarity
+from langparse.services.fidelity import teds, text_similarity_detail
 from langparse.services.quality import QualityCheck, run_quality_checks
 
 
@@ -90,7 +90,12 @@ class BenchmarkService:
 
         if expected_markdown:
             reference = Path(expected_markdown).read_text(encoding="utf-8")
-            scores["text_similarity"] = text_similarity(reference, actual_markdown)
+            detail = text_similarity_detail(reference, actual_markdown)
+            scores["text_similarity"] = detail["score"]
+            if detail["truncated"]:
+                # Surfaced so a score over a prefix is not read as the whole doc.
+                scores["text_similarity_truncated"] = True
+                scores["compared_tokens"] = detail["compared_tokens"]
 
         if expected_tables is not None:
             scores["teds"] = self._score_tables(expected_tables, actual_tables)
@@ -130,7 +135,13 @@ class BenchmarkService:
         return [block.rows for block in scan_blocks(markdown) if block.kind == TABLE and block.rows]
 
     def _score_tables(self, expected_tables: list, actual_tables: list) -> float:
-        """Mean TEDS over the expected tables, paired with actuals in order."""
+        """
+        Mean TEDS over the expected tables, paired with actuals in order.
+
+        Bounds worth knowing: pairing is positional, so a parser that emits the
+        right tables in the wrong order scores poorly, and actual tables beyond
+        the expected count are ignored -- spurious extra tables are not caught.
+        """
         if not expected_tables:
             return 1.0 if not actual_tables else 0.0
 

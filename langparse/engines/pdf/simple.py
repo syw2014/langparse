@@ -1,8 +1,15 @@
+import threading
 from pathlib import Path
 from typing import Iterator
 
 from langparse.core.engine import BaseEngine, PageResult
-from langparse.engines.pdf.ocr import DEFAULT_MIN_CHARS, DEFAULT_RESOLUTION, needs_ocr, ocr_page_text
+from langparse.engines.pdf.ocr import (
+    DEFAULT_MIN_CHARS,
+    DEFAULT_RESOLUTION,
+    load_recogniser,
+    needs_ocr,
+    ocr_page_text,
+)
 
 
 class BasePDFEngine(BaseEngine):
@@ -36,6 +43,11 @@ class SimplePDFEngine(BasePDFEngine):
         self.ocr_min_chars = ocr_min_chars
         self.ocr_resolution = ocr_resolution
         self._recogniser = recogniser
+        # Batch runs share one engine across worker threads. The lock keeps
+        # model loading (tens of seconds) from happening once per thread, and
+        # serialises recognition because rapidocr states no thread-safety
+        # guarantee -- correctness over throughput on an already slow path.
+        self._ocr_lock = threading.Lock()
 
     def process(self, file_path: Path, **kwargs) -> Iterator[PageResult]:
         try:
@@ -77,16 +89,20 @@ class SimplePDFEngine(BasePDFEngine):
     def _run_ocr(self, page) -> str:
         """Recognise a page, degrading to no text rather than failing the parse."""
         try:
-            recogniser = self._resolve_recogniser()
-            return ocr_page_text(page, recogniser, resolution=self.ocr_resolution)
+            with self._ocr_lock:
+                recogniser = self._build_recogniser_if_needed()
+                return ocr_page_text(page, recogniser, resolution=self.ocr_resolution)
         except ImportError:
             # rapidocr absent: the page keeps whatever thin text layer it had.
             return ""
 
     def _resolve_recogniser(self):
-        if self._recogniser is None:
-            from langparse.engines.pdf.ocr import load_recogniser
+        with self._ocr_lock:
+            return self._build_recogniser_if_needed()
 
+    def _build_recogniser_if_needed(self):
+        """Caller must hold `_ocr_lock`."""
+        if self._recogniser is None:
             self._recogniser = load_recogniser()
         return self._recogniser
 

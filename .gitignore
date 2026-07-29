@@ -137,3 +137,8 @@ dmypy.json
 models/
 samples/*.local.json
 samples/private/
+
+# Local sample documents used for manual testing. Kept out of the repo for the
+# same reason the benchmark manifest ships without them: no large PDFs in git.
+data/
+.DS_Store

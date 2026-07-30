@@ -175,9 +175,7 @@ class BenchmarkService:
     def _mean_fidelity(self, rows: list[dict], key: str) -> float | None:
         """None when nothing was scored, so an empty run cannot read as perfect."""
         scores = [
-            row["fidelity"][key]
-            for row in rows
-            if row.get("fidelity") and key in row["fidelity"]
+            row["fidelity"][key] for row in rows if row.get("fidelity") and key in row["fidelity"]
         ]
         if not scores:
             return None

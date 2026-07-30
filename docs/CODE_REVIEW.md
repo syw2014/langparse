@@ -2,7 +2,7 @@
 
 **审查日期**: 2026-07-30
 **范围**: 全代码库
-**测试**: 180 passed
+**测试**: 187 passed
 
 > 本文档在 2026-07-30 重写。2025-11-23 版本给出的"核心功能完备、可直接发布"结论建立在若干未经运行验证的断言上（例如称测试覆盖 100%、解析器完成度 100%），已按实际代码重新审查。
 
@@ -46,10 +46,13 @@ CLI 的批处理只有一条实现路径；不传 `--output-dir` 时渲染到内
 分类靠字符串匹配，`"timeout" in message` 会误伤任何含该词的消息。CLI 边界统一捕获并以退出码 2 输出单行信息，不再抛栈。
 
 ### 工程基建
-- 无测试 CI（仅 `pypi-publish.yml`）；无 ruff / mypy / coverage；无 `py.typed`。
-- `loguru` 是唯一硬依赖却零 import，`config.py` 用 `print` 输出警告。
-- `ENGINE_MAP` 公布 5 个引擎，`vision_llm` / `deepdoc` / `paddle` 三个抛 `NotImplementedError`——用户按文档选用会直接失败。
-- `dev` extra 只含 pytest，而 `conftest.py` 模块级 import pandas 与 docx，照文档安装后跑测试会在收集阶段全崩。
+测试 CI 覆盖 Python 3.10–3.13 并附 coverage，lint 用 ruff（check + format）。`dev` extra 已能独立跑通测试。`py.typed` 已随包发布。
+
+依赖为零：`loguru` 已移除，改用标准 `logging` 加 `NullHandler`，宿主不配置日志时库保持静默。未安装对应 extra 时给出可操作的 ImportError 而非崩溃。
+
+`ENGINE_MAP` 只公布可用的 `simple` 与 `mineru`；未实现的三个移入 `PLANNED_ENGINES`，选用时立即报 "not implemented yet"，不会等到用户配置完模型再失败。
+
+**缺口**：无 mypy 配置。
 
 ---
 

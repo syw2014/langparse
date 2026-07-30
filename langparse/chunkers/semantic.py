@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, List
 
 from langparse.chunkers.blocks import CODE, HEADING, PAGE_MARKER, TABLE, Block, scan_blocks
 from langparse.core.chunker import BaseChunker
@@ -17,7 +17,7 @@ class _Section:
     header: str | None = None
     header_level: int = 0
     header_path: str = ""
-    blocks: List[Block] = field(default_factory=list)
+    blocks: list[Block] = field(default_factory=list)
     page_numbers: set = field(default_factory=set)
 
 
@@ -51,10 +51,10 @@ class SemanticChunker(BaseChunker):
         self.overlap = overlap
         self.length_function = length_function
 
-    def chunk(self, document: Document, **kwargs) -> List[Chunk]:
+    def chunk(self, document: Document, **kwargs) -> list[Chunk]:
         sections = self._sections(scan_blocks(document.content))
 
-        chunks: List[Chunk] = []
+        chunks: list[Chunk] = []
         for section in sections:
             units = self._units_for(section.blocks)
             for text, oversized in self._pack(units):
@@ -76,9 +76,9 @@ class SemanticChunker(BaseChunker):
 
     # -- sectioning ---------------------------------------------------------
 
-    def _sections(self, blocks: List[Block]) -> List[_Section]:
-        sections: List[_Section] = []
-        header_stack: List[tuple[int, str]] = []
+    def _sections(self, blocks: list[Block]) -> list[_Section]:
+        sections: list[_Section] = []
+        header_stack: list[tuple[int, str]] = []
         current_page = 1
         current = _Section(page_numbers={current_page})
 
@@ -111,8 +111,8 @@ class SemanticChunker(BaseChunker):
 
     # -- unit expansion -----------------------------------------------------
 
-    def _units_for(self, blocks: List[Block]) -> List[_Unit]:
-        units: List[_Unit] = []
+    def _units_for(self, blocks: list[Block]) -> list[_Unit]:
+        units: list[_Unit] = []
         for block in blocks:
             if self._fits(block.text):
                 units.append(_Unit(block.text))
@@ -126,7 +126,7 @@ class SemanticChunker(BaseChunker):
                 units.extend(_Unit(part) for part in self._split_prose(block.text))
         return units
 
-    def _split_table(self, block: Block) -> List[str]:
+    def _split_table(self, block: Block) -> list[str]:
         """Split by row, repeating the header so each part reads on its own."""
         if not block.rows:
             return [block.text]
@@ -134,8 +134,8 @@ class SemanticChunker(BaseChunker):
         header, *data_rows = block.rows
         header_markdown = [_row_markdown(header), _separator_markdown(len(header))]
 
-        parts: List[str] = []
-        pending: List[str] = []
+        parts: list[str] = []
+        pending: list[str] = []
 
         for row in data_rows:
             candidate = pending + [_row_markdown(row)]
@@ -151,8 +151,8 @@ class SemanticChunker(BaseChunker):
             parts.append("\n".join(header_markdown + pending))
         return parts or [block.text]
 
-    def _split_prose(self, text: str) -> List[str]:
-        parts: List[str] = []
+    def _split_prose(self, text: str) -> list[str]:
+        parts: list[str] = []
         pending = ""
         for sentence in SENTENCE_END_RE.split(text):
             if not sentence:
@@ -186,9 +186,9 @@ class SemanticChunker(BaseChunker):
 
     # -- packing ------------------------------------------------------------
 
-    def _pack(self, units: List[_Unit]) -> List[tuple[str, bool]]:
-        packed: List[tuple[str, bool]] = []
-        pending: List[str] = []
+    def _pack(self, units: list[_Unit]) -> list[tuple[str, bool]]:
+        packed: list[tuple[str, bool]] = []
+        pending: list[str] = []
 
         def flush():
             if pending:
@@ -208,7 +208,7 @@ class SemanticChunker(BaseChunker):
         flush()
         return self._apply_overlap(packed)
 
-    def _apply_overlap(self, packed: List[tuple[str, bool]]) -> List[tuple[str, bool]]:
+    def _apply_overlap(self, packed: list[tuple[str, bool]]) -> list[tuple[str, bool]]:
         if self.overlap <= 0 or len(packed) < 2:
             return packed
 
@@ -234,7 +234,7 @@ class SemanticChunker(BaseChunker):
         return self.length_function(text) <= self.max_chunk_size
 
 
-def _row_markdown(row: List[str]) -> str:
+def _row_markdown(row: list[str]) -> str:
     return f"| {' | '.join(row)} |"
 
 

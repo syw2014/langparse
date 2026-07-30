@@ -5,7 +5,9 @@ from langparse.services.benchmark_service import BenchmarkService
 
 
 class StubBatchService:
-    def run(self, inputs, engine_name="simple", output_dir="out", fmt="json", max_workers=1, **kwargs):
+    def run(
+        self, inputs, engine_name="simple", output_dir="out", fmt="json", max_workers=1, **kwargs
+    ):
         return BatchRunResult(
             items=[
                 BatchItemResult(
@@ -139,7 +141,9 @@ def test_benchmark_omits_fidelity_when_no_reference_is_given(tmp_path):
     source = tmp_path / "doc.md"
     source.write_text("# Title\n", encoding="utf-8")
     manifest = tmp_path / "m.json"
-    manifest.write_text(json.dumps({"samples": [{"id": "s1", "path": str(source)}]}), encoding="utf-8")
+    manifest.write_text(
+        json.dumps({"samples": [{"id": "s1", "path": str(source)}]}), encoding="utf-8"
+    )
 
     report = BenchmarkService().run(manifest, output_dir=tmp_path / "reports", fmt="markdown")
 

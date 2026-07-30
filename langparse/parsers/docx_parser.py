@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Union
 
 from langparse.core.parser import BaseParser
 from langparse.types import ParsedDocumentResult, ParsedElement, ParsedPageResult
@@ -19,13 +18,15 @@ class DocxParser(BaseParser):
     We treat the entire document as Page 1 for now, unless we convert to PDF first.
     """
 
-    def parse_result(self, file_path: Union[str, Path], **kwargs) -> ParsedDocumentResult:
+    def parse_result(self, file_path: str | Path, **kwargs) -> ParsedDocumentResult:
         path = self._resolve_existing_path(file_path)
 
         try:
             import docx
         except ImportError:
-            raise ImportError("python-docx is required. Install with `pip install python-docx`.")
+            raise ImportError(
+                "python-docx is required. Install with `pip install python-docx`."
+            ) from None
 
         doc = docx.Document(path)
         markdown_lines: list[str] = []
@@ -103,9 +104,7 @@ class DocxParser(BaseParser):
         return "paragraph", text
 
     def _table_rows(self, table) -> list[list[str]]:
-        return [
-            [cell.text.strip().replace("\n", " ") for cell in row.cells] for row in table.rows
-        ]
+        return [[cell.text.strip().replace("\n", " ") for cell in row.cells] for row in table.rows]
 
     def _rows_to_markdown(self, rows: list[list[str]]) -> str:
         width = max(len(row) for row in rows)

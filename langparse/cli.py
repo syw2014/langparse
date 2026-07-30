@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from langparse.errors import classify_exception
 from langparse.services.batch_service import BatchParseService
@@ -26,7 +26,9 @@ def build_parser():
     parse_cmd.add_argument("--api-port", type=int, default=None)
     parse_cmd.add_argument("--api-command", default=None)
     parse_cmd.add_argument("--api-start-timeout", type=float, default=None)
-    parse_cmd.add_argument("--model-policy", choices=["download_if_missing", "require_existing"], default=None)
+    parse_cmd.add_argument(
+        "--model-policy", choices=["download_if_missing", "require_existing"], default=None
+    )
     parse_cmd.add_argument("--model-source", default=None)
     parse_cmd.add_argument("--auto-install-runtime", action="store_true")
     parse_cmd.add_argument("--runtime-package", default=None)
@@ -137,7 +139,9 @@ def _run(args, parser) -> int:
         return 0
 
     if len(args.inputs) != 1:
-        parser.error("Single parse mode accepts exactly one input. Use --batch for multiple inputs.")
+        parser.error(
+            "Single parse mode accepts exactly one input. Use --batch for multiple inputs."
+        )
 
     rendered = service.parse_output(
         args.inputs[0],

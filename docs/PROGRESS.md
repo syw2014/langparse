@@ -1,8 +1,9 @@
 # LangParse 研发进度
 
 **版本**: 0.0.1（`pyproject.toml`，未发布 PyPI）
+**必需依赖**: 无（按格式安装 extras）
 **最后更新**: 2026-07-30
-**测试**: 180 passed
+**测试**: 187 passed
 
 > 本文档在 2026-07-30 重写。此前版本声称 v0.1.0、测试覆盖 100%、解析器完成度 100%，三项均与实际不符，已按代码现状订正。
 
@@ -16,13 +17,13 @@
 | Markdown / DOCX / Excel 解析 | 可用 | 均产出结构化 pages/tables/elements |
 | PDF 解析（simple） | 可用 | pdfplumber，含表格提取与扫描件 OCR 兜底 |
 | PDF 解析（MinerU） | 可用 | 经 `mineru-api`，含服务生命周期管理、表格/图片/caption 抽取 |
-| PDF 解析（vision_llm / deepdoc / paddle） | **未实现** | `ENGINE_MAP` 中注册但抛 `NotImplementedError` |
+| PDF 解析（vision_llm / deepdoc / paddle） | 未实现 | 已移出 `ENGINE_MAP`，选用时立即报错而非解析时才失败 |
 | 语义分块 | 可用 | 块扫描器 + 尺寸装箱，见 `chunkers/blocks.py` |
 | 批处理 / 指标 / 质检 | 可用 | 全格式生效 |
 | Benchmark | 可用 | 结构阈值 + 保真度（文本编辑距离 / 表格 TEDS），需 manifest 提供参考输出 |
-| 测试 CI | **缺失** | 仅有 `pypi-publish.yml` |
+| 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-**测试覆盖率未测量**（无 coverage 配置）。"180 passed" 指用例全部通过，不等同于覆盖率。
+"187 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
 
 ---
 
@@ -64,10 +65,8 @@ langparse/
 - OCR 兜底目前只接在 `simple` 引擎；MinerU 自带 OCR，未做交叉验证。
 
 **P3**
-- 无测试 CI，无 ruff/mypy/coverage，无 `py.typed`。
-- `loguru` 是唯一硬依赖却零 import；`config.py` 用 `print` 而非日志。
-- `ENGINE_MAP` 对外公布 5 个引擎，其中 3 个未实现。
-- CLI 存在两套 batch 实现，按无关 flag 二选一。
+- 无 mypy 配置（已有 ruff 与 `py.typed`）。
+- `errors.py` 的分类靠字符串匹配，`"timeout" in message` 会误伤。
 
 ---
 

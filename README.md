@@ -300,7 +300,7 @@ LangParse uses [`uv`](https://github.com/astral-sh/uv) for environment and depen
 uv sync --all-extras
 
 # Or install just what you need
-uv sync                      # core only (loguru)
+uv sync                      # core only (no third-party dependencies)
 uv pip install -e ".[pdf]"   # PDF parsing (pdfplumber)
 uv pip install -e ".[docx]"  # Word parsing (python-docx)
 uv pip install -e ".[excel]" # Excel parsing (pandas + openpyxl)
@@ -309,7 +309,7 @@ uv pip install -e ".[mineru]"# MinerU runtime (large download)
 uv pip install -e ".[all]"   # everything above
 ```
 
-> Note: the core install ships only `loguru`. The real PDF/DOCX/Excel parsers require their optional extras above — without them those parsers will not run, even though the unit tests pass (they mock or skip the heavy dependencies).
+> Note: the core install has **no third-party dependencies**. The PDF/DOCX/Excel parsers require the optional extras above; without them a parse fails with an `ImportError` naming the missing package rather than crashing. `pip install -e ".[dev]"` is enough to run the test suite.
 
 ### Run the tests
 
@@ -319,20 +319,18 @@ uv run pytest -q
 
 ### Smoke-test locally
 
-The repo ships sample inputs you can use right away:
-
 ```bash
 # Markdown parse + semantic chunk (no extra deps needed)
 uv run python examples/basic_usage.py
 
-# Parse a real PDF (requires the [pdf] extra)
-uv run langparse parse data/domain/scan.pdf --engine simple --format json
+# Parse a PDF of your own (requires the [pdf] extra)
+uv run langparse parse your.pdf --engine simple --format json
 
-# Run the benchmark on the bundled manifest
+# Run the benchmark on the bundled manifest template
 uv run langparse benchmark samples/public.example.json --engine simple --output-dir reports
 ```
 
-Sample assets: `data/domain/scan.pdf`, `data/domain/scan_pic.pdf` (scanned PDFs, need OCR/MinerU) and `samples/public.example.json` (benchmark manifest).
+The repository ships `samples/public.example.json` as a benchmark manifest template. `data/` is where local test documents go; it is git-ignored, so bring your own.
 
 ## 💬 Contact
 

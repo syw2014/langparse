@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
 
 from langparse.errors import classify_exception
 from langparse.metrics import BatchItemResult, BatchRunResult, collect_parse_metrics
@@ -63,16 +63,14 @@ class BatchParseService:
                 collect_metrics,
                 chunk,
             )
-            for path, output_path in zip(paths, output_paths)
+            for path, output_path in zip(paths, output_paths, strict=True)
         ]
 
         if worker_count == 1:
             results = [self._run_one(*args, **kwargs) for args in job_args]
         else:
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                futures = [
-                    executor.submit(self._run_one, *args, **kwargs) for args in job_args
-                ]
+                futures = [executor.submit(self._run_one, *args, **kwargs) for args in job_args]
                 # Indexed rather than as_completed: input order is what pairs
                 # rendered output with the source the caller asked for.
                 results = [future.result() for future in futures]
@@ -97,9 +95,7 @@ class BatchParseService:
             if path.is_dir():
                 paths.extend(
                     sorted(
-                        child
-                        for child in path.iterdir()
-                        if child.is_file() and is_supported(child)
+                        child for child in path.iterdir() if child.is_file() and is_supported(child)
                     )
                 )
             else:
@@ -179,7 +175,9 @@ class BatchParseService:
 
     def _build_summary(self, items: list[BatchItemResult]) -> dict:
         total_pages = sum((item.metrics.page_count if item.metrics else 0) for item in items)
-        total_elapsed = sum((item.metrics.elapsed_seconds if item.metrics else 0.0) for item in items)
+        total_elapsed = sum(
+            (item.metrics.elapsed_seconds if item.metrics else 0.0) for item in items
+        )
         return {
             "total_files": len(items),
             "success_count": sum(1 for item in items if item.status == "success"),
@@ -205,8 +203,7 @@ class BatchParseService:
         if isinstance(inputs, (str, Path)):
             yield inputs
             return
-        for item in inputs:
-            yield item
+        yield from inputs
 
     def _utc_now(self) -> str:
         return datetime.now(timezone.utc).isoformat()

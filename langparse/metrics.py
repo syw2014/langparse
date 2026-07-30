@@ -104,12 +104,7 @@ def collect_parse_metrics(
     )
     image_count = sum(len(page.images) for page in parsed.pages)
     table_count = sum(len(page.tables) for page in parsed.pages) or count_markdown_tables(markdown)
-    caption_count = sum(
-        1
-        for page in parsed.pages
-        for image in page.images
-        if image.get("caption")
-    )
+    caption_count = sum(1 for page in parsed.pages for image in page.images if image.get("caption"))
 
     return ParseMetrics(
         elapsed_seconds=round(elapsed_seconds, 4),

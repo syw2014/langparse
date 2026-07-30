@@ -1,14 +1,15 @@
 from abc import ABC, abstractmethod
-from typing import List
-from langparse.types import Document, Chunk
+
+from langparse.types import Chunk, Document
+
 
 class BaseChunker(ABC):
     """
     Abstract base class for all text chunkers.
     """
-    
+
     @abstractmethod
-    def chunk(self, document: Document, **kwargs) -> List[Chunk]:
+    def chunk(self, document: Document, **kwargs) -> list[Chunk]:
         """
         Split a Document into a list of Chunks.
         """

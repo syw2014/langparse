@@ -2,7 +2,11 @@ import copy
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
+
+from langparse.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class Config:
@@ -69,11 +73,11 @@ class Config:
         config_path = Path.home() / ".langparse" / "config.json"
         if config_path.exists():
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
+                with open(config_path, encoding="utf-8") as f:
                     user_config = json.load(f)
                     self._merge_dict(self._config, user_config)
             except Exception as e:
-                print(f"Warning: Failed to load config file: {e}")
+                logger.warning("Failed to load config file %s: %s", config_path, e)
 
     def _load_from_env(self):
         for env_key, config_key in self.ENV_MAP.items():
@@ -110,14 +114,16 @@ class Config:
             target = target[part]
         target[keys[-1]] = value
 
-    def _merge_dict(self, base: Dict, update: Dict):
+    def _merge_dict(self, base: dict, update: dict):
         for k, v in update.items():
             if k in base and isinstance(base[k], dict) and isinstance(v, dict):
                 self._merge_dict(base[k], v)
             else:
                 base[k] = v
 
-    def resolve_engine_config(self, engine_name: str, runtime_kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def resolve_engine_config(
+        self, engine_name: str, runtime_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
         config_key = f"engines.{engine_name}"
         engine_config = self.get(config_key, {})
         resolved_config = {**engine_config, **runtime_kwargs}

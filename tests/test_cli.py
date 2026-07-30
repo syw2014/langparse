@@ -53,7 +53,9 @@ def test_cli_accepts_mineru_runtime_install_options():
 
 def test_cli_batch_command_supports_output_dir():
     parser = build_parser()
-    args = parser.parse_args(["parse", "docs/", "--batch", "--output-dir", "out", "--api-port", "8010"])
+    args = parser.parse_args(
+        ["parse", "docs/", "--batch", "--output-dir", "out", "--api-port", "8010"]
+    )
 
     assert args.batch is True
     assert args.output_dir == "out"
@@ -363,7 +365,9 @@ def test_cli_main_batch_metrics_delegates_to_batch_service(monkeypatch):
     )
 
     assert exit_code == 0
-    assert calls == [(["docs/"], "mineru", "out", "json", 4, True, {"collect_metrics": True, "chunk": False})]
+    assert calls == [
+        (["docs/"], "mineru", "out", "json", 4, True, {"collect_metrics": True, "chunk": False})
+    ]
 
 
 def test_cli_main_benchmark_delegates_to_benchmark_service(monkeypatch):
@@ -445,7 +449,10 @@ def test_cli_batch_always_uses_one_implementation(tmp_path, monkeypatch):
     source.write_text("# A\n", encoding="utf-8")
 
     assert main(["parse", str(source), "--batch", "--output-dir", str(tmp_path / "o")]) == 0
-    assert main(["parse", str(source), "--batch", "--metrics", "--output-dir", str(tmp_path / "o")]) == 0
+    assert (
+        main(["parse", str(source), "--batch", "--metrics", "--output-dir", str(tmp_path / "o")])
+        == 0
+    )
 
     assert len(used) == 2, "plain --batch bypassed BatchParseService"
 

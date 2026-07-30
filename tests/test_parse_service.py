@@ -67,7 +67,9 @@ def test_parse_file_rejects_invalid_process_document_shape(tmp_path):
             return [SimpleNamespace(page_number=1, markdown_content="bad")]
 
         def process(self, file_path, **kwargs):
-            raise AssertionError("process() should not be used after invalid process_document output")
+            raise AssertionError(
+                "process() should not be used after invalid process_document output"
+            )
 
     pdf = tmp_path / "a.pdf"
     pdf.write_text("x")
@@ -175,9 +177,7 @@ def test_chunk_option_does_not_leak_into_engine_config(tmp_path):
 
     module.ENGINE_MAP["recording"] = RecordingEngine
     try:
-        ParseService().parse_batch_outputs(
-            [pdf], engine_name="recording", fmt="json", chunk=True
-        )
+        ParseService().parse_batch_outputs([pdf], engine_name="recording", fmt="json", chunk=True)
     finally:
         module.ENGINE_MAP.pop("recording", None)
 

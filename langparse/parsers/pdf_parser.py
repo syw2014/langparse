@@ -1,9 +1,9 @@
 from pathlib import Path
-from typing import Literal, Union
+from typing import Literal
 
 from langparse.config import settings
 from langparse.core.parser import BaseParser
-from langparse.services.parse_service import ENGINE_MAP, ParseService
+from langparse.services.parse_service import ParseService
 from langparse.types import ParsedDocumentResult
 
 
@@ -12,18 +12,17 @@ class PDFParser(BaseParser):
     A universal PDF parser that delegates to specific engines.
     """
 
-    def __init__(self, engine: Literal["simple", "mineru", "vision_llm", "deepdoc", "paddle"] = None, **engine_kwargs):
-        # 1. Resolve engine name: Argument > Config > Default
+    def __init__(
+        self,
+        engine: Literal["simple", "mineru"] = None,
+        **engine_kwargs,
+    ):
+        # Engine name resolves as: argument > config > default. Construction is
+        # delegated so selection errors read the same here as from the CLI.
         self.engine_name = engine or settings.get("default_pdf_engine", "simple")
+        self.engine = ParseService().create_engine(self.engine_name, **engine_kwargs)
 
-        engine_class = ENGINE_MAP.get(self.engine_name)
-        if not engine_class:
-            raise ValueError(f"Unknown engine: {self.engine_name}. Available: {list(ENGINE_MAP.keys())}")
-
-        engine_config = settings.resolve_engine_config(self.engine_name, engine_kwargs)
-        self.engine = engine_class(**engine_config)
-
-    def parse_result(self, file_path: Union[str, Path], **kwargs) -> ParsedDocumentResult:
+    def parse_result(self, file_path: str | Path, **kwargs) -> ParsedDocumentResult:
         return ParseService().parse_result(
             file_path,
             engine_name=self.engine_name,

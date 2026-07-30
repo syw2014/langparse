@@ -24,6 +24,7 @@ def _edit_distance(left: list, right: list, substitution_cost=None) -> float:
     for near-matches instead of a flat 1 per mismatch.
     """
     if substitution_cost is None:
+
         def substitution_cost(a, b):
             return 0.0 if a == b else 1.0
 

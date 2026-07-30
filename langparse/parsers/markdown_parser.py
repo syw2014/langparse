@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Union
 
 from langparse.core.parser import BaseParser
 from langparse.types import ParsedDocumentResult, ParsedPageResult
@@ -14,7 +13,7 @@ class MarkdownParser(BaseParser):
     page markers the source already carries.
     """
 
-    def parse_result(self, file_path: Union[str, Path], **kwargs) -> ParsedDocumentResult:
+    def parse_result(self, file_path: str | Path, **kwargs) -> ParsedDocumentResult:
         path = self._resolve_existing_path(file_path)
         content = path.read_text(encoding="utf-8")
 

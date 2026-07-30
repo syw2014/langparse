@@ -7,8 +7,6 @@ reports success while the actual content -- an image -- is never read.
 
 from pathlib import Path
 
-import pytest
-
 from langparse.engines.pdf.ocr import needs_ocr, ocr_page_text
 
 

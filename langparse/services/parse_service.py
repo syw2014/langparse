@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import asdict
 from pathlib import Path
-from typing import Iterator, Union
 
 from langparse.config import settings
 from langparse.core.rendering import document_from_result
@@ -24,9 +23,17 @@ from langparse.services.output_paths import (
 )
 from langparse.types import Chunk, Document, ParsedDocumentResult, ParsedPageResult
 
+#: Engines a caller can actually select. Advertising an engine that raises
+#: NotImplementedError only once it runs wastes the user's configuration effort
+#: and, for MinerU-scale setups, their model downloads.
 ENGINE_MAP = {
     "simple": SimplePDFEngine,
     "mineru": MinerUEngine,
+}
+
+#: Reserved names with adapters in the tree but no working implementation.
+#: Selecting one fails immediately with an explanation instead of at parse time.
+PLANNED_ENGINES = {
     "vision_llm": VisionLLMEngine,
     "deepdoc": DeepDocEngine,
     "paddle": PaddleOCRVLEngine,
@@ -120,7 +127,7 @@ class ParseService:
         relative_paths = resolve_output_paths([source for source, _ in outputs], fmt)
 
         written_paths = []
-        for (_, content), relative in zip(outputs, relative_paths):
+        for (_, content), relative in zip(outputs, relative_paths, strict=True):
             destination = output_dir / relative
             self.write_output(content, destination)
             written_paths.append(destination)
@@ -135,9 +142,7 @@ class ParseService:
             if path.is_dir():
                 paths.extend(
                     sorted(
-                        child
-                        for child in path.iterdir()
-                        if child.is_file() and is_supported(child)
+                        child for child in path.iterdir() if child.is_file() and is_supported(child)
                     )
                 )
             else:
@@ -210,7 +215,7 @@ class ParseService:
 
         active_engine = engine or self._create_engine(engine_name, **kwargs)
         if hasattr(active_engine, "process_document"):
-            process_document = getattr(active_engine, "process_document")
+            process_document = active_engine.process_document
             if not callable(process_document):
                 raise TypeError(
                     f"{type(active_engine).__name__}.process_document exists but is not callable"
@@ -258,7 +263,12 @@ class ParseService:
     def _create_engine(self, engine_name: str, **kwargs):
         engine_class = ENGINE_MAP.get(engine_name)
         if engine_class is None:
-            raise ValueError(f"Unknown engine: {engine_name}. Available: {list(ENGINE_MAP.keys())}")
+            available = ", ".join(sorted(ENGINE_MAP))
+            if engine_name in PLANNED_ENGINES:
+                raise ValueError(
+                    f"Engine '{engine_name}' is not implemented yet. Available: {available}"
+                )
+            raise ValueError(f"Unknown engine: {engine_name}. Available: {available}")
 
         engine_config = settings.resolve_engine_config(engine_name, kwargs)
         return engine_class(**engine_config)
@@ -277,7 +287,7 @@ class ParseService:
     def _build_document_from_result(self, parsed: ParsedDocumentResult) -> Document:
         return document_from_result(parsed)
 
-    def _flatten_inputs(self, inputs) -> Iterator[Union[str, Path]]:
+    def _flatten_inputs(self, inputs) -> Iterator[str | Path]:
         if isinstance(inputs, (str, Path)):
             yield inputs
             return

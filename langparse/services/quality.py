@@ -56,7 +56,10 @@ def run_quality_checks(metrics: ParseMetrics, checks: QualityCheck) -> QualityCh
         and metrics.images_with_caption_ratio < 1.0
     ):
         failures.append("require_captions_for_images")
-    if checks.max_header_footer_repetition_ratio is not None and metrics.header_footer_removed_count == 0:
+    if (
+        checks.max_header_footer_repetition_ratio is not None
+        and metrics.header_footer_removed_count == 0
+    ):
         warnings.append("header_footer_filter_not_applied")
 
     return QualityCheckResult(passed=not failures, failures=failures, warnings=warnings)

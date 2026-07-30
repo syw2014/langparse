@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 
 def output_filename(source, fmt: str) -> str:
@@ -74,9 +74,7 @@ def resolve_output_paths(sources: Iterable, fmt: str) -> list[Path]:
     in *different* directories keep the plain name and widen the prefix instead.
     """
     sources = list(sources)
-    sibling_counts = Counter(
-        (Path(source).parent, Path(source).stem) for source in sources
-    )
+    sibling_counts = Counter((Path(source).parent, Path(source).stem) for source in sources)
 
     used_paths: set[Path] = set()
     resolved: list[Path] = []

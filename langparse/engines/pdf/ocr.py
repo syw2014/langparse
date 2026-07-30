@@ -9,7 +9,8 @@ success while the actual content is never read. Detection therefore looks for
 
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 #: A full page of body text runs well over a thousand characters. This is the
 #: ceiling below which a page covered by an image is treated as a scan rather

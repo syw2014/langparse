@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 import shlex
 import shutil
 import socket
@@ -9,8 +11,6 @@ import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
-import json
-import os
 
 from langparse.engines.pdf.mineru_client import MinerUClient
 
@@ -122,7 +122,9 @@ class MinerUServiceManager:
             except Exception as exc:  # pragma: no cover - exercised in timeout flow
                 last_error = exc
                 time.sleep(0.25)
-        raise RuntimeError("Timed out waiting for local mineru-api service to become ready.") from last_error
+        raise RuntimeError(
+            "Timed out waiting for local mineru-api service to become ready."
+        ) from last_error
 
     def _stop_process(self, process: subprocess.Popen) -> None:
         if process.poll() is not None:

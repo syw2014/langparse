@@ -1,5 +1,6 @@
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from langparse.core.engine import PageResult
 from langparse.engines.pdf.mineru_client import MinerUClient
@@ -144,7 +145,9 @@ class MinerUEngine(BasePDFEngine):
         engine_specific_items = [page.metadata.get("engine_specific", {}) for page in pages]
         quality_metadata = {
             "ocr_applied": any(bool(item.get("ocr_applied")) for item in engine_specific_items),
-            "ocr_text_chars": sum(int(item.get("ocr_text_chars", 0) or 0) for item in engine_specific_items),
+            "ocr_text_chars": sum(
+                int(item.get("ocr_text_chars", 0) or 0) for item in engine_specific_items
+            ),
             "multi_column_detected": any(
                 bool(item.get("multi_column_detected")) for item in engine_specific_items
             ),
@@ -152,7 +155,8 @@ class MinerUEngine(BasePDFEngine):
                 int(item.get("reading_order_warnings", 0) or 0) for item in engine_specific_items
             ),
             "header_footer_removed_count": sum(
-                int(item.get("header_footer_removed_count", 0) or 0) for item in engine_specific_items
+                int(item.get("header_footer_removed_count", 0) or 0)
+                for item in engine_specific_items
             ),
         }
         return ParsedDocumentResult(

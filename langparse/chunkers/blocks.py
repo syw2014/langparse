@@ -62,9 +62,7 @@ def scan_blocks(markdown: str) -> list[Block]:
 
         page_marker = PAGE_MARKER_RE.match(line)
         if page_marker:
-            blocks.append(
-                Block(kind=PAGE_MARKER, text=line, page_number=int(page_marker.group(1)))
-            )
+            blocks.append(Block(kind=PAGE_MARKER, text=line, page_number=int(page_marker.group(1))))
             index += 1
             continue
 
@@ -120,14 +118,8 @@ def _consume_table(lines: list[str], index: int, blocks: list[Block]) -> int:
         collected.append(lines[index])
         index += 1
 
-    rows = [
-        _split_table_row(line)
-        for line in collected
-        if not TABLE_SEPARATOR_RE.match(line)
-    ]
-    blocks.append(
-        Block(kind=TABLE, text="\n".join(collected), rows=rows, has_header=bool(rows))
-    )
+    rows = [_split_table_row(line) for line in collected if not TABLE_SEPARATOR_RE.match(line)]
+    blocks.append(Block(kind=TABLE, text="\n".join(collected), rows=rows, has_header=bool(rows)))
     return index
 
 

@@ -1,6 +1,6 @@
 import threading
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from langparse.core.engine import BaseEngine, PageResult
 from langparse.engines.pdf.ocr import (
@@ -53,7 +53,7 @@ class SimplePDFEngine(BasePDFEngine):
         try:
             import pdfplumber
         except ImportError:
-            raise ImportError("Please install `pdfplumber` to use the 'simple' engine.")
+            raise ImportError("Please install `pdfplumber` to use the 'simple' engine.") from None
 
         with pdfplumber.open(file_path) as pdf:
             for i, page in enumerate(pdf.pages):

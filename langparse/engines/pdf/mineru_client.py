@@ -141,8 +141,8 @@ class MinerUClient:
         for name, value in fields.items():
             lines.extend(
                 [
-                    f"--{boundary}".encode("utf-8"),
-                    f'Content-Disposition: form-data; name="{name}"'.encode("utf-8"),
+                    f"--{boundary}".encode(),
+                    f'Content-Disposition: form-data; name="{name}"'.encode(),
                     b"",
                     str(value).encode("utf-8"),
                 ]
@@ -152,14 +152,12 @@ class MinerUClient:
         file_bytes = file_path.read_bytes()
         lines.extend(
             [
-                f"--{boundary}".encode("utf-8"),
-                f'Content-Disposition: form-data; name="files"; filename="{file_path.name}"'.encode(
-                    "utf-8"
-                ),
-                f"Content-Type: {content_type}".encode("utf-8"),
+                f"--{boundary}".encode(),
+                f'Content-Disposition: form-data; name="files"; filename="{file_path.name}"'.encode(),
+                f"Content-Type: {content_type}".encode(),
                 b"",
                 file_bytes,
-                f"--{boundary}--".encode("utf-8"),
+                f"--{boundary}--".encode(),
                 b"",
             ]
         )

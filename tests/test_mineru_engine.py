@@ -1,13 +1,13 @@
+import json
 import subprocess
 from contextlib import contextmanager
-import json
 from pathlib import Path
 
 import pytest
 
+from langparse.engines.pdf.mineru import MinerUEngine
 from langparse.engines.pdf.mineru_client import MinerUClient
 from langparse.engines.pdf.mineru_service import MinerUServiceManager
-from langparse.engines.pdf.mineru import MinerUEngine
 from langparse.types import ParsedDocumentResult, ParsedPageResult
 
 
@@ -242,8 +242,10 @@ def test_service_manager_starts_local_service_when_api_url_missing(monkeypatch):
     class StubProcess:
         def poll(self):
             return None
+
         def terminate(self):
             health_attempts["terminated"] = True
+
         def wait(self, timeout=None):
             return 0
 
@@ -253,7 +255,9 @@ def test_service_manager_starts_local_service_when_api_url_missing(monkeypatch):
         "_start_local_service",
         lambda home_override=None: StubProcess(),
     )
-    monkeypatch.setattr(manager, "_stop_process", lambda process: health_attempts.setdefault("stopped", True))
+    monkeypatch.setattr(
+        manager, "_stop_process", lambda process: health_attempts.setdefault("stopped", True)
+    )
     monkeypatch.setattr(
         "langparse.engines.pdf.mineru_service.MinerUClient",
         lambda base_url, timeout=300.0: StubClient(),

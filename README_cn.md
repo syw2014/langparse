@@ -210,7 +210,7 @@ LangParse 使用 [`uv`](https://github.com/astral-sh/uv) 管理环境和依赖�
 uv sync --all-extras
 
 # 或按需安装
-uv sync                      # 仅核心依赖（loguru）
+uv sync                      # 仅核心（无第三方依赖）
 uv pip install -e ".[pdf]"   # PDF 解析（pdfplumber）
 uv pip install -e ".[docx]"  # Word 解析（python-docx）
 uv pip install -e ".[excel]" # Excel 解析（pandas + openpyxl）
@@ -219,7 +219,7 @@ uv pip install -e ".[mineru]"# MinerU 运行时（体积较大）
 uv pip install -e ".[all]"   # 以上全部
 ```
 
-> 注意：核心安装只包含 `loguru`。真实的 PDF/DOCX/Excel 解析需要上面对应的可选依赖——不装就无法运行这些解析器，即使单元测试能通过（测试对重依赖做了 mock 或跳过）。
+> 注意：核心安装**没有任何第三方依赖**。PDF/DOCX/Excel 解析需要上面对应的可选依赖；未安装时会抛出指明缺失包名的 `ImportError`，而不是崩溃。`pip install -e ".[dev]"` 即可跑通测试套件。
 
 ### 运行测试
 
@@ -235,14 +235,14 @@ uv run pytest -q
 # Markdown 解析 + 语义分块（无需额外依赖）
 uv run python examples/basic_usage.py
 
-# 解析真实 PDF（需要 [pdf] 可选依赖）
-uv run langparse parse data/domain/scan.pdf --engine simple --format json
+# 解析你自己的 PDF（需要 [pdf] 可选依赖）
+uv run langparse parse your.pdf --engine simple --format json
 
 # 用自带清单运行 benchmark
 uv run langparse benchmark samples/public.example.json --engine simple --output-dir reports
 ```
 
-示例素材：`data/domain/scan.pdf`、`data/domain/scan_pic.pdf`（扫描件 PDF，需 OCR/MinerU）以及 `samples/public.example.json`（benchmark 清单）。
+仓库自带 `samples/public.example.json`（benchmark 清单模板）。`data/` 用于存放本地测试文档，已被 git 忽略，需要自备。
 
 ## 📝 引用 LangParse
 

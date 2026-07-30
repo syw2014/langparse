@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Union
 
 from langparse.core.parser import BaseParser
 from langparse.types import ParsedDocumentResult, ParsedElement, ParsedPageResult
@@ -11,7 +10,7 @@ class ExcelParser(BaseParser):
     Each Sheet is treated as a separate 'Page'.
     """
 
-    def parse_result(self, file_path: Union[str, Path], **kwargs) -> ParsedDocumentResult:
+    def parse_result(self, file_path: str | Path, **kwargs) -> ParsedDocumentResult:
         path = self._resolve_existing_path(file_path)
 
         try:
@@ -19,7 +18,7 @@ class ExcelParser(BaseParser):
         except ImportError:
             raise ImportError(
                 "pandas and openpyxl are required. Install with `pip install pandas openpyxl`."
-            )
+            ) from None
 
         if path.suffix.lower() == ".csv":
             sheets = {None: pd.read_csv(path)}

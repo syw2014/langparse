@@ -4,43 +4,116 @@
 
 > Documents In, Knowledge Out. (文档进，知识出。)
 
-**LangParse 是一个为 LLM 或 Agent 应用打造的通用文档解析与文本分块引擎 —— 实现"文档进，知识出"。**
+**LangParse 是文档解析与分块方向的一个厂商中立编排层（orchestration layer）** —— 类比 LLM 领域的 LiteLLM，只是对接的对象是各种解析引擎，而不是各家 LLM 供应商。
 
 ---
 
-## 🚀 项目状态：刚刚启动！
+## 🚀 项目状态
 
-**LangParse 项目刚刚启动。**
+LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（187 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
 
-这是一个全新的项目，旨在解决 LLM 和 Agent 应用中复杂文档（如 PDF、DOCX）解析和分块的“第一公里”难题。
-
-我们的愿景是创建一个健壮、高保真、且对开发者极度友好的解析引擎。我们正在积极寻找早期贡献者、设计伙伴和任何有兴趣构建下一代 RAG 基础工具的同道中人。
-
-**我们诚邀您的加入！**
+项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（DeepDoc、PaddleOCR-VL），以及帮忙压测"引擎中立路由"这个设计本身。
 
 ## 🤔 为什么选择 LangParse？
 
-在构建 RAG (Retrieval-Augmented Generation) 或 Agent 系统时，开发者面临的第一个，也是最痛苦的挑战之一是：
+当前 RAG/Agent 场景下的文档解析工具分两类，但都没有解决完整问题：
 
-1.  **低保真解析 (Low-Fidelity Parsing)**：现有的工具在处理复杂的 PDF、表格或图文混排时，经常会丢失结构、弄乱文本顺序或将表格解析为不可读的“乱码”。
-2.  **无效分块 (Ineffective Chunking)**：简单的按固定大小（如 1000 字符）分块，会粗暴地切断完整的语义单元（如段落、列表项），严重降低 RAG 的检索效果。
-3.  **格式孤岛 (Format Silos)**：您需要为 `.pdf`, `.docx`, `.md`, `.html` 甚至是数据库编写完全不同的处理逻辑，这非常繁琐且难以维护。
+1. **单一、有主见的解析引擎**（MinerU、Docling、Marker、LlamaParse……）。每一个在自己的适用范围内都很强，但一旦选定就被锁定在它的取舍上——想在"轻量通用解析"和"重量级垂直引擎"（比如中文/复杂版面场景的 MinerU、DeepDoc）之间切换，往往意味着重写整条管道。
+2. **号称"多引擎"、实际并不中立的封装层**。像 MegaParse、LiteParse 这类项目名义上支持多个后端，但产品结构上都在为自家的旗舰选项导流——MegaParse README 里的 benchmark 表格存在的目的就是证明自家的 vision 解析器打败它包装的第三方引擎；LiteParse 明确写着复杂文档要升级到付费的 LlamaParse。两者都没有把 MinerU、DeepDoc 这类可自托管的垂直引擎当作真正平等的选项接入。
 
-**LangParse 旨在解决这一切。** 我们的目标是成为所有非结构化和半结构化数据源的统一入口，将它们转换为 LLM 最“喜欢”的、干净且富含元数据的 Markdown 块。
+**LangParse 两者都不是——它是适配/路由层。** 统一接口下，通用引擎（基于 pdfplumber 的 `simple`）和垂直/自托管引擎（目前是 `mineru`，`deepdoc`/`paddle` 在推进中）享有同等的一等公民地位，不会为了给某个付费选项导流而刻意弱化其他引擎。分块策略是叠加在引擎之上、完全独立的另一个选择。输出既可以是解析原文，也可以是分块后的内容——同一套 API，你说了算。
 
-## ✨ 核心特性 (项目愿景)
+**非目标**（写在这里是为了防止后续范围漂移）：
+- 不跟 MinerU / Docling / LlamaParse 拼原始解析精度——精度天花板由引擎本身决定，编排层改变不了这件事。
+- 不是一个独立的解析质量评测/排行榜项目（这类需求应参考 OmniDocBench、SCORE-Bench）。`services/fidelity.py` 里的保真度评分存在的意义,是帮你在**自己的文档**上对比选型,是辅助能力,不是产品的核心叙事。
+- 不绑定任何单一厂商的云端 API 作为唯一路径——自托管引擎和远程 API 引擎都应该是平等的后端选项。
 
-* **📄 高保真文档解析**：
-    * **PDF 优先**：专为复杂 PDF 优化，能准确提取文本、标题、列表，并**将表格（Table）完美转换为 Markdown 表格**。
-    * **多格式支持**：开箱即用支持 `.pdf`, `.docx`, `.md`, `.txt` 等，并计划快速扩展到 `.pptx`, `.html` 甚至 `SQL` 数据库。
-* **🧩 智能语义分块**：
-    * **Markdown 感知**：不再是愚蠢的固定大小切割，而是根据 Markdown 标题 (H1, H2)、列表、代码块等结构进行语义分块。
-    * **递归与重叠**：提供多种分块策略，以确保知识块的大小和语义完整性达到最佳平衡。
-* **📡 统一的“知识”输出**：
-    * 所有输入最终都会被转换为**干净、结构化的 Markdown**。
-    * 每个分块（Chunk）都会自动附带丰富的**元数据**（`metadata`），如：`source_file`, `page_number`, `header` 等，以便于 RAG 流程中的引用和过滤。
-* **💻 简洁的开发者 API**：
-    * 我们追求极致简单的 API。目标是用 1-3 行代码完成最复杂的解析任务。
+## 🏗️ 架构
+
+```mermaid
+flowchart LR
+    subgraph Input["输入格式"]
+        direction TB
+        PDF["PDF"]
+        DOCX["DOCX / DOC"]
+        XLSX["XLSX / XLS / CSV"]
+        MD["MD / TXT"]
+    end
+
+    subgraph Router["路由层<br/>parsers/registry.py"]
+        direction TB
+        REG["内容嗅探优先，<br/>扩展名兜底<br/>（唯一事实源）"]
+    end
+
+    subgraph GenericEngines["通用引擎"]
+        direction TB
+        SIMPLE["simple<br/>(pdfplumber)"]
+        DOCXP["DocxParser"]
+        EXCELP["ExcelParser"]
+        MDP["MarkdownParser"]
+    end
+
+    subgraph VerticalEngines["垂直 / 自托管引擎"]
+        direction TB
+        MINERU["mineru ✅"]
+        DEEPDOC["deepdoc 🚧 规划中"]
+        PADDLE["paddle 🚧 规划中"]
+        VISION["vision_llm 🚧 规划中"]
+    end
+
+    subgraph Result["统一结果"]
+        direction TB
+        PDR["ParsedDocumentResult<br/>pages / elements / tables / images"]
+    end
+
+    subgraph ChunkLayer["分块层（可插拔）"]
+        direction TB
+        SEM["SemanticChunker<br/>blocks.py + semantic.py"]
+    end
+
+    subgraph Output["输出"]
+        direction TB
+        RAW["解析原文<br/>Markdown / JSON"]
+        CHUNKS["分块结果<br/>Chunk[] + metadata"]
+    end
+
+    subgraph Services["服务层（横切关注点）"]
+        direction TB
+        BATCH["batch_service"]
+        QUALITY["quality 质检"]
+        BENCH["benchmark_service<br/>可选：在自己的语料上<br/>对比引擎选型"]
+        METRICS["metrics"]
+    end
+
+    Input --> Router
+    Router --> GenericEngines
+    Router --> VerticalEngines
+    GenericEngines --> Result
+    VerticalEngines --> Result
+    Result --> RAW
+    Result --> SEM
+    SEM --> CHUNKS
+    Result -.-> Services
+
+    style Input fill:#F5F5F5,color:#000000,stroke:#37D7FA,stroke-width:2px
+    style Router fill:#F5F5F5,color:#000000,stroke:#8A8F98,stroke-width:2px
+    style GenericEngines fill:#F5F5F5,color:#000000,stroke:#3E18F9,stroke-width:2px
+    style VerticalEngines fill:#F5F5F5,color:#000000,stroke:#FF8705,stroke-width:2px
+    style Result fill:#F5F5F5,color:#000000,stroke:#8A8F98,stroke-width:2px
+    style ChunkLayer fill:#F5F5F5,color:#000000,stroke:#1FAA59,stroke-width:2px
+    style Output fill:#F5F5F5,color:#000000,stroke:#FF8DF2,stroke-width:2px
+    style Services fill:#FAFAFA,color:#000000,stroke:#8A8F98,stroke-width:1px,stroke-dasharray: 4 3
+```
+
+和 [LiteParse](https://github.com/run-llama/liteparse) 那张图形式类似，但画的是不同的东西：他们画的是单一引擎内部的处理管线（格式转换 → 文本抽取 → OCR → 版面重建）；这张画的是**多引擎外层的路由层**——通用引擎和垂直引擎是平等的、都汇入同一个 `ParsedDocumentResult`，分块是叠加在结果之上、独立可选的一步，服务层（批处理/质检/benchmark）横切整条管线，而不是长在某一个引擎内部。
+
+## ✨ 核心特性
+
+* **🔌 引擎中立路由**：通用引擎（`simple`）和垂直引擎（`mineru`，`deepdoc`/`paddle` 推进中）共享同一套接口和同一种输出形状（`ParsedDocumentResult`）。没有默认"主推"引擎，按你的文档特点自己选。
+* **📄 多格式解析**：开箱即用支持 `.pdf` `.docx` `.doc` `.xlsx` `.xls` `.csv` `.md` `.txt`，全部归一化到同一套结构化结果。
+* **🧩 可插拔语义分块**：基于 Markdown 结构（标题、列表、表格、代码块）分块，和是哪个引擎产出的内容无关。
+* **📡 统一输出**：拿解析原文，或者拿带丰富 metadata（`source_file`、`page_number`、`header` 等）的分块结果——同一套 API,你决定。
+* **📊 可选的保真度评分**：`services/fidelity.py` 加上 `benchmark` CLI 命令,让你在需要证据支持选型决策时,在自己的文档上量化对比几个引擎。
 
 ## 📦 安装 (Installation)
 

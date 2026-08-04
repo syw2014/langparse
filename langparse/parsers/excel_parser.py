@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from langparse.core.parser import BaseParser
+from langparse.parsers.sniff import looks_like_ole_binary, looks_like_zip_ooxml
 from langparse.types import ParsedDocumentResult, ParsedElement, ParsedPageResult
 
 
@@ -20,10 +21,15 @@ class ExcelParser(BaseParser):
                 "pandas and openpyxl are required. Install with `pip install pandas openpyxl`."
             ) from None
 
-        if path.suffix.lower() == ".csv":
-            sheets = {None: pd.read_csv(path)}
-        else:
+        # The extension names one of .csv/.xls/.xlsx, but it can lie -- a
+        # workbook re-exported or renamed to .csv (or vice versa) would
+        # otherwise be handed to the wrong pandas reader. Content decides:
+        # a real workbook is either a ZIP-OOXML or legacy-OLE container;
+        # anything else is read as delimited text regardless of its label.
+        if looks_like_zip_ooxml(path) or looks_like_ole_binary(path):
             sheets = pd.read_excel(path, sheet_name=None)
+        else:
+            sheets = {None: pd.read_csv(path)}
 
         pages = [
             self._page_for_sheet(index + 1, sheet_name, frame)

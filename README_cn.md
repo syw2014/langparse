@@ -336,6 +336,10 @@ uv run langparse benchmark samples/public.example.json --engine simple --output-
 
 如有问题、功能请求或错误报告，建议在 GitHub 仓库中**提交 Issue**。这样便于公开讨论，也能帮助其他可能有相同问题的用户。
 
+## 📋 更新日志
+
+变更记录见 [CHANGELOG_cn.md](CHANGELOG_cn.md)（[English](CHANGELOG.md)），按日期分组——项目还没有发布到 PyPI，暂时没有版本号可以挂靠。
+
 ## 📄 许可证
 
 本项目采用 [Apache 2.0 许可证](https://www.apache.org/licenses/LICENSE-2.0)。

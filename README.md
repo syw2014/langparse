@@ -424,5 +424,8 @@ If you use LangParse in your research, product, or publication, we would appreci
 }
 ```
 
+## Changelog
+See [CHANGELOG.md](CHANGELOG.md) ([中文](CHANGELOG_cn.md)) for what's changed, grouped by date — there's no version history yet since nothing has shipped to PyPI.
+
 ## License
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).

@@ -9,7 +9,10 @@ services/fidelity.py's TEDS scoring working across engines.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from html.parser import HTMLParser
+
+from langparse.types import ParsedElement, ParsedPageResult
 
 
 class _RawTableParser(HTMLParser):
@@ -83,3 +86,70 @@ def html_table_to_rows(html: str) -> list[list[str]]:
                 col += 1
         grid.append(row)
     return grid
+
+
+def _bbox(box: dict) -> list[float]:
+    return [float(box.get("x0", 0.0)), float(box.get("top", 0.0)), float(box.get("x1", 0.0)), float(box.get("bottom", 0.0))]
+
+
+def _rows_to_markdown_table(rows: list[list[str]]) -> str:
+    if not rows:
+        return ""
+    lines = [f"| {' | '.join(rows[0])} |", f"| {' | '.join(['---'] * len(rows[0]))} |"]
+    for row in rows[1:]:
+        lines.append(f"| {' | '.join(row)} |")
+    return "\n".join(lines)
+
+
+def render_pages(boxes: list[dict]) -> list[ParsedPageResult]:
+    """Render deepdoc's flat box list (from RAGFlowPdfParser.parse_into_bboxes) into pages."""
+    boxes_by_page: dict[int, list[dict]] = defaultdict(list)
+    for box in boxes:
+        boxes_by_page[box["page_number"]].append(box)
+
+    pages = []
+    for page_number in sorted(boxes_by_page):
+        markdown_parts: list[str] = []
+        plain_parts: list[str] = []
+        elements: list[ParsedElement] = []
+        tables: list[dict] = []
+        images: list[dict] = []
+
+        for box in boxes_by_page[page_number]:
+            layout_type = box.get("layout_type") or "text"
+            text = (box.get("text") or "").strip()
+            bbox = _bbox(box)
+
+            if layout_type == "table":
+                rows = html_table_to_rows(text)
+                tables.append({"rows": rows})
+                markdown_parts.append(_rows_to_markdown_table(rows))
+                elements.append(ParsedElement(kind="table", text=text, bbox=bbox, metadata={"layout_type": layout_type}))
+                continue
+
+            if layout_type == "figure":
+                images.append({"caption": text, "bbox": bbox})
+                if text:
+                    markdown_parts.append(f"*{text}*")
+                elements.append(ParsedElement(kind="figure", text=text, bbox=bbox, metadata={"layout_type": layout_type}))
+                continue
+
+            if not text:
+                continue
+
+            markdown_parts.append(f"# {text}" if layout_type == "title" else text)
+            plain_parts.append(text)
+            elements.append(ParsedElement(kind=layout_type, text=text, bbox=bbox, metadata={"layout_type": layout_type}))
+
+        pages.append(
+            ParsedPageResult(
+                page_number=page_number,
+                markdown_content="\n\n".join(part for part in markdown_parts if part),
+                plain_text="\n".join(plain_parts),
+                elements=elements,
+                tables=tables,
+                images=images,
+                metadata={"engine_name": "deepdoc"},
+            )
+        )
+    return pages

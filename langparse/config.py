@@ -34,6 +34,10 @@ class Config:
         "LANGPARSE_MINERU_MODEL_SOURCE": "engines.mineru.model_source",
         "LANGPARSE_MINERU_AUTO_INSTALL_RUNTIME": "engines.mineru.auto_install_runtime",
         "LANGPARSE_MINERU_RUNTIME_PACKAGE": "engines.mineru.runtime_package",
+        "LANGPARSE_DEEPDOC_DEVICE": "engines.deepdoc.device",
+        "LANGPARSE_DEEPDOC_MODEL_DIR": "engines.deepdoc.model_dir",
+        "LANGPARSE_DEEPDOC_DOWNLOAD_DIR": "engines.deepdoc.download_dir",
+        "LANGPARSE_DEEPDOC_MODEL_POLICY": "engines.deepdoc.model_policy",
     }
 
     DEFAULT_CONFIG = {
@@ -60,6 +64,12 @@ class Config:
                 "provider": "openai",
                 "model": "gpt-4o",
                 "api_key": None,
+            },
+            "deepdoc": {
+                "device": "cpu",
+                "model_dir": None,
+                "download_dir": None,
+                "model_policy": "download_if_missing",
             },
         },
     }

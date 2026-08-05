@@ -7,8 +7,9 @@ from pathlib import Path
 
 from langparse.config import settings
 from langparse.core.rendering import document_from_result
+from langparse.engines.pdf.deepdoc_engine import DeepDocEngine
 from langparse.engines.pdf.mineru import MinerUEngine
-from langparse.engines.pdf.other import DeepDocEngine, PaddleOCRVLEngine
+from langparse.engines.pdf.other import PaddleOCRVLEngine
 from langparse.engines.pdf.simple import SimplePDFEngine
 from langparse.engines.pdf.vision_llm import VisionLLMEngine
 from langparse.parsers.registry import (
@@ -29,13 +30,13 @@ from langparse.types import Chunk, Document, ParsedDocumentResult, ParsedPageRes
 ENGINE_MAP = {
     "simple": SimplePDFEngine,
     "mineru": MinerUEngine,
+    "deepdoc": DeepDocEngine,
 }
 
 #: Reserved names with adapters in the tree but no working implementation.
 #: Selecting one fails immediately with an explanation instead of at parse time.
 PLANNED_ENGINES = {
     "vision_llm": VisionLLMEngine,
-    "deepdoc": DeepDocEngine,
     "paddle": PaddleOCRVLEngine,
 }
 

@@ -14,7 +14,7 @@ class PDFParser(BaseParser):
 
     def __init__(
         self,
-        engine: Literal["simple", "mineru"] = None,
+        engine: Literal["simple", "mineru", "deepdoc"] = None,
         **engine_kwargs,
     ):
         # Engine name resolves as: argument > config > default. Construction is

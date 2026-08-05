@@ -40,7 +40,18 @@ excel = ["pandas>=2.0.0", "openpyxl>=3.1.0"]
 # pdfplumber already pulls in pypdfium2, which rasterises the page.
 ocr = ["rapidocr_onnxruntime>=1.3.0", "pdfplumber>=0.10.0"]
 mineru = ["mineru[all]"]
-all = ["pdfplumber", "python-docx", "pandas", "openpyxl", "rapidocr_onnxruntime", "mineru[all]"]
+deepdoc = [
+    "pdfplumber>=0.10.0",
+    "opencv-python-headless>=4.9.0",
+    "onnxruntime>=1.17.0",
+    "pypdf>=4.0.0",
+    "huggingface_hub>=0.20.0",
+    "scikit-learn>=1.3.0",
+    "shapely>=2.0.0",
+    "pyclipper>=1.3.0",
+    "jieba>=0.42.1",
+]
+all = ["pdfplumber", "python-docx", "pandas", "openpyxl", "rapidocr_onnxruntime", "mineru[all]", "opencv-python-headless", "onnxruntime", "pypdf", "huggingface_hub", "scikit-learn", "shapely", "pyclipper", "jieba"]
 # The test suite exercises every parser, and conftest.py builds .docx/.xlsx
 # fixtures at import time, so `pip install -e ".[dev]"` must be enough to run it.
 dev = [
@@ -81,6 +92,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Tests define throwaway classes and shadow names freely.
 "tests/*" = ["B011"]
+# Vendored from RAGFlow's deepdoc (Apache-2.0) — ported near-verbatim, see
+# langparse/engines/pdf/deepdoc/__init__.py for provenance. Not rewritten to
+# local style; only cross-package imports and out-of-scope branches changed.
+"langparse/engines/pdf/deepdoc/*" = ["E", "F403", "F405", "B", "UP", "C4", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

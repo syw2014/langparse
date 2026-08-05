@@ -89,7 +89,12 @@ def html_table_to_rows(html: str) -> list[list[str]]:
 
 
 def _bbox(box: dict) -> list[float]:
-    return [float(box.get("x0", 0.0)), float(box.get("top", 0.0)), float(box.get("x1", 0.0)), float(box.get("bottom", 0.0))]
+    return [
+        float(box.get("x0", 0.0)),
+        float(box.get("top", 0.0)),
+        float(box.get("x1", 0.0)),
+        float(box.get("bottom", 0.0)),
+    ]
 
 
 def _rows_to_markdown_table(rows: list[list[str]]) -> str:
@@ -124,14 +129,22 @@ def render_pages(boxes: list[dict]) -> list[ParsedPageResult]:
                 rows = html_table_to_rows(text)
                 tables.append({"rows": rows})
                 markdown_parts.append(_rows_to_markdown_table(rows))
-                elements.append(ParsedElement(kind="table", text=text, bbox=bbox, metadata={"layout_type": layout_type}))
+                elements.append(
+                    ParsedElement(
+                        kind="table", text=text, bbox=bbox, metadata={"layout_type": layout_type}
+                    )
+                )
                 continue
 
             if layout_type == "figure":
                 images.append({"caption": text, "bbox": bbox})
                 if text:
                     markdown_parts.append(f"*{text}*")
-                elements.append(ParsedElement(kind="figure", text=text, bbox=bbox, metadata={"layout_type": layout_type}))
+                elements.append(
+                    ParsedElement(
+                        kind="figure", text=text, bbox=bbox, metadata={"layout_type": layout_type}
+                    )
+                )
                 continue
 
             if not text:
@@ -139,7 +152,11 @@ def render_pages(boxes: list[dict]) -> list[ParsedPageResult]:
 
             markdown_parts.append(f"# {text}" if layout_type == "title" else text)
             plain_parts.append(text)
-            elements.append(ParsedElement(kind=layout_type, text=text, bbox=bbox, metadata={"layout_type": layout_type}))
+            elements.append(
+                ParsedElement(
+                    kind=layout_type, text=text, bbox=bbox, metadata={"layout_type": layout_type}
+                )
+            )
 
         pages.append(
             ParsedPageResult(

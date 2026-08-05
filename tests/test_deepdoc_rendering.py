@@ -7,22 +7,12 @@ def test_simple_table_without_spans():
 
 
 def test_colspan_header_repeats_value_across_columns():
-    html = (
-        "<table>"
-        "<tr><th colspan='2'>Header</th></tr>"
-        "<tr><td>1</td><td>2</td></tr>"
-        "</table>"
-    )
+    html = "<table><tr><th colspan='2'>Header</th></tr><tr><td>1</td><td>2</td></tr></table>"
     assert html_table_to_rows(html) == [["Header", "Header"], ["1", "2"]]
 
 
 def test_rowspan_first_column_repeats_value_down_rows():
-    html = (
-        "<table>"
-        "<tr><td rowspan='2'>Group</td><td>1</td></tr>"
-        "<tr><td>2</td></tr>"
-        "</table>"
-    )
+    html = "<table><tr><td rowspan='2'>Group</td><td>1</td></tr><tr><td>2</td></tr></table>"
     assert html_table_to_rows(html) == [["Group", "1"], ["Group", "2"]]
 
 

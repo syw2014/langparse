@@ -52,7 +52,9 @@ def ensure_deepdoc_models(
         return str(target)
 
     if model_policy == "require_existing":
-        raise RuntimeError(f"deepdoc model_policy=require_existing but models are missing under {target}")
+        raise RuntimeError(
+            f"deepdoc model_policy=require_existing but models are missing under {target}"
+        )
 
     target.mkdir(parents=True, exist_ok=True)
     downloaded = download_models(target)

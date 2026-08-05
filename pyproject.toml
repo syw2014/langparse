@@ -63,6 +63,7 @@ dev = [
     "pandas>=2.0.0",
     "openpyxl>=3.1.0",
     "tabulate>=0.9.0",
+    "jieba>=0.42.1",
 ]
 
 [project.urls]
@@ -96,6 +97,23 @@ ignore = [
 # langparse/engines/pdf/deepdoc/__init__.py for provenance. Not rewritten to
 # local style; only cross-package imports and out-of-scope branches changed.
 "langparse/engines/pdf/deepdoc/*" = ["E", "F403", "F405", "B", "UP", "C4", "I"]
+
+# Exclude vendored deepdoc files from ruff format to preserve upstream diffability.
+# These 8 files are ported near-verbatim from RAGFlow (Apache-2.0) and must remain
+# diffable against future upstream changes — not part of the project's normal style
+# migration. Per-file-ignore only applies to linting; this section excludes them from
+# formatting as well, which is a separate ruff configuration surface.
+[tool.ruff.format]
+exclude = [
+    "langparse/engines/pdf/deepdoc/operators.py",
+    "langparse/engines/pdf/deepdoc/postprocess.py",
+    "langparse/engines/pdf/deepdoc/ocr.py",
+    "langparse/engines/pdf/deepdoc/recognizer.py",
+    "langparse/engines/pdf/deepdoc/layout_recognizer.py",
+    "langparse/engines/pdf/deepdoc/table_structure_recognizer.py",
+    "langparse/engines/pdf/deepdoc/pdf_parser.py",
+    "langparse/engines/pdf/deepdoc/utils.py",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

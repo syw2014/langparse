@@ -76,11 +76,17 @@ if LOCK_KEY_pdfplumber not in sys.modules:
 
 class RAGFlowPdfParser:
     def __init__(self, model_dir=None, **kwargs):
-        self.ocr = OCR(model_dir=model_dir)
+        # Resolved once so every model-file consumer -- OCR, LayoutRecognizer,
+        # TableStructureRecognizer, and _ocr_can_represent's ocr.res lookup --
+        # agrees on the same directory. OCR/Recognizer already fall back to
+        # default_model_dir() internally when given None, so passing the
+        # already-resolved value here changes nothing for them.
+        self.model_dir = model_dir or str(default_model_dir())
+        self.ocr = OCR(model_dir=self.model_dir)
         self.parallel_limiter = None
 
-        self.layouter = LayoutRecognizer("layout", model_dir=model_dir)
-        self.tbl_det = TableStructureRecognizer(model_dir=model_dir)
+        self.layouter = LayoutRecognizer("layout", model_dir=self.model_dir)
+        self.tbl_det = TableStructureRecognizer(model_dir=self.model_dir)
 
         self.page_from = 0
         self.column_num = 1
@@ -133,27 +139,29 @@ class RAGFlowPdfParser:
     # CID pattern regex for unmapped font characters from pdfminer
     _CID_PATTERN = re.compile(r"\(cid\s*:\s*\d+\s*\)")
 
+    # Class-level default; a matching instance attribute (see __init__'s
+    # self.model_dir) shadows this once _ocr_can_represent below populates
+    # it, scoping the cache to the model_dir this instance was built with.
     _OCR_ALPHABET = None
 
-    @classmethod
-    def _ocr_can_represent(cls, text, min_coverage=0.8):
+    def _ocr_can_represent(self, text, min_coverage=0.8):
         """True if the OCR recogniser's alphabet covers this text well enough to be worth OCRing."""
         if not text:
             return True
-        if cls._OCR_ALPHABET is None:
-            res = os.path.join(default_model_dir(), "ocr.res")
+        if self._OCR_ALPHABET is None:
+            res = os.path.join(self.model_dir, "ocr.res")
             try:
                 with open(res, encoding="utf-8") as f:
-                    cls._OCR_ALPHABET = set(f.read())
+                    self._OCR_ALPHABET = set(f.read())
             except (OSError, UnicodeDecodeError) as e:
                 logging.warning("Could not load OCR alphabet from %s: %s; treating all text as representable.", res, e)
-                cls._OCR_ALPHABET = set()
-        if not cls._OCR_ALPHABET:
+                self._OCR_ALPHABET = set()
+        if not self._OCR_ALPHABET:
             return True  # unknown alphabet: preserve existing behaviour
         letters = [c for c in text if c.strip()]
         if not letters:
             return True
-        covered = sum(1 for c in letters if c in cls._OCR_ALPHABET)
+        covered = sum(1 for c in letters if c in self._OCR_ALPHABET)
         return covered / len(letters) >= min_coverage
 
     # CJK scripts (Han, Hiragana, Katakana, Hangul) do not separate words with

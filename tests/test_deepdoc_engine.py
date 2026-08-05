@@ -1,3 +1,7 @@
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from langparse.engines.pdf.deepdoc_engine import DeepDocEngine
@@ -11,6 +15,35 @@ class _FakeParser:
 
     def parse_into_bboxes(self, fnm, **kwargs):
         self.calls.append(fnm)
+        return self._boxes
+
+
+class _ConcurrencyTrackingParser:
+    """Records whether parse_into_bboxes was ever entered by two threads at once.
+
+    RAGFlowPdfParser is per-parse stateful (see DeepDocEngine._parser_lock's
+    docstring), so concurrent calls must never overlap. This fake sleeps
+    between "starting" and "returning" to widen the race window, and uses an
+    instance-level counter that must never exceed 1 if DeepDocEngine's lock
+    is doing its job.
+    """
+
+    def __init__(self, boxes):
+        self._boxes = boxes
+        self._active = 0
+        self._lock = threading.Lock()
+        self.max_concurrent_calls = 0
+
+    def parse_into_bboxes(self, fnm, **kwargs):
+        with self._lock:
+            self._active += 1
+            self.max_concurrent_calls = max(self.max_concurrent_calls, self._active)
+        # Sleep *outside* the bookkeeping lock, and after recording entry, so
+        # a second thread that (incorrectly) entered concurrently has a wide
+        # window to be observed above before either thread returns.
+        time.sleep(0.05)
+        with self._lock:
+            self._active -= 1
         return self._boxes
 
 
@@ -120,3 +153,36 @@ def test_missing_deepdoc_extra_raises_actionable_import_error(tmp_path, monkeypa
 
     with pytest.raises(ImportError, match="langparse\\[deepdoc\\]"):
         engine.process_document(pdf_path)
+
+
+def test_concurrent_process_document_calls_do_not_overlap(tmp_path):
+    """Regression test: batch_service.py builds ONE DeepDocEngine and runs a
+    ThreadPoolExecutor over it. RAGFlowPdfParser is stateful across its whole
+    call (not just at construction), so DeepDocEngine._parser_lock must be
+    held around the entire parse_into_bboxes call, not just the lazy build.
+    """
+    pdf_path_a = tmp_path / "a.pdf"
+    pdf_path_b = tmp_path / "b.pdf"
+    pdf_path_a.write_bytes(b"%PDF-1.4")
+    pdf_path_b.write_bytes(b"%PDF-1.4")
+    box = {
+        "page_number": 1,
+        "layout_type": "text",
+        "text": "hi",
+        "x0": 0,
+        "x1": 1,
+        "top": 0,
+        "bottom": 1,
+    }
+    fake_parser = _ConcurrencyTrackingParser([box])
+    engine = DeepDocEngine(parser=fake_parser)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(engine.process_document, pdf_path_a),
+            executor.submit(engine.process_document, pdf_path_b),
+        ]
+        for future in futures:
+            future.result()
+
+    assert fake_parser.max_concurrent_calls == 1

@@ -1,3 +1,4 @@
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,16 @@ class DeepDocEngine(BasePDFEngine):
         self.download_dir = download_dir
         self.model_policy = model_policy
         self._parser = parser
+        # Batch runs share one engine (and thus one RAGFlowPdfParser) across
+        # worker threads. RAGFlowPdfParser is deeply per-parse stateful --
+        # __images__ resets self.boxes/self.page_images/etc. at the top of
+        # every call, and the downstream chain mutates self.boxes in place --
+        # so two threads parsing concurrently would corrupt each other's
+        # state. The lock also prevents two threads from racing to build (and
+        # load ~100MB of models for) separate parsers. Same precedent as
+        # SimplePDFEngine._ocr_lock: correctness over throughput on an
+        # already-slow path.
+        self._parser_lock = threading.Lock()
 
     def _build_parser(self):
         try:
@@ -57,10 +68,11 @@ class DeepDocEngine(BasePDFEngine):
                 'DeepDoc engine needs extra dependencies. Install them with `pip install "langparse[deepdoc]"`.'
             ) from exc
 
-        if self._parser is None:
-            self._parser = self._build_parser()
+        with self._parser_lock:
+            if self._parser is None:
+                self._parser = self._build_parser()
+            boxes = self._parser.parse_into_bboxes(str(file_path))
 
-        boxes = self._parser.parse_into_bboxes(str(file_path))
         pages = render_pages(boxes)
         return ParsedDocumentResult(
             source=str(file_path),

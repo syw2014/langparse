@@ -37,7 +37,7 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | Markdown / DOCX / Excel 解析 | 可用 | 均产出结构化 pages/tables/elements |
 | PDF 解析（simple） | 可用 | pdfplumber，含表格提取与扫描件 OCR 兜底 |
 | PDF 解析（MinerU） | 可用 | 经 `mineru-api`，含服务生命周期管理、表格/图片/caption 抽取 |
-| PDF 解析（DeepDoc） | 可用 | 移植自 RAGFlow：OCR + 版面分析 + 表格结构识别，ONNX/CPU 推理，模型按需从 HuggingFace `InfiniFlow/deepdoc` 下载到 `~/.langparse/models/deepdoc` |
+| PDF 解析（DeepDoc） | 可用 | 移植自 RAGFlow：OCR + 版面分析 + 表格结构识别，ONNX/CPU 推理，模型按需从 HuggingFace `InfiniFlow/deepdoc` 下载到 `~/.langparse/models/deepdoc`；已知局限：复杂/多行竖排标签版式下表格结构识别仍可能出现行拆分或印章文字碎片误判为单元格 |
 | PDF 解析（vision_llm / paddle） | 未实现 | 已移出 `ENGINE_MAP`，选用时立即报错而非解析时才失败 |
 | 语义分块 | 可用 | 块扫描器 + 尺寸装箱，见 `chunkers/blocks.py` |
 | 批处理 / 指标 / 质检 | 可用 | 全格式生效 |
@@ -85,7 +85,7 @@ langparse/
 优先级按"是否直接服务项目定位（引擎中立编排层）"排列，不是按实现难度。
 
 **P0 —— 直接验证"通用引擎与垂直引擎平权"这条核心主张**
-1. ✅ **已完成（2026-08-05）——把 DeepDoc 从占位实现补成真实可用**：[langparse/engines/pdf/deepdoc_engine.py](../langparse/engines/pdf/deepdoc_engine.py) 现在是移植自 RAGFlow 的完整 OCR + 版面分析 + 表格结构识别流水线（ONNX/CPU 推理，见 `langparse/engines/pdf/deepdoc/`），已注册进 `ENGINE_MAP`，`--engine deepdoc` 端到端可用，CLI 无需新增任何 flag（`--device` `--model-dir` `--download-dir` `--model-policy` 本就是通用转发的 kwargs）。用真实扫描件 PDF 做过一次人工冒烟验证（非 CI 用例，模型从 HuggingFace `InfiniFlow/deepdoc` 首次运行时下载到 `~/.langparse/models/deepdoc`）：产出的 `markdown_content` 是可读的中文文本和结构化表格（个别字符有 OCR 误识别，如"竣工"识别成"峻工"，属于扫描件 OCR 正常误差范围，非乱码非空）。跑起来的垂直引擎从 MinerU 一个变成两个，"平权"主张不再只有单一样本支撑。
+1. ✅ **已完成（2026-08-05）——把 DeepDoc 从占位实现补成真实可用**：[langparse/engines/pdf/deepdoc_engine.py](../langparse/engines/pdf/deepdoc_engine.py) 现在是移植自 RAGFlow 的完整 OCR + 版面分析 + 表格结构识别流水线（ONNX/CPU 推理，见 `langparse/engines/pdf/deepdoc/`），已注册进 `ENGINE_MAP`，`--engine deepdoc` 端到端可用，CLI 无需新增任何 flag（`--device` `--model-dir` `--download-dir` `--model-policy` 本就是通用转发的 kwargs）。用真实扫描件 PDF 做过一次人工冒烟验证（非 CI 用例，模型从 HuggingFace `InfiniFlow/deepdoc` 首次运行时下载到 `~/.langparse/models/deepdoc`）：产出的 `markdown_content` 是可读的中文文本和结构化表格，整体非乱码非空。对照源图像逐项核对后，发现两类已知局限而非"完美识别"：字符级 OCR 误差（"竣工"识别成"峻工"、两处日期字段缺字/错位，属扫描件 OCR 正常范围）之外，表格结构重建在复杂版式下有真实缺陷——源文档一段竖排多字标签被表格结构识别器拆成 5 行乱序字符，另有 2 行在源图像里找不到对应内容，疑似红色签章文字碎片被误判为单元格；后者是表格结构还原本身的局限，不是简单的字符识别误差（见上方完成度表 DeepDoc 行的注记）。跑起来的垂直引擎从 MinerU 一个变成两个，"平权"主张不再只有单一样本支撑，但表格结构还原在复杂版式上的鲁棒性仍是待改进项，不宜过度宣称"识别干净"。
 2. **文档化"新引擎接入契约"**：`BaseEngine.process()` / `PageResult`（[core/engine.py](../langparse/core/engine.py)）接口已经存在，但没有一份面向贡献者的说明——新引擎要实现什么、必须保证什么输出形状、哪些 metadata 字段是引擎特定的。缺了这份文档，后续接入方式容易不一致，等价于悄悄破坏引擎中立性。
 3. **审计路由/配置层有没有隐性偏向**：
    - ✅ **已修复（2026-08-04）——路由曾经只信扩展名**：`parser_kind_for()` 之前纯按后缀查表，文件后缀被改错（比如真实内容是 xlsx 却存成 .csv，或反过来）会直接路由到错误的解析器，静默产出乱码而不是报错。现在 `parsers/sniff.py` 先按内容嗅探（PDF 魔数、OOXML zip 包内部路径判断 docx/xlsx），嗅探结果确定时覆盖扩展名；嗅探不出结论时（纯文本、旧版 OLE 二进制 `.doc`/`.xls`）才退回扩展名，行为不变。`ExcelParser` 内部的 csv/workbook 分支同步改为按内容判定。零新增依赖（zipfile 是标准库）。已知局限：旧版 OLE 复合文档格式（pre-2007 `.doc`/`.xls`）内部结构需要额外依赖才能精确解析，目前只能识别"是不是 OLE 容器"，识别不出具体是 doc 还是 xls，这种情况下继续退回扩展名。

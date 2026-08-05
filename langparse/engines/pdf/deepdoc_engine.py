@@ -80,7 +80,12 @@ class DeepDocEngine(BasePDFEngine):
             engine="deepdoc",
             pages=pages,
             markdown_content="\n\n".join(page.markdown_content for page in pages),
-            metadata={"device": self.device, "model_dir": self.model_dir},
+            metadata={
+                "device": self.device,
+                "model_dir": self.model_dir,
+                "ocr_applied": True,
+                "ocr_text_chars": sum(len(page.plain_text) for page in pages),
+            },
         )
 
     def process(self, file_path: Path, **kwargs) -> Iterator[PageResult]:

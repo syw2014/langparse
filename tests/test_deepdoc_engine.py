@@ -77,6 +77,13 @@ def test_process_document_returns_normalized_result(tmp_path):
     assert parsed.filename == "sample.pdf"
     assert parsed.pages[0].markdown_content == "# Title"
     assert fake_parser.calls == [str(pdf_path)]
+    # deepdoc OCRs every page unconditionally, so downstream quality/benchmark
+    # checks that gate on OCR having run (langparse/metrics.py,
+    # langparse/services/quality.py) must see it reflected here.
+    assert parsed.metadata["ocr_applied"] is True
+    expected_chars = sum(len(page.plain_text) for page in parsed.pages)
+    assert expected_chars == len("Title")
+    assert parsed.metadata["ocr_text_chars"] == expected_chars
 
 
 def test_process_document_joins_page_markdown(tmp_path):

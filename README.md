@@ -12,7 +12,7 @@
 
 LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (187 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
 
-Still pre-1.0. Looking for early contributors and design partners, particularly to help wire up additional vertical engines (DeepDoc, PaddleOCR-VL) and pressure-test the engine-neutral routing design.
+Still pre-1.0. Looking for early contributors and design partners, particularly to help wire up additional vertical engines (PaddleOCR-VL, vision-LLM backends) and pressure-test the engine-neutral routing design.
 
 ## 🤔 Why LangParse?
 
@@ -21,7 +21,7 @@ Document parsing tooling for RAG/Agent pipelines today falls into two camps, and
 1. **Single, opinionated parsing engines** (MinerU, Docling, Marker, LlamaParse, ...). Each is strong within its own scope, but adopting one locks you into its trade-offs — switching between a lightweight generic parser and a heavyweight vertical engine (e.g. MinerU/DeepDoc for CJK or complex layouts) usually means rewriting your pipeline.
 2. **"Multi-engine" wrappers that aren't actually neutral.** Projects like MegaParse or LiteParse nominally support several backends, but the product is structured to fund a flagship offering — MegaParse's own vision-based parser (its README benchmark table exists to show it beating the third-party engines it wraps), LiteParse's own local engine with an explicit upsell to LlamaParse for anything complex. Neither wires up self-hosted vertical engines like MinerU or DeepDoc as genuine peers.
 
-**LangParse is neither of those — it's the adapter/routing layer.** One interface; generic engines (pdfplumber-based `simple`) and vertical/self-hosted engines (`mineru` today, `deepdoc` / `paddle` in progress) are equally first-class, pluggable backends, with no engine favored to drive adoption of a paid tier. Chunking strategy is a separate, independent choice on top of whichever engine parsed the document. Output is either the raw parsed document or chunked content — your call, same API.
+**LangParse is neither of those — it's the adapter/routing layer.** One interface; generic engines (pdfplumber-based `simple`) and vertical/self-hosted engines (`mineru` and `deepdoc` today, `paddle` in progress) are equally first-class, pluggable backends, with no engine favored to drive adoption of a paid tier. Chunking strategy is a separate, independent choice on top of whichever engine parsed the document. Output is either the raw parsed document or chunked content — your call, same API.
 
 **Non-goals** (kept here so scope doesn't drift):
 - Not competing with MinerU / Docling / LlamaParse on raw extraction accuracy — that ceiling is set by the engine, not by this layer.
@@ -56,7 +56,7 @@ flowchart LR
     subgraph VerticalEngines["Vertical / Self-Hosted Engines"]
         direction TB
         MINERU["mineru ✅"]
-        DEEPDOC["deepdoc 🚧 planned"]
+        DEEPDOC["deepdoc ✅"]
         PADDLE["paddle 🚧 planned"]
         VISION["vision_llm 🚧 planned"]
     end
@@ -109,7 +109,7 @@ Same shape as the [LiteParse](https://github.com/run-llama/liteparse) diagram, d
 
 ## ✨ Core Features
 
-* **🔌 Engine-neutral routing**: Generic (`simple`) and vertical (`mineru`, with `deepdoc`/`paddle` in progress) PDF engines share one interface and one output shape (`ParsedDocumentResult`). No default "flagship" engine — you pick based on your documents.
+* **🔌 Engine-neutral routing**: Generic (`simple`) and vertical (`mineru`, `deepdoc`, with `paddle` in progress) PDF engines share one interface and one output shape (`ParsedDocumentResult`). No default "flagship" engine — you pick based on your documents.
 * **📄 Multi-format parsing**: `.pdf` `.docx` `.doc` `.xlsx` `.xls` `.csv` `.md` `.txt` out of the box, all normalized to the same structured result.
 * **🧩 Pluggable semantic chunking**: Markdown-structure-aware chunking (headings, lists, tables, code blocks), decoupled from which engine produced the content.
 * **📡 Unified output**: Get the parsed document as-is, or chunked with rich metadata (`source_file`, `page_number`, `header`, ...) — same API either way.
@@ -125,10 +125,11 @@ Once v0.1 is released, you will be able to install it via pip:
 pip install langparse
 ```
 
-If you need the MinerU runtime, install the optional extra:
+If you need the MinerU or DeepDoc runtime, install the optional extra:
 
 ```bash
 pip install "langparse[mineru]"
+pip install "langparse[deepdoc]"
 pip install "langparse[all]"
 ```
 
@@ -379,6 +380,7 @@ uv pip install -e ".[docx]"  # Word parsing (python-docx)
 uv pip install -e ".[excel]" # Excel parsing (pandas + openpyxl)
 uv pip install -e ".[ocr]"   # OCR (rapidocr_onnxruntime)
 uv pip install -e ".[mineru]"# MinerU runtime (large download)
+uv pip install -e ".[deepdoc]"# DeepDoc runtime (OCR/layout/table ONNX weights, ~100MB download on first run)
 uv pip install -e ".[all]"   # everything above
 ```
 

@@ -12,7 +12,7 @@
 
 LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（187 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
 
-项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（DeepDoc、PaddleOCR-VL），以及帮忙压测"引擎中立路由"这个设计本身。
+项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（PaddleOCR-VL、vision-LLM 后端），以及帮忙压测"引擎中立路由"这个设计本身。
 
 ## 🤔 为什么选择 LangParse？
 
@@ -21,7 +21,7 @@ LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、�
 1. **单一、有主见的解析引擎**（MinerU、Docling、Marker、LlamaParse……）。每一个在自己的适用范围内都很强，但一旦选定就被锁定在它的取舍上——想在"轻量通用解析"和"重量级垂直引擎"（比如中文/复杂版面场景的 MinerU、DeepDoc）之间切换，往往意味着重写整条管道。
 2. **号称"多引擎"、实际并不中立的封装层**。像 MegaParse、LiteParse 这类项目名义上支持多个后端，但产品结构上都在为自家的旗舰选项导流——MegaParse README 里的 benchmark 表格存在的目的就是证明自家的 vision 解析器打败它包装的第三方引擎；LiteParse 明确写着复杂文档要升级到付费的 LlamaParse。两者都没有把 MinerU、DeepDoc 这类可自托管的垂直引擎当作真正平等的选项接入。
 
-**LangParse 两者都不是——它是适配/路由层。** 统一接口下，通用引擎（基于 pdfplumber 的 `simple`）和垂直/自托管引擎（目前是 `mineru`，`deepdoc`/`paddle` 在推进中）享有同等的一等公民地位，不会为了给某个付费选项导流而刻意弱化其他引擎。分块策略是叠加在引擎之上、完全独立的另一个选择。输出既可以是解析原文，也可以是分块后的内容——同一套 API，你说了算。
+**LangParse 两者都不是——它是适配/路由层。** 统一接口下，通用引擎（基于 pdfplumber 的 `simple`）和垂直/自托管引擎（目前是 `mineru` 和 `deepdoc`，`paddle` 在推进中）享有同等的一等公民地位，不会为了给某个付费选项导流而刻意弱化其他引擎。分块策略是叠加在引擎之上、完全独立的另一个选择。输出既可以是解析原文，也可以是分块后的内容——同一套 API，你说了算。
 
 **非目标**（写在这里是为了防止后续范围漂移）：
 - 不跟 MinerU / Docling / LlamaParse 拼原始解析精度——精度天花板由引擎本身决定，编排层改变不了这件事。
@@ -56,7 +56,7 @@ flowchart LR
     subgraph VerticalEngines["垂直 / 自托管引擎"]
         direction TB
         MINERU["mineru ✅"]
-        DEEPDOC["deepdoc 🚧 规划中"]
+        DEEPDOC["deepdoc ✅"]
         PADDLE["paddle 🚧 规划中"]
         VISION["vision_llm 🚧 规划中"]
     end
@@ -109,7 +109,7 @@ flowchart LR
 
 ## ✨ 核心特性
 
-* **🔌 引擎中立路由**：通用引擎（`simple`）和垂直引擎（`mineru`，`deepdoc`/`paddle` 推进中）共享同一套接口和同一种输出形状（`ParsedDocumentResult`）。没有默认"主推"引擎，按你的文档特点自己选。
+* **🔌 引擎中立路由**：通用引擎（`simple`）和垂直引擎（`mineru`、`deepdoc`，`paddle` 推进中）共享同一套接口和同一种输出形状（`ParsedDocumentResult`）。没有默认"主推"引擎，按你的文档特点自己选。
 * **📄 多格式解析**：开箱即用支持 `.pdf` `.docx` `.doc` `.xlsx` `.xls` `.csv` `.md` `.txt`，全部归一化到同一套结构化结果。
 * **🧩 可插拔语义分块**：基于 Markdown 结构（标题、列表、表格、代码块）分块，和是哪个引擎产出的内容无关。
 * **📡 统一输出**：拿解析原文，或者拿带丰富 metadata（`source_file`、`page_number`、`header` 等）的分块结果——同一套 API,你决定。
@@ -125,10 +125,11 @@ flowchart LR
 pip install langparse
 ```
 
-如果需要 MinerU 运行时，请安装可选依赖：
+如果需要 MinerU 或 DeepDoc 运行时，请安装可选依赖：
 
 ```bash
 pip install "langparse[mineru]"
+pip install "langparse[deepdoc]"
 pip install "langparse[all]"
 ```
 
@@ -289,6 +290,7 @@ uv pip install -e ".[docx]"  # Word 解析（python-docx）
 uv pip install -e ".[excel]" # Excel 解析（pandas + openpyxl）
 uv pip install -e ".[ocr]"   # OCR（rapidocr_onnxruntime）
 uv pip install -e ".[mineru]"# MinerU 运行时（体积较大）
+uv pip install -e ".[deepdoc]"# DeepDoc 运行时（OCR/版面/表格 ONNX 权重，首次运行下载约 100MB）
 uv pip install -e ".[all]"   # 以上全部
 ```
 

@@ -102,3 +102,36 @@ def test_engine_name_is_stamped_on_page_metadata():
     pages = render_pages([_box(text="x")])
 
     assert pages[0].metadata["engine_name"] == "deepdoc"
+
+
+def test_bbox_without_positions_falls_back_to_top_level_coordinates():
+    # Existing hand-built fixtures (e.g. _box() above) never set "positions";
+    # _bbox must still work from x0/top/x1/bottom for them.
+    box = _box(text="body", top=0.0, bottom=1.0, x0=0.0, x1=10.0)
+    assert "positions" not in box
+
+    pages = render_pages([box])
+
+    assert pages[0].elements[0].bbox == [0.0, 0.0, 10.0, 1.0]
+
+
+def test_bbox_prefers_page_local_positions_over_cumulative_top_bottom():
+    # _layouts_rec offsets top/bottom by page_cum_height[page_number - 1] so
+    # boxes sort correctly across a multi-page document internally -- e.g. a
+    # box on page 2 with local top=100 after an 800-tall page 1 carries
+    # top=900 here. "positions" holds the same rectangle in page-local
+    # coordinates ([page_number, left, right, top, bottom]); ParsedElement.bbox
+    # must report the page-local rectangle, matching MinerUEngine's convention.
+    box = _box(
+        page_number=2,
+        text="second page text",
+        top=900.0,
+        bottom=920.0,
+        x0=0.0,
+        x1=10.0,
+    )
+    box["positions"] = [[2, 0.0, 10.0, 100.0, 120.0]]
+
+    pages = render_pages([box])
+
+    assert pages[0].elements[0].bbox == [0.0, 100.0, 10.0, 120.0]

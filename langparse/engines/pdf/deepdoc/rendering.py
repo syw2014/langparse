@@ -89,6 +89,19 @@ def html_table_to_rows(html: str) -> list[list[str]]:
 
 
 def _bbox(box: dict) -> list[float]:
+    # box["top"]/box["bottom"] are in document-cumulative Y space (offset by
+    # the running sum of prior pages' heights, see _layouts_rec in
+    # pdf_parser.py) so boxes sort correctly across a multi-page document
+    # internally. box["positions"] -- a list of
+    # [page_number, left, right, top, bottom] tuples -- carries the same
+    # rectangle in page-local coordinates instead, which is what a
+    # ParsedElement.bbox must report (MinerUEngine's bbox is page-local too).
+    # Fall back to x0/top/x1/bottom when positions is absent, e.g. for
+    # hand-built test fixtures.
+    positions = box.get("positions")
+    if positions:
+        _page_number, left, right, top, bottom = positions[0]
+        return [float(left), float(top), float(right), float(bottom)]
     return [
         float(box.get("x0", 0.0)),
         float(box.get("top", 0.0)),

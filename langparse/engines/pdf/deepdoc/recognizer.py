@@ -15,7 +15,6 @@
 #
 import gc
 import logging
-import os
 import math
 import numpy as np
 import cv2

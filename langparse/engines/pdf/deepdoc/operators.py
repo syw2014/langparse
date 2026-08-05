@@ -17,7 +17,6 @@
 import logging
 import sys
 import ast
-import six
 import cv2
 import numpy as np
 import math
@@ -34,10 +33,7 @@ class DecodeImage:
 
     def __call__(self, data):
         img = data["image"]
-        if six.PY2:
-            assert isinstance(img, str) and len(img) > 0, "invalid input 'img' in DecodeImage"
-        else:
-            assert isinstance(img, bytes) and len(img) > 0, "invalid input 'img' in DecodeImage"
+        assert isinstance(img, bytes) and len(img) > 0, "invalid input 'img' in DecodeImage"
         img = np.frombuffer(img, dtype="uint8")
         if self.ignore_orientation:
             img = cv2.imdecode(img, cv2.IMREAD_IGNORE_ORIENTATION | cv2.IMREAD_COLOR)

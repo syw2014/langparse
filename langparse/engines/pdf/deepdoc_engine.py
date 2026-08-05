@@ -24,7 +24,9 @@ class DeepDocEngine(BasePDFEngine):
         **kwargs: Any,
     ):
         if device != "cpu":
-            raise ValueError(f"DeepDocEngine only supports device='cpu' in this version, got: {device!r}")
+            raise ValueError(
+                f"DeepDocEngine only supports device='cpu' in this version, got: {device!r}"
+            )
         self.device = device
         self.model_dir = model_dir
         self.download_dir = download_dir

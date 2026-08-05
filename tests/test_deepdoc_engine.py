@@ -1,9 +1,7 @@
-from pathlib import Path
-
 import pytest
 
 from langparse.engines.pdf.deepdoc_engine import DeepDocEngine
-from langparse.types import ParsedDocumentResult, ParsedPageResult
+from langparse.types import ParsedDocumentResult
 
 
 class _FakeParser:
@@ -25,7 +23,17 @@ def test_process_document_returns_normalized_result(tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")
     fake_parser = _FakeParser(
-        [{"page_number": 1, "layout_type": "title", "text": "Title", "x0": 0, "x1": 1, "top": 0, "bottom": 1}]
+        [
+            {
+                "page_number": 1,
+                "layout_type": "title",
+                "text": "Title",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            }
+        ]
     )
     engine = DeepDocEngine(parser=fake_parser)
 
@@ -43,8 +51,24 @@ def test_process_document_joins_page_markdown(tmp_path):
     pdf_path.write_bytes(b"%PDF-1.4")
     fake_parser = _FakeParser(
         [
-            {"page_number": 1, "layout_type": "text", "text": "one", "x0": 0, "x1": 1, "top": 0, "bottom": 1},
-            {"page_number": 2, "layout_type": "text", "text": "two", "x0": 0, "x1": 1, "top": 0, "bottom": 1},
+            {
+                "page_number": 1,
+                "layout_type": "text",
+                "text": "one",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            },
+            {
+                "page_number": 2,
+                "layout_type": "text",
+                "text": "two",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            },
         ]
     )
     engine = DeepDocEngine(parser=fake_parser)
@@ -59,7 +83,17 @@ def test_process_yields_page_results(tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")
     fake_parser = _FakeParser(
-        [{"page_number": 1, "layout_type": "text", "text": "hi", "x0": 0, "x1": 1, "top": 0, "bottom": 1}]
+        [
+            {
+                "page_number": 1,
+                "layout_type": "text",
+                "text": "hi",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            }
+        ]
     )
     engine = DeepDocEngine(parser=fake_parser)
 
@@ -84,5 +118,5 @@ def test_missing_deepdoc_extra_raises_actionable_import_error(tmp_path, monkeypa
     real_import = builtins.__import__
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
-    with pytest.raises(ImportError, match='langparse\\[deepdoc\\]'):
+    with pytest.raises(ImportError, match="langparse\\[deepdoc\\]"):
         engine.process_document(pdf_path)

@@ -50,6 +50,15 @@ MAXIMUM_PAGE_NUMBER = 100000
 PARALLEL_DEVICES = 0
 
 
+#: NOTE: this is a simplified reimplementation, not a verbatim port, of
+#: common/misc_utils.py's thread_pool_exec. Upstream uses a per-call
+#: ThreadPoolExecutor(max_workers=1) instead of loop.run_in_executor(None,
+#: call) specifically to avoid a documented Python 3.13 deadlock on repeated
+#: awaits within one event loop. That distinction has no present effect here
+#: -- this function's only call site is inside a branch that's permanently
+#: unreachable, since self.parallel_limiter is always None after this port's
+#: __init__ (see below) -- but reviving multi-device parallelism in the
+#: future would need to restore the per-call executor to avoid that deadlock.
 async def thread_pool_exec(func, *args, **kwargs):
     import asyncio
     import contextvars

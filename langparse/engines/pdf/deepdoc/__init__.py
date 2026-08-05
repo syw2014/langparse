@@ -27,10 +27,29 @@ operators.py and postprocess.py are themselves derived from PaddleOCR
 (Apache-2.0) upstream in RAGFlow; that attribution carries through here too.
 """
 
-from .layout_recognizer import LayoutRecognizer4YOLOv10 as LayoutRecognizer
-from .ocr import OCR
-from .pdf_parser import RAGFlowPdfParser
-from .recognizer import Recognizer
-from .table_structure_recognizer import TableStructureRecognizer
-
 __all__ = ["OCR", "LayoutRecognizer", "Recognizer", "TableStructureRecognizer", "RAGFlowPdfParser"]
+
+# Lazy (PEP 562) exports: importing this package must stay cheap so that
+# lightweight submodules (model_loader.py, rendering.py, tokenizer.py) can be
+# imported on their own -- e.g. under a `pip install -e ".[dev]"`-only
+# environment -- without transitively pulling in sklearn/cv2/onnxruntime via
+# pdf_parser.py's own heavy dependency chain. Python always runs a package's
+# __init__.py before any of its submodules, so eager `from .x import Y` here
+# would make every submodule import pay that cost.
+_EXPORTS = {
+    "OCR": (".ocr", "OCR"),
+    "LayoutRecognizer": (".layout_recognizer", "LayoutRecognizer4YOLOv10"),
+    "Recognizer": (".recognizer", "Recognizer"),
+    "TableStructureRecognizer": (".table_structure_recognizer", "TableStructureRecognizer"),
+    "RAGFlowPdfParser": (".pdf_parser", "RAGFlowPdfParser"),
+}
+
+
+def __getattr__(name):
+    if name in _EXPORTS:
+        import importlib
+
+        module_name, attr_name = _EXPORTS[name]
+        module = importlib.import_module(module_name, __name__)
+        return getattr(module, attr_name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

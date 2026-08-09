@@ -135,3 +135,39 @@ def test_bbox_prefers_page_local_positions_over_cumulative_top_bottom():
     pages = render_pages([box])
 
     assert pages[0].elements[0].bbox == [0.0, 100.0, 10.0, 120.0]
+
+
+def test_ocr_pages_marks_page_applied_and_counts_chars():
+    pages = render_pages([_box(text="recovered body")], ocr_pages={1: True})
+
+    assert pages[0].metadata["ocr_applied"] is True
+    assert pages[0].metadata["ocr_text_chars"] == len("recovered body")
+
+
+def test_page_missing_from_ocr_pages_defaults_to_not_applied():
+    pages = render_pages([_box(text="native body")], ocr_pages={})
+
+    assert pages[0].metadata["ocr_applied"] is False
+    assert pages[0].metadata["ocr_text_chars"] == 0
+
+
+def test_ocr_pages_omitted_defaults_to_not_applied():
+    pages = render_pages([_box(text="native body")])
+
+    assert pages[0].metadata["ocr_applied"] is False
+    assert pages[0].metadata["ocr_text_chars"] == 0
+
+
+def test_ocr_pages_is_keyed_independently_per_page_in_a_multi_page_document():
+    pages = render_pages(
+        [
+            _box(page_number=1, text="native page"),
+            _box(page_number=2, text="scanned page"),
+        ],
+        ocr_pages={1: False, 2: True},
+    )
+
+    assert pages[0].metadata["ocr_applied"] is False
+    assert pages[0].metadata["ocr_text_chars"] == 0
+    assert pages[1].metadata["ocr_applied"] is True
+    assert pages[1].metadata["ocr_text_chars"] == len("scanned page")

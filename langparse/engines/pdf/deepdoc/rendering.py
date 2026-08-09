@@ -119,12 +119,23 @@ def _rows_to_markdown_table(rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
-def render_pages(boxes: list[dict]) -> list[ParsedPageResult]:
-    """Render deepdoc's flat box list (from RAGFlowPdfParser.parse_into_bboxes) into pages."""
+def render_pages(
+    boxes: list[dict], ocr_pages: dict[int, bool] | None = None
+) -> list[ParsedPageResult]:
+    """Render deepdoc's flat box list (from RAGFlowPdfParser.parse_into_bboxes) into pages.
+
+    ocr_pages is an optional {page_number: bool} map (1-indexed, matching
+    box["page_number"]) saying whether a page's text should be credited to
+    OCR rather than the PDF's native text layer -- see
+    DeepDocEngine._classify_ocr_pages, which derives it via the same
+    needs_ocr() heuristic simple/ocr.py already uses. A page absent from the
+    map, or the map itself omitted, defaults to False/0.
+    """
     boxes_by_page: dict[int, list[dict]] = defaultdict(list)
     for box in boxes:
         boxes_by_page[box["page_number"]].append(box)
 
+    ocr_pages = ocr_pages or {}
     pages = []
     for page_number in sorted(boxes_by_page):
         markdown_parts: list[str] = []
@@ -171,15 +182,21 @@ def render_pages(boxes: list[dict]) -> list[ParsedPageResult]:
                 )
             )
 
+        plain_text = "\n".join(plain_parts)
+        page_ocr_applied = bool(ocr_pages.get(page_number, False))
         pages.append(
             ParsedPageResult(
                 page_number=page_number,
                 markdown_content="\n\n".join(part for part in markdown_parts if part),
-                plain_text="\n".join(plain_parts),
+                plain_text=plain_text,
                 elements=elements,
                 tables=tables,
                 images=images,
-                metadata={"engine_name": "deepdoc"},
+                metadata={
+                    "engine_name": "deepdoc",
+                    "ocr_applied": page_ocr_applied,
+                    "ocr_text_chars": len(plain_text) if page_ocr_applied else 0,
+                },
             )
         )
     return pages

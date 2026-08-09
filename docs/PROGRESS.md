@@ -94,7 +94,7 @@ langparse/
 **P1 —— 支撑 P0，不阻塞**
 4. **PaddleOCR-VL / vision_llm 引擎**：优先级低于 DeepDoc——DeepDoc 更能体现"CJK/复杂版面垂直引擎"这条叙事，且已被 RAGFlow 等项目验证过可行性。
 5. **标注语料 + 跨引擎量化对比**：不再是唯一阻塞项，重新定位为"帮用户在自己的语料上做工程选型决策的辅助能力"（呼应"项目定位"里的非目标）。DeepDoc 已经可用，simple / MinerU / DeepDoc 三引擎对比现在具备条件，比之前两个引擎更有说服力，可以着手做。
-6. **OCR 兜底跨引擎一致性**：目前 OCR 兜底只接在 `simple` 引擎；MinerU 自带 OCR，DeepDoc 也有自己的 OCR/版面分析，三者从未做过交叉验证——这个问题现在已经实际存在，不再只是"未来接入 DeepDoc 后会更突出"。
+6. ✅ **已完成（2026-08-09）——OCR 兜底跨引擎一致性**：`ocr_applied`/`ocr_text_chars` 曾经在三个引擎里各表各的——`simple` 按"图片占比高+文本层薄"的启发式逐页判定；MinerU 转发它自己内部的判定结果；DeepDoc 因为无条件对每页跑 OCR，直接把文档级 `ocr_applied` 写死成 `True`、`ocr_text_chars` 算成全文本长度而非"真正靠 OCR 恢复的字符数"，导致 `quality.py` 的 `require_ocr_text` 质检和 `benchmark_service.py` 的 `ocr_applied_count` 对 DeepDoc 的产出完全失真（永远判定为"用了 OCR"）。现在 `DeepDocEngine` 另开一次 `pdfplumber` 读取，复用 `simple` 引擎同款的 `needs_ocr()` 启发式逐页独立判定（不改变 DeepDoc 内部实际跑 OCR 的时机），`render_pages()` 据此在页面级别补上这两个字段，文档级别按 MinerU 的 `any()`/`sum()` 方式汇总；新增的跨引擎测试用同一份合成的扫描页/原生数字页 fixture 驱动 simple 和 deepdoc，断言两者判定一致。MinerU 的判定结果仍然原样信任、不做二次校验，因为它来自我们不掌控内部逻辑的外部服务。已知局限：DeepDoc 内部对"原生文本层存在但乱码"（CID / 字体编码错乱）的页面也会走 OCR 重识别，这套外部启发式检测不到这个内部决策，这种窄场景下 `ocr_applied` 可能漏报为 `False`（最终文本输出不受影响，只是这个 metadata 信号在这种场景下不准）。
 
 **P2 —— 工程基建，不紧急**
 7. 无 mypy 配置（已有 ruff 与 `py.typed`）。

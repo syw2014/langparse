@@ -244,3 +244,57 @@ def test_concurrent_recognition_is_serialised(monkeypatch):
         thread.join()
 
     assert overlaps == []
+
+
+class _FakeDeepDocParser:
+    def __init__(self, text):
+        self._text = text
+
+    def parse_into_bboxes(self, fnm, **kwargs):
+        return [
+            {
+                "page_number": 1,
+                "layout_type": "text",
+                "text": self._text,
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            }
+        ]
+
+
+def test_simple_and_deepdoc_agree_on_ocr_applied_for_a_scanned_page(monkeypatch):
+    from langparse.engines.pdf.deepdoc_engine import DeepDocEngine
+    from langparse.engines.pdf.simple import SimplePDFEngine
+
+    scanned_page = ScannedPage(text="", images=[full_page_image()])
+
+    _patch_pdfplumber(monkeypatch, [scanned_page])
+    simple_engine = SimplePDFEngine(enable_ocr=True, recogniser=_recogniser("recovered text"))
+    simple_pages = list(simple_engine.process(Path("scan.pdf")))
+
+    _patch_pdfplumber(monkeypatch, [scanned_page])
+    deepdoc_engine = DeepDocEngine(parser=_FakeDeepDocParser("recovered text"))
+    deepdoc_pages = list(deepdoc_engine.process(Path("scan.pdf")))
+
+    assert simple_pages[0].metadata["ocr_applied"] is True
+    assert deepdoc_pages[0].metadata["ocr_applied"] is True
+
+
+def test_simple_and_deepdoc_agree_on_ocr_applied_for_a_born_digital_page(monkeypatch):
+    from langparse.engines.pdf.deepdoc_engine import DeepDocEngine
+    from langparse.engines.pdf.simple import SimplePDFEngine
+
+    native_page = ScannedPage(text="real " * 400, images=[full_page_image()])
+
+    _patch_pdfplumber(monkeypatch, [native_page])
+    simple_engine = SimplePDFEngine(enable_ocr=True, recogniser=_recogniser("should not appear"))
+    simple_pages = list(simple_engine.process(Path("doc.pdf")))
+
+    _patch_pdfplumber(monkeypatch, [native_page])
+    deepdoc_engine = DeepDocEngine(parser=_FakeDeepDocParser("native text"))
+    deepdoc_pages = list(deepdoc_engine.process(Path("doc.pdf")))
+
+    assert simple_pages[0].metadata["ocr_applied"] is False
+    assert deepdoc_pages[0].metadata["ocr_applied"] is False

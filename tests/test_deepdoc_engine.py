@@ -1,3 +1,4 @@
+import logging
 import sys
 import threading
 import time
@@ -195,6 +196,51 @@ def test_process_document_rolls_up_ocr_metadata_across_mixed_pages(tmp_path, mon
     assert parsed.metadata["ocr_applied"] is True
     # sum() across pages: only page 2's chars count, matching mineru.py's rollup.
     assert parsed.metadata["ocr_text_chars"] == len("scanned page")
+
+
+def test_process_document_survives_ocr_classification_failure(tmp_path, monkeypatch, caplog):
+    """Finding 1 regression: _classify_ocr_pages runs *after*
+    parse_into_bboxes() has already spent time on the real parse, purely to
+    annotate advisory ocr_applied/ocr_text_chars metadata. A pdfplumber
+    failure here (malformed/encrypted/oddly-structured PDF, PDFSyntaxError,
+    etc.) must never propagate and discard an otherwise-successful parse --
+    it should be logged and treated as "classify nothing" (empty dict),
+    which is exactly render_pages()'s documented default of False/0 for a
+    page absent from the map.
+    """
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4")
+
+    def _raise_open(path):
+        raise Exception("boom: malformed or encrypted PDF")
+
+    module = types.ModuleType("pdfplumber")
+    module.open = _raise_open
+    monkeypatch.setitem(sys.modules, "pdfplumber", module)
+
+    fake_parser = _FakeParser(
+        [
+            {
+                "page_number": 1,
+                "layout_type": "text",
+                "text": "recovered text",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            }
+        ]
+    )
+    engine = DeepDocEngine(parser=fake_parser)
+
+    with caplog.at_level(logging.WARNING, logger="langparse"):
+        parsed = engine.process_document(pdf_path)
+
+    assert isinstance(parsed, ParsedDocumentResult)
+    assert parsed.pages[0].markdown_content == "recovered text"
+    assert parsed.metadata["ocr_applied"] is False
+    assert parsed.metadata["ocr_text_chars"] == 0
+    assert "boom: malformed or encrypted PDF" in caplog.text
 
 
 def test_process_document_joins_page_markdown(tmp_path):

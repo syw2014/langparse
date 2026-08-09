@@ -5,7 +5,10 @@ from typing import Any
 
 from langparse.core.engine import PageResult
 from langparse.engines.pdf.simple import BasePDFEngine
+from langparse.logging import get_logger
 from langparse.types import ParsedDocumentResult
+
+logger = get_logger(__name__)
 
 
 class DeepDocEngine(BasePDFEngine):
@@ -67,19 +70,32 @@ class DeepDocEngine(BasePDFEngine):
         OCR pass, so the two engines report comparable metadata for comparable
         input. 1-indexed to match render_pages()'s page_number convention;
         pdfplumber.pages itself is 0-indexed.
+
+        This runs after the real (and potentially minutes-long) deepdoc parse
+        has already completed, purely to annotate advisory metadata. Any
+        failure here (missing pdfplumber, malformed/encrypted/oddly-structured
+        PDF, etc.) is logged and swallowed rather than raised, so it can never
+        discard an otherwise-successful parse. An empty dict is already the
+        documented contract: render_pages() defaults every absent page to
+        ocr_applied=False / ocr_text_chars=0.
         """
         try:
-            import pdfplumber
-        except ImportError as exc:
-            raise ImportError(
-                'DeepDoc engine needs extra dependencies. Install them with `pip install "langparse[deepdoc]"`.'
-            ) from exc
-        from langparse.engines.pdf.ocr import needs_ocr
+            try:
+                import pdfplumber
+            except ImportError as exc:
+                raise ImportError(
+                    'DeepDoc engine needs extra dependencies. Install them with `pip install "langparse[deepdoc]"`.'
+                ) from exc
+            from langparse.engines.pdf.ocr import needs_ocr
 
-        with pdfplumber.open(file_path) as pdf:
-            return {
-                page_number: needs_ocr(page) for page_number, page in enumerate(pdf.pages, start=1)
-            }
+            with pdfplumber.open(file_path) as pdf:
+                return {
+                    page_number: needs_ocr(page)
+                    for page_number, page in enumerate(pdf.pages, start=1)
+                }
+        except Exception as exc:
+            logger.warning("Skipping OCR-applied classification for %s: %s", file_path, exc)
+            return {}
 
     def process_document(self, file_path: Path, **kwargs: Any) -> ParsedDocumentResult:
         try:

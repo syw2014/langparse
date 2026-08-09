@@ -60,6 +60,27 @@ class DeepDocEngine(BasePDFEngine):
         )
         return RAGFlowPdfParser(model_dir=resolved_model_dir)
 
+    def _classify_ocr_pages(self, file_path: Path) -> dict[int, bool]:
+        """Per-page {page_number: bool} saying whether a page's text should be
+        credited to OCR, using the same needs_ocr() heuristic simple/ocr.py
+        already uses -- independent of deepdoc's own (unconditional) internal
+        OCR pass, so the two engines report comparable metadata for comparable
+        input. 1-indexed to match render_pages()'s page_number convention;
+        pdfplumber.pages itself is 0-indexed.
+        """
+        try:
+            import pdfplumber
+        except ImportError as exc:
+            raise ImportError(
+                'DeepDoc engine needs extra dependencies. Install them with `pip install "langparse[deepdoc]"`.'
+            ) from exc
+        from langparse.engines.pdf.ocr import needs_ocr
+
+        with pdfplumber.open(file_path) as pdf:
+            return {
+                page_number: needs_ocr(page) for page_number, page in enumerate(pdf.pages, start=1)
+            }
+
     def process_document(self, file_path: Path, **kwargs: Any) -> ParsedDocumentResult:
         try:
             from langparse.engines.pdf.deepdoc.rendering import render_pages
@@ -73,7 +94,8 @@ class DeepDocEngine(BasePDFEngine):
                 self._parser = self._build_parser()
             boxes = self._parser.parse_into_bboxes(str(file_path))
 
-        pages = render_pages(boxes)
+        ocr_pages = self._classify_ocr_pages(file_path)
+        pages = render_pages(boxes, ocr_pages=ocr_pages)
         return ParsedDocumentResult(
             source=str(file_path),
             filename=Path(file_path).name,
@@ -83,8 +105,8 @@ class DeepDocEngine(BasePDFEngine):
             metadata={
                 "device": self.device,
                 "model_dir": self.model_dir,
-                "ocr_applied": True,
-                "ocr_text_chars": sum(len(page.plain_text) for page in pages),
+                "ocr_applied": any(page.metadata["ocr_applied"] for page in pages),
+                "ocr_text_chars": sum(page.metadata["ocr_text_chars"] for page in pages),
             },
         )
 

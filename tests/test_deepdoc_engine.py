@@ -1,11 +1,52 @@
+import sys
 import threading
 import time
+import types
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
 from langparse.engines.pdf.deepdoc_engine import DeepDocEngine
 from langparse.types import ParsedDocumentResult
+
+
+class _FakePdfplumberPage:
+    def __init__(self, text="plenty of native text " * 50, images=()):
+        self._text = text
+        self.images = list(images)
+        self.width = 595
+        self.height = 842
+
+    def extract_text(self):
+        return self._text
+
+
+class _FakePdf:
+    def __init__(self, pages):
+        self.pages = pages
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _patch_pdfplumber(monkeypatch, pages):
+    module = types.ModuleType("pdfplumber")
+    module.open = lambda path: _FakePdf(pages)
+    monkeypatch.setitem(sys.modules, "pdfplumber", module)
+
+
+@pytest.fixture(autouse=True)
+def _default_pdfplumber(monkeypatch):
+    """process_document() now classifies each page via pdfplumber
+    (DeepDocEngine._classify_ocr_pages). Default every test in this file to
+    pages with plenty of native text and no images (needs_ocr() -> False), so
+    tests that don't care about OCR classification aren't broken by the
+    placeholder `%PDF-1.4` bytes they write as a fake PDF file. Tests that do
+    care call _patch_pdfplumber again themselves to override this."""
+    _patch_pdfplumber(monkeypatch, [_FakePdfplumberPage() for _ in range(10)])
 
 
 class _FakeParser:
@@ -77,13 +118,83 @@ def test_process_document_returns_normalized_result(tmp_path):
     assert parsed.filename == "sample.pdf"
     assert parsed.pages[0].markdown_content == "# Title"
     assert fake_parser.calls == [str(pdf_path)]
-    # deepdoc OCRs every page unconditionally, so downstream quality/benchmark
-    # checks that gate on OCR having run (langparse/metrics.py,
-    # langparse/services/quality.py) must see it reflected here.
+    # The default _default_pdfplumber fixture classifies this page as
+    # born-digital (plenty of native text, no images), so it must NOT be
+    # credited to OCR -- deepdoc no longer hardcodes ocr_applied=True.
+    assert parsed.metadata["ocr_applied"] is False
+    assert parsed.metadata["ocr_text_chars"] == 0
+
+
+def test_process_document_reports_ocr_applied_for_a_scanned_looking_page(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4")
+    _patch_pdfplumber(
+        monkeypatch,
+        [_FakePdfplumberPage(text="", images=[{"x0": 0, "x1": 595, "top": 0, "bottom": 842}])],
+    )
+    fake_parser = _FakeParser(
+        [
+            {
+                "page_number": 1,
+                "layout_type": "text",
+                "text": "recovered text",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            }
+        ]
+    )
+    engine = DeepDocEngine(parser=fake_parser)
+
+    parsed = engine.process_document(pdf_path)
+
     assert parsed.metadata["ocr_applied"] is True
-    expected_chars = sum(len(page.plain_text) for page in parsed.pages)
-    assert expected_chars == len("Title")
-    assert parsed.metadata["ocr_text_chars"] == expected_chars
+    assert parsed.metadata["ocr_text_chars"] == len("recovered text")
+
+
+def test_process_document_rolls_up_ocr_metadata_across_mixed_pages(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4")
+    _patch_pdfplumber(
+        monkeypatch,
+        [
+            _FakePdfplumberPage(),  # page 1: born-digital
+            _FakePdfplumberPage(
+                text="", images=[{"x0": 0, "x1": 595, "top": 0, "bottom": 842}]
+            ),  # page 2: scanned
+        ],
+    )
+    fake_parser = _FakeParser(
+        [
+            {
+                "page_number": 1,
+                "layout_type": "text",
+                "text": "native page",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            },
+            {
+                "page_number": 2,
+                "layout_type": "text",
+                "text": "scanned page",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            },
+        ]
+    )
+    engine = DeepDocEngine(parser=fake_parser)
+
+    parsed = engine.process_document(pdf_path)
+
+    # any() across pages: True because page 2 is scanned, even though page 1 isn't.
+    assert parsed.metadata["ocr_applied"] is True
+    # sum() across pages: only page 2's chars count, matching mineru.py's rollup.
+    assert parsed.metadata["ocr_text_chars"] == len("scanned page")
 
 
 def test_process_document_joins_page_markdown(tmp_path):

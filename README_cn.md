@@ -10,7 +10,7 @@
 
 ## 🚀 项目状态
 
-LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（336 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
+LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（365 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
 
 项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（PaddleOCR-VL、vision-LLM 后端），以及帮忙压测"引擎中立路由"这个设计本身。
 
@@ -173,13 +173,22 @@ OOXML 工作簿不再被当作分页的 pandas 表格。每个 Sheet 只保留�
 ```python
 from langparse.services.parse_service import ParseService
 
-parsed = ParseService().parse_result("budget.xlsx", chunk=True)
+parsed = ParseService().parse_result(
+    "budget.xlsx",
+    chunk=True,
+    chunk_profile="retrieval",
+)
+analysis_chunks = ParseService().chunk_result(
+    parsed,
+    chunk_profile="analysis",
+)
 print(parsed.structure.snapshot.sheets[0].cells["B2"].formula)
 print(parsed.diagnostics.coverage_ratio)
 print([block.kind for block in parsed.structure.sheets[0].blocks])
 print(parsed.diagnostics.source_ref_validity_ratio)
 print(parsed.chunks[0].metadata["chunk_type"])
 print(parsed.chunks[0].metadata["source_ranges"])
+print(analysis_chunks[0].structured_payload.get("records"))
 
 sheet_table = parsed.structure.sheets[0].blocks[0].logical_table
 cross_sheet_table = parsed.structure.table_continuations[0].logical_table
@@ -192,10 +201,21 @@ Block 都有带源坐标的 Markdown 和 chunk 路径。`structure.snapshot` 与
 原始单元格视图。高置信的相邻 Sheet 续表会通过
 `structure.table_continuations` 暴露一个聚合逻辑表；证据不足时保持独立，并记录
 模糊或拒绝诊断。Markdown 和 chunks 仍按源 Sheet 输出，不复制聚合表；源成员
-chunks 可按 `continuation_id` 重新分组。retrieval/analysis 双 chunk profiles、
-按置信度触发的 LLM/VLM fallback、富信息 `.xls`/`.xlsb` adapter、图片/图表
-语义 Block、标准 bundle 输出和生产加固仍待后续实现；分隔文本和旧版输入目前
-继续走兼容 adapter。
+chunks 可按 `continuation_id` 重新分组。retrieval/analysis 双 chunk profiles 已接入
+library、批处理服务和 CLI：`retrieval` 是默认 profile，预算为 1000；`analysis` 的预算
+为 4000。两者都保留完整行和精确 source refs；analysis chunks 额外提供规范化、可回查
+源坐标的 `records`。同一个已解析结果可通过 `chunk_result()` 重复生成另一套 profile，
+无需重新解析，也不会修改其 structure。精确的单元格/公式分析仍应读取
+`structure.snapshot`，analysis chunks 不能替代事实层。analysis profile 仅支持 OOXML
+workbook 结果；CSV、旧版 `.xls` 和非 workbook 输入继续走兼容路径。
+
+```bash
+langparse parse budget.xlsx --chunk --chunk-profile analysis --format json
+```
+
+summary/index chunks、按置信度触发的 LLM/VLM fallback、富信息 `.xls`/`.xlsb`
+adapter、图片/图表语义 Block、标准 bundle 输出和生产加固仍待后续实现；分隔文本和
+旧版输入目前继续走兼容 adapter。
 
 ### 扫描件
 

@@ -147,9 +147,7 @@ def test_workbook_chunker_keeps_oversized_form_field_intact(tmp_path):
     assert chunks[0].metadata["oversized"] is True
     assert chunks[0].structured_payload["fields"] == [["项目名称", "x" * 200]]
 
-    analysis_chunks = WorkbookStructuralChunker(
-        max_chunk_size=40, profile="analysis"
-    ).chunk(parsed)
+    analysis_chunks = WorkbookStructuralChunker(max_chunk_size=40, profile="analysis").chunk(parsed)
     assert len(analysis_chunks) == 2
     assert analysis_chunks[0].metadata["oversized"] is True
     assert analysis_chunks[0].structured_payload["records"] == [

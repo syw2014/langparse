@@ -10,7 +10,7 @@
 
 ## 🚀 Project Status
 
-LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (336 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
+LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (365 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
 
 Still pre-1.0. Looking for early contributors and design partners, particularly to help wire up additional vertical engines (PaddleOCR-VL, vision-LLM backends) and pressure-test the engine-neutral routing design.
 
@@ -211,13 +211,22 @@ parse:
 ```python
 from langparse.services.parse_service import ParseService
 
-parsed = ParseService().parse_result("budget.xlsx", chunk=True)
+parsed = ParseService().parse_result(
+    "budget.xlsx",
+    chunk=True,
+    chunk_profile="retrieval",
+)
+analysis_chunks = ParseService().chunk_result(
+    parsed,
+    chunk_profile="analysis",
+)
 print(parsed.structure.snapshot.sheets[0].cells["B2"].formula)
 print(parsed.diagnostics.coverage_ratio)
 print([block.kind for block in parsed.structure.sheets[0].blocks])
 print(parsed.diagnostics.source_ref_validity_ratio)
 print(parsed.chunks[0].metadata["chunk_type"])
 print(parsed.chunks[0].metadata["source_ranges"])
+print(analysis_chunks[0].structured_payload.get("records"))
 
 sheet_table = parsed.structure.sheets[0].blocks[0].logical_table
 cross_sheet_table = parsed.structure.table_continuations[0].logical_table
@@ -235,10 +244,26 @@ continuations expose one aggregate logical table through
 and records an ambiguous or rejected diagnostic. Markdown and chunks remain
 source-Sheet based rather than duplicating the aggregate, and source-member
 chunks can be regrouped by `continuation_id`. Retrieval/analysis dual chunk
-profiles, confidence-driven LLM/VLM fallback, rich `.xls`/`.xlsb` adapters,
-image/chart semantic blocks, standard bundle output, and production hardening
-remain follow-up work; delimited and legacy inputs keep the compatibility
-adapter for now.
+profiles are built into the library, batch service, and CLI. `retrieval` is the
+default profile and uses a 1000-character budget; `analysis` uses 4000. Both
+preserve complete rows and exact source references. Analysis chunks add
+normalized, source-linked `records` while keeping cell-level facts, including
+formulas and cached values, in `structure.snapshot`. A parsed result can
+generate another profile repeatedly with `chunk_result()` without reparsing or
+mutating its structure. The analysis profile is only available for OOXML
+workbook results: CSV, legacy `.xls`, and non-workbook inputs keep their
+compatibility paths. Use `structure.snapshot` for exact cell or formula
+analysis rather than treating analysis chunks as a replacement for the fact
+layer.
+
+```bash
+langparse parse budget.xlsx --chunk --chunk-profile analysis --format json
+```
+
+Summary/index chunks, confidence-driven LLM/VLM fallback, rich
+`.xls`/`.xlsb` adapters, image/chart semantic blocks, standard bundle output,
+and production hardening remain follow-up work; delimited and legacy inputs
+keep the compatibility adapter for now.
 
 ### Scanned PDFs
 

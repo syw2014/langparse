@@ -3,7 +3,7 @@
 **版本**: 0.0.1（`pyproject.toml`，未发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
 **最后更新**: 2026-08-25
-**测试**: 336 passed
+**测试**: 365 passed
 
 > 本文档在 2026-07-30 重写。此前版本声称 v0.1.0、测试覆盖 100%、解析器完成度 100%，三项均与实际不符，已按代码现状订正。2026-08-03 补充"项目定位"一节并重排"已知缺口"优先级，理由见下。
 
@@ -48,7 +48,7 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | Benchmark | 可用 | 结构阈值 + 保真度（文本编辑距离 / 表格 TEDS），需 manifest 提供参考输出 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-"336 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+"365 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
 
 ---
 
@@ -117,10 +117,12 @@ langparse/
    chunks 可按 `continuation_id` 重组。真实预算工作簿保持 14 个 LogicalTable +
    1 个 TextBlock、零 accepted 续接、39 个无重复 chunks，data/total `row_id` 完整守恒，
    coverage/reconstruction/source-ref validity 为 1.0/true/1.0。
-5. 🟨 **Phase 3 基础语义 chunk 已完成，profiles 待补**：现已按 logical
-   table/section/header path 生成 `table_rows` chunks，不跨板块并携带 row/fragment
-   source ranges，同时支持 Form/Matrix/Text/raw-grid chunks；retrieval 与 analysis
-   两套可配置 profiles 尚未实现。
+5. ✅ **Phase 3（2026-08-25）双 Excel chunk profiles**：`retrieval`（默认预算
+   1000）与 `analysis`（默认预算 4000）已通过 library、Batch 和 CLI 提供；所有
+   chunks 携带版本化 profile/visibility metadata，analysis 额外提供 source-linked
+   normalized records。真实 15-Sheet 工作簿回归中 retrieval 保持 39 chunks，两套
+   profile 均精确守恒 228 个 data/total `row_id`，analysis 的 `table_rows` chunk 数
+   不多于 retrieval；全量测试为 365 passed。
 6. ⬜ **Phase 4 可选模型 fallback**：仅对低置信候选调用 LLM/VLM，使用 schema
    约束与坐标校验；模型不能改写事实层。
 7. ⬜ **Phase 5 格式、语义 Block 与 bundle**：补齐 `.xls/.xlsb` rich adapters、

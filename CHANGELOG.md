@@ -33,7 +33,14 @@ version sections.
 - Public end-to-end continuation coverage plus a read-only 15-Sheet private
   workbook regression: 14 LogicalTable + 1 TextBlock, zero accepted
   continuations, quality ratios `1.0` / `true` / `1.0`, and 39 unique chunks
-  with exact data/total `row_id` conservation. The full suite passes 336 tests.
+  with exact data/total `row_id` conservation. The full suite passes 365 tests.
+- Workbook `chunk_profile="retrieval" | "analysis"` through the library, batch
+  service, and CLI. Profiles have versioned profile/visibility metadata;
+  analysis adds normalized, source-linked records.
+- Chunking failures preserve the successfully parsed result, and the read-only
+  private-workbook regression now proves both profiles conserve all 228
+  data/total `row_id` values while analysis produces no more table chunks than
+  retrieval.
 
 ### Changed
 - Excel results are non-paginated. Sheet ordinals remain available as
@@ -44,9 +51,9 @@ version sections.
   `diagnostics`; JSON output includes native spreadsheet scalars safely.
 
 ### Known limitations
-- Retrieval versus analysis chunk profiles, image/chart semantic blocks,
-  model-assisted fallback, rich `.xls`/`.xlsb` adapters, standard bundle
-  output, and production hardening remain later phases.
+- Summary/index chunks, image/chart semantic blocks, model-assisted fallback,
+  rich `.xls`/`.xlsb` adapters, standard bundle output, and production
+  hardening remain later phases.
 
 ## [2026-08-04]
 

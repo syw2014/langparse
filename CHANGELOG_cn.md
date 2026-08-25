@@ -28,7 +28,13 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
 - 新增公开端到端续接覆盖和只读 15-Sheet 私有工作簿回归：14 个
   LogicalTable + 1 个 TextBlock、零 accepted 续接、质量比率
   `1.0` / `true` / `1.0`，以及 39 个无重复 chunks 与精确的 data/total `row_id` 守恒。
-  完整测试套件为 336 个测试全部通过。
+  完整测试套件为 365 个测试全部通过。
+- 新增 library、Batch 和 CLI 的 `chunk_profile="retrieval" | "analysis"` API；
+  chunks 携带版本化 profile/visibility metadata，analysis 额外提供规范化、可回查
+  源坐标的 records。
+- 新增 chunk 失败时保留已成功解析结果的行为；只读私有工作簿回归同时证明两套
+  profiles 均守恒全部 228 个 data/total `row_id`，且 analysis 的表格 chunks 数
+  不多于 retrieval。
 
 ### 变更（Changed）
 - Excel 结果改为非分页。Sheet 序号仅作为兼容标识，不再注入虚构页码标记。
@@ -38,8 +44,8 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
   输出可安全序列化 Excel 原生日期等值。
 
 ### 已知限制
-- retrieval/analysis 双 chunk profiles、图片/图表语义 Block、模型 fallback、
-  富信息 `.xls`/`.xlsb` adapter、标准 bundle 输出和生产加固仍属于后续阶段。
+- summary/index chunks、图片/图表语义 Block、模型 fallback、富信息 `.xls`/`.xlsb`
+  adapter、标准 bundle 输出和生产加固仍属于后续阶段。
 
 ## [2026-08-04]
 

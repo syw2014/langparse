@@ -113,8 +113,7 @@ def test_analysis_table_payload_has_source_linked_schema_and_records(tmp_path):
     chunk = next(
         item
         for item in WorkbookStructuralChunker(profile="analysis").chunk(parsed)
-        if item.metadata["chunk_type"] == "table_rows"
-        and item.metadata["sheet_name"] == "Visible"
+        if item.metadata["chunk_type"] == "table_rows" and item.metadata["sheet_name"] == "Visible"
     )
 
     payload = chunk.structured_payload

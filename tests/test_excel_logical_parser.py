@@ -5,6 +5,7 @@ from openpyxl import Workbook
 
 from langparse.chunkers.workbook import WorkbookStructuralChunker
 from langparse.parsers.excel_parser import ExcelParser
+from langparse.services.parse_service import ParseService
 from langparse.workbooks.assembly import assemble_workbook
 from langparse.workbooks.types import CellSnapshot, SheetSnapshot, WorkbookSnapshot
 
@@ -79,6 +80,36 @@ def test_excel_parser_uses_semantic_workbook_assembly(tmp_path):
     assert parsed.markdown_content.count("| Name | Value |") == 1
 
 
+def test_parse_service_analysis_profile_records_and_reuses_structure(tmp_path):
+    path = tmp_path / "analysis-profile.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Budget"
+    sheet.append(["Item", "Amount"])
+    sheet.append(["Materials", 120])
+    sheet.append(["Labor", 80])
+    workbook.save(path)
+
+    parsed = ParseService().parse_result(path, chunk=True, chunk_profile="analysis")
+
+    assert parsed.structure is not None
+    structure_before_retrieval = parsed.structure
+    analysis_chunks = parsed.chunks
+    table_chunk = next(
+        chunk for chunk in analysis_chunks if chunk.metadata["chunk_type"] == "table_rows"
+    )
+    assert table_chunk.metadata["chunk_profile"] == "analysis"
+    assert table_chunk.metadata["chunk_profile_version"] == 1
+    assert len(table_chunk.structured_payload["records"]) == len(table_chunk.metadata["row_ids"])
+    assert all(record["source_refs"] for record in table_chunk.structured_payload["records"])
+
+    retrieval_chunks = ParseService().chunk_result(parsed, chunk_profile="retrieval")
+
+    assert parsed.structure is structure_before_retrieval
+    assert parsed.chunks is analysis_chunks
+    assert {chunk.metadata["chunk_profile"] for chunk in retrieval_chunks} == {"retrieval"}
+
+
 def test_excel_parser_links_cross_sheet_continuation_and_chunks_source_members(tmp_path):
     path = tmp_path / "continued-table.xlsx"
     workbook = Workbook()
@@ -113,6 +144,7 @@ def test_excel_parser_links_cross_sheet_continuation_and_chunks_source_members(t
     reason="private budget workbook is not available",
 )
 def test_private_budget_workbook_sheet_8_acceptance():
+    before = PRIVATE_BUDGET_WORKBOOK.stat()
     parsed = ExcelParser().parse_result(PRIVATE_BUDGET_WORKBOOK)
 
     assert parsed.structure is not None
@@ -153,7 +185,8 @@ def test_private_budget_workbook_sheet_8_acceptance():
         block.kind for workbook_sheet in parsed.structure.sheets for block in workbook_sheet.blocks
     }
     assert block_kinds == {"logical_table", "text"}
-    chunks = WorkbookStructuralChunker().chunk(parsed)
+    retrieval_chunks = WorkbookStructuralChunker(profile="retrieval").chunk(parsed)
+    analysis_chunks = WorkbookStructuralChunker(profile="analysis").chunk(parsed)
     expected_chunk_types = {
         {
             "logical_table": "table_rows",
@@ -164,8 +197,10 @@ def test_private_budget_workbook_sheet_8_acceptance():
         }[kind]
         for kind in block_kinds
     }
-    assert {chunk.metadata["chunk_type"] for chunk in chunks} == expected_chunk_types
-    assert len(chunks) == 39
+    assert {chunk.metadata["chunk_type"] for chunk in retrieval_chunks} == expected_chunk_types
+    assert len(retrieval_chunks) == 39
+    assert {chunk.metadata["chunk_profile"] for chunk in retrieval_chunks} == {"retrieval"}
+    assert {chunk.metadata["chunk_profile"] for chunk in analysis_chunks} == {"analysis"}
     logical_row_ids = [
         row.row_id
         for workbook_sheet in parsed.structure.sheets
@@ -176,7 +211,7 @@ def test_private_budget_workbook_sheet_8_acceptance():
     ]
     chunk_row_ids = [
         row_id
-        for chunk in chunks
+        for chunk in retrieval_chunks
         if chunk.metadata["chunk_type"] == "table_rows"
         for row_id in chunk.metadata["row_ids"]
     ]
@@ -186,4 +221,23 @@ def test_private_budget_workbook_sheet_8_acceptance():
     assert len(chunk_row_ids) == len(set(chunk_row_ids))
     assert len(chunk_row_ids) == len(logical_row_ids)
     assert set(chunk_row_ids) == set(logical_row_ids)
+    analysis_row_ids = [
+        row_id
+        for chunk in analysis_chunks
+        if chunk.metadata["chunk_type"] == "table_rows"
+        for row_id in chunk.metadata["row_ids"]
+    ]
+    assert len(analysis_row_ids) == 228
+    assert len(analysis_row_ids) == len(set(analysis_row_ids))
+    assert set(analysis_row_ids) == set(logical_row_ids)
+    assert sum(chunk.metadata["chunk_type"] == "table_rows" for chunk in analysis_chunks) <= sum(
+        chunk.metadata["chunk_type"] == "table_rows" for chunk in retrieval_chunks
+    )
+    assert all(
+        len(chunk.structured_payload["records"]) == len(chunk.metadata["row_ids"])
+        for chunk in analysis_chunks
+        if chunk.metadata["chunk_type"] == "table_rows"
+    )
     assert "Unnamed:" not in parsed.markdown_content
+    after = PRIVATE_BUDGET_WORKBOOK.stat()
+    assert (after.st_size, after.st_mtime_ns) == (before.st_size, before.st_mtime_ns)

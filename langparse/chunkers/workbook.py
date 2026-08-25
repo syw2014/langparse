@@ -5,6 +5,11 @@ from collections.abc import Callable
 from openpyxl.utils import get_column_letter, range_boundaries
 
 from langparse.core.rendering import document_metadata
+from langparse.chunkers.profiles import (
+    WorkbookChunkPolicy,
+    WorkbookChunkProfile,
+    resolve_workbook_chunk_policy,
+)
 from langparse.types import Chunk, ParsedDocumentResult
 from langparse.workbooks.types import (
     FormBlock,
@@ -26,12 +31,18 @@ class WorkbookStructuralChunker:
 
     def __init__(
         self,
-        max_chunk_size: int = 1000,
+        max_chunk_size: int | None = None,
         length_function: Callable[[str], int] = len,
+        *,
+        profile: str | WorkbookChunkProfile | None = None,
     ):
-        if max_chunk_size <= 0:
+        self.policy: WorkbookChunkPolicy = resolve_workbook_chunk_policy(profile)
+        resolved_size = (
+            self.policy.default_max_chunk_size if max_chunk_size is None else max_chunk_size
+        )
+        if resolved_size <= 0:
             raise ValueError("max_chunk_size must be positive")
-        self.max_chunk_size = max_chunk_size
+        self.max_chunk_size = resolved_size
         self.length_function = length_function
 
     def chunk(self, parsed: ParsedDocumentResult) -> list[Chunk]:

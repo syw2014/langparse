@@ -69,6 +69,7 @@ class ParseDiagnostics:
     source_ref_validity_ratio: float = 1.0
     block_count_by_kind: dict[str, int] = field(default_factory=dict)
     ambiguous_regions: list[StructuredData] = field(default_factory=list)
+    continuation_candidates: list[StructuredData] = field(default_factory=list)
     model_calls: list[StructuredData] = field(default_factory=list)
     unsupported_features: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)

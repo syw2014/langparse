@@ -134,6 +134,18 @@ class LogicalTable:
     source_refs: list[SourceRef] = field(default_factory=list)
     confidence: float = 1.0
     diagnostics: list[StructuredData] = field(default_factory=list)
+    continuation_id: str | None = None
+    continuation_role: str | None = None
+
+
+@dataclass
+class TableContinuation:
+    continuation_id: str
+    logical_table: LogicalTable
+    member_table_ids: list[str] = field(default_factory=list)
+    source_refs: list[SourceRef] = field(default_factory=list)
+    confidence: float = 1.0
+    reason_codes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -224,3 +236,4 @@ class WorkbookIR(ParsedStructure):
     filename: str = ""
     snapshot: WorkbookSnapshot | None = None
     metadata: StructuredData = field(default_factory=dict)
+    table_continuations: list[TableContinuation] = field(default_factory=list)

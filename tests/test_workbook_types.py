@@ -1,3 +1,5 @@
+from dataclasses import asdict
+
 from langparse.types import ParseDiagnostics, ParsedStructure
 from langparse.workbooks.types import (
     CellSnapshot,
@@ -9,6 +11,7 @@ from langparse.workbooks.types import (
     SheetIR,
     SheetSnapshot,
     SourceRef,
+    TableContinuation,
     TableFragment,
     WorkbookBlock,
     WorkbookIR,
@@ -95,3 +98,27 @@ def test_semantic_block_types_preserve_payload_and_sources():
 
 def test_parse_diagnostics_defaults_source_ref_validity_to_one():
     assert ParseDiagnostics().source_ref_validity_ratio == 1.0
+
+
+def test_continuation_types_have_backward_compatible_defaults():
+    table = LogicalTable(table_id="table_1")
+    ir = WorkbookIR(kind="workbook", workbook_id="book_1", source="book.xlsx")
+    diagnostics = ParseDiagnostics()
+
+    assert table.continuation_id is None
+    assert table.continuation_role is None
+    assert ir.table_continuations == []
+    assert diagnostics.continuation_candidates == []
+
+
+def test_table_continuation_serializes_aggregate_table():
+    continuation = TableContinuation(
+        continuation_id="continuation_1",
+        member_table_ids=["table_1", "table_2"],
+        logical_table=LogicalTable(table_id="aggregate_1"),
+    )
+
+    payload = asdict(continuation)
+
+    assert payload["member_table_ids"] == ["table_1", "table_2"]
+    assert payload["logical_table"]["table_id"] == "aggregate_1"

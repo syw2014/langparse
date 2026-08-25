@@ -142,6 +142,19 @@ def test_score_marks_conflicting_page_metadata_as_terminal():
     assert candidate.terminal_reason_codes == ("page_sequence_conflict",)
 
 
+def test_score_marks_page_number_beyond_total_as_terminal():
+    # Break caught: a numerically adjacent page outside the declared total is not a continuation.
+    left_sheet, left = _table_fixture("清单1", 0, page=2, total_pages=2)
+    right_sheet, right = _table_fixture("清单2", 1, page=3, total_pages=2)
+
+    candidate = score_continuation(left_sheet, left, right_sheet, right)
+
+    assert candidate is not None
+    assert candidate.confidence == 0.85
+    assert "print_page_sequence" not in candidate.reason_codes
+    assert candidate.terminal_reason_codes == ("page_sequence_conflict",)
+
+
 def test_score_recognizes_sequential_sheet_names():
     # Break caught: sheet-order context must be counted without title or page evidence.
     left_sheet, left = _table_fixture("Data1", 0, title="")

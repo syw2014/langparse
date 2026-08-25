@@ -154,12 +154,18 @@ def _page_metadata(
 
 def _has_valid_page_sequence(left_table: LogicalTable, right_table: LogicalTable) -> bool:
     metadata = _page_metadata(left_table, right_table)
-    return metadata is not None and metadata[1] == metadata[0] + 1 and metadata[2] > 0
+    return (
+        metadata is not None
+        and 1 <= metadata[0] < metadata[2]
+        and metadata[1] == metadata[0] + 1 <= metadata[2]
+    )
 
 
 def _page_metadata_conflicts(left_table: LogicalTable, right_table: LogicalTable) -> bool:
     metadata = _page_metadata(left_table, right_table)
-    return metadata is not None and not (metadata[1] == metadata[0] + 1 and metadata[2] > 0)
+    return metadata is not None and not (
+        1 <= metadata[0] < metadata[2] and metadata[1] == metadata[0] + 1 <= metadata[2]
+    )
 
 
 def _has_sequential_sheet_names(left_name: str, right_name: str) -> bool:

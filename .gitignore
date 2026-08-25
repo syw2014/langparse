@@ -145,3 +145,4 @@ data/
 
 # Isolated workspaces for subagent-driven plan execution.
 .worktrees/
+.claude/worktrees/

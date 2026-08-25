@@ -5,7 +5,7 @@ import pytest
 from langparse.core.engine import PageResult
 from langparse.metrics import collect_parse_metrics
 from langparse.services.parse_service import ParseService
-from langparse.types import ParsedDocumentResult, ParsedPageResult
+from langparse.types import ParsedDocumentResult, ParsedPageResult, ParsedStructure
 
 
 def test_parse_file_uses_process_document_fast_path(tmp_path):
@@ -239,6 +239,49 @@ def test_direct_analysis_chunking_rejects_non_workbook_results():
 
     with pytest.raises(ValueError, match="analysis chunk profile requires WorkbookIR"):
         ParseService().chunk_result(parsed, chunk_profile="analysis")
+
+
+def test_direct_analysis_chunking_rejects_non_rich_workbook_structure():
+    parsed = ParsedDocumentResult(
+        source="legacy.xls",
+        filename="legacy.xls",
+        engine="excel",
+        markdown_content="# Legacy workbook",
+        structure=ParsedStructure(kind="workbook"),
+    )
+
+    with pytest.raises(ValueError, match="analysis chunk profile requires WorkbookIR"):
+        ParseService().chunk_result(parsed, chunk_profile="analysis")
+
+
+def test_parse_result_marks_non_rich_workbook_analysis_as_unsupported(tmp_path):
+    class LegacyWorkbookEngine:
+        def process_document(self, file_path, **kwargs):
+            return ParsedDocumentResult(
+                source=str(file_path),
+                filename=file_path.name,
+                engine="legacy-workbook",
+                markdown_content="# Legacy workbook",
+                structure=ParsedStructure(kind="workbook"),
+            )
+
+    pdf = tmp_path / "legacy.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+
+    parsed = ParseService().parse_result(
+        pdf,
+        engine=LegacyWorkbookEngine(),
+        chunk=True,
+        chunk_profile="analysis",
+    )
+
+    assert parsed.chunks == []
+    assert parsed.diagnostics is not None
+    assert parsed.diagnostics.status == "partial"
+    assert parsed.diagnostics.errors == []
+    assert parsed.diagnostics.unsupported_features == [
+        "Chunking profile 'analysis' is not supported for engine 'legacy-workbook'."
+    ]
 
 
 def test_non_workbook_chunks_are_tagged_as_retrieval(tmp_path):

@@ -33,6 +33,7 @@ from langparse.types import (
     ParseDiagnostics,
     ParsedPageResult,
 )
+from langparse.workbooks.types import WorkbookIR
 
 #: Engines a caller can actually select. Advertising an engine that raises
 #: NotImplementedError only once it runs wastes the user's configuration effort
@@ -69,7 +70,7 @@ class ParseService:
             return chunker.chunk(document_from_result(parsed))
 
         policy = resolve_workbook_chunk_policy(chunk_profile)
-        if parsed.structure is not None and parsed.structure.kind == "workbook":
+        if isinstance(parsed.structure, WorkbookIR):
             from langparse.chunkers.workbook import WorkbookStructuralChunker
 
             return WorkbookStructuralChunker(profile=policy.name).chunk(parsed)

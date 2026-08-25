@@ -2,6 +2,11 @@
 
 from langparse.workbooks.adapters import OOXMLWorkbookAdapter, WorkbookAdapter
 from langparse.workbooks.assembly import assemble_baseline, assemble_workbook
+from langparse.workbooks.blocks import (
+    interpret_form_block,
+    interpret_matrix_block,
+    interpret_text_block,
+)
 from langparse.workbooks.regions import detect_candidate_regions
 from langparse.workbooks.rendering import compatibility_pages, render_workbook_markdown
 from langparse.workbooks.tables import interpret_logical_table
@@ -55,6 +60,9 @@ __all__ = [
     "compatibility_pages",
     "detect_candidate_regions",
     "interpret_logical_table",
+    "interpret_form_block",
+    "interpret_matrix_block",
+    "interpret_text_block",
     "render_workbook_markdown",
     "stable_id",
 ]

@@ -7,6 +7,28 @@ hang a version number on. Once there's a first release, this will switch to
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/)
 version sections.
 
+## [2026-08-25]
+
+### Added
+- A typed OOXML fact layer and baseline `WorkbookIR`, including raw/display
+  values, formulas and cached values, merges, style fingerprints, visibility,
+  dimensions, print areas, comments, hyperlinks, and object anchors.
+- Parse coverage/reconstruction diagnostics and source-aware raw-grid workbook
+  chunks with complete source rows and exact sheet/range metadata.
+
+### Changed
+- Excel results are non-paginated. Sheet ordinals remain available as
+  compatibility identifiers, but no fake page markers are injected.
+- OOXML Markdown and compatibility tables use spreadsheet coordinates instead
+  of pandas header inference, eliminating generated `Unnamed:*` headers.
+- `ParsedDocumentResult` can directly carry `structure`, `chunks`, and
+  `diagnostics`; JSON output includes native spreadsheet scalars safely.
+
+### Known limitations
+- Logical multi-table/section detection, repeated print-fragment merging, and
+  model-assisted fallback are later phases. Rich `.xls`/`.xlsb` adapters are
+  also not part of this phase.
+
 ## [2026-08-04]
 
 ### Added

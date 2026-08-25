@@ -10,7 +10,7 @@
 
 ## 🚀 Project Status
 
-LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (187 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
+LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (268 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
 
 Still pre-1.0. Looking for early contributors and design partners, particularly to help wire up additional vertical engines (PaddleOCR-VL, vision-LLM backends) and pressure-test the engine-neutral routing design.
 
@@ -110,7 +110,8 @@ Same shape as the [LiteParse](https://github.com/run-llama/liteparse) diagram, d
 ## ✨ Core Features
 
 * **🔌 Engine-neutral routing**: Generic (`simple`) and vertical (`mineru`, `deepdoc`, with `paddle` in progress) PDF engines share one interface and one output shape (`ParsedDocumentResult`). No default "flagship" engine — you pick based on your documents.
-* **📄 Multi-format parsing**: `.pdf` `.docx` `.doc` `.xlsx` `.xls` `.csv` `.md` `.txt` out of the box, all normalized to the same structured result.
+* **📄 Multi-format parsing**: `.pdf` `.docx` `.doc` `.xlsx` `.xlsm` `.xls` `.csv` `.md` `.txt` out of the box, all normalized to the same structured result.
+* **📗 Lossless OOXML facts**: `.xlsx`/`.xlsm` parsing preserves coordinates, raw/display values, formulas and cached values, merges, style fingerprints, visibility, dimensions, print areas, comments, hyperlinks, and object anchors in `WorkbookIR.snapshot`.
 * **🧩 Pluggable semantic chunking**: Markdown-structure-aware chunking (headings, lists, tables, code blocks), decoupled from which engine produced the content.
 * **📡 Unified output**: Get the parsed document as-is, or chunked with rich metadata (`source_file`, `page_number`, `header`, ...) — same API either way.
 * **📊 Optional fidelity scoring**: `services/fidelity.py` plus the `benchmark` CLI command let you quantitatively compare engines on *your own* documents when you need evidence for a choice.
@@ -198,6 +199,28 @@ chunks with `---` in Markdown output), and activates the chunk metrics:
 langparse parse paper.pdf --chunk --format json
 langparse parse docs/ --batch --chunk --metrics --output-dir out
 ```
+
+### Structured Excel results
+
+OOXML workbooks are not treated as paginated pandas tables. Each sheet keeps a
+stable compatibility ordinal, while the result sets `paginated=False` and
+exposes the source facts, baseline blocks, coverage diagnostics, raw Markdown,
+and source-aware row chunks from one parse:
+
+```python
+from langparse.services.parse_service import ParseService
+
+result = ParseService().parse_result("budget.xlsx", chunk=True)
+print(result.structure.snapshot.sheets[0].cells["B2"].formula)
+print(result.diagnostics.coverage_ratio)
+print(result.chunks[0].metadata["source_ranges"])
+```
+
+Phase 1 deliberately provides a lossless raw-grid structure. Automatic
+multi-table region detection, repeated print-fragment merging, multi-level
+header/section/total interpretation, and optional LLM/VLM fallback are planned
+follow-up phases; they are not claimed as implemented yet. Legacy `.xls` and
+delimited inputs retain the compatibility adapter for now.
 
 ### Scanned PDFs
 
@@ -315,7 +338,7 @@ langparse parse notes.md --output notes.out.md
 langparse parse mixed_folder/ --batch --output-dir out --metrics
 ```
 
-Supported extensions: `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.csv`, `.md`, `.txt`.
+Supported extensions: `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xlsm`, `.xls`, `.csv`, `.md`, `.txt`.
 Batch directory expansion picks up all of them; unsupported files exit with
 code 2 and a one-line message.
 

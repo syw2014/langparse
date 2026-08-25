@@ -6,6 +6,26 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 [语义化版本](https://semver.org/lang/zh-CN/) 的版本分区格式。
 
+## [2026-08-25]
+
+### 新增（Added）
+- 新增带类型的 OOXML 事实层与基线 `WorkbookIR`，保留原始/显示值、公式与
+  缓存值、合并关系、样式指纹、可见性、行列尺寸、打印区域、批注、超链接和
+  对象锚点。
+- 新增解析覆盖率/重建诊断，以及保持完整源行并携带精确 Sheet/范围 metadata
+  的 raw-grid workbook chunks。
+
+### 变更（Changed）
+- Excel 结果改为非分页。Sheet 序号仅作为兼容标识，不再注入虚构页码标记。
+- OOXML Markdown 与兼容表改用工作表坐标列，不再由 pandas 推断表头，因此
+  不会生成 `Unnamed:*`。
+- `ParsedDocumentResult` 可直接携带 `structure`、`chunks`、`diagnostics`，JSON
+  输出可安全序列化 Excel 原生日期等值。
+
+### 已知限制
+- 逻辑多表/板块检测、重复打印片段合并、模型 fallback 属于后续阶段；富信息
+  `.xls`/`.xlsb` adapter 也不在本阶段范围内。
+
 ## [2026-08-04]
 
 ### 新增（Added）

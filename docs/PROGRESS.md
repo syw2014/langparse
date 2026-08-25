@@ -2,8 +2,8 @@
 
 **版本**: 0.0.1（`pyproject.toml`，未发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
-**最后更新**: 2026-08-05
-**测试**: 236 passed
+**最后更新**: 2026-08-25
+**测试**: 268 passed
 
 > 本文档在 2026-07-30 重写。此前版本声称 v0.1.0、测试覆盖 100%、解析器完成度 100%，三项均与实际不符，已按代码现状订正。2026-08-03 补充"项目定位"一节并重排"已知缺口"优先级，理由见下。
 
@@ -34,7 +34,9 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | --- | --- | --- |
 | 核心架构 | 可用 | 统一在 `ParsedDocumentResult` 上，路由集中在 `parsers/registry.py` |
 | 文件类型路由 | 可用 | 扩展名 + 内容双重判定（`parsers/sniff.py`）：能确定性识别的格式（PDF 魔数、OOXML zip 内部结构）以内容为准，覆盖被改错扩展名的文件；纯文本格式与旧版 OLE 二进制（.doc/.xls）无法可靠嗅探，退回扩展名 |
-| Markdown / DOCX / Excel 解析 | 可用 | 均产出结构化 pages/tables/elements |
+| Markdown / DOCX 解析 | 可用 | 均产出结构化 pages/tables/elements |
+| Excel OOXML 事实解析（Phase 1） | 可用 | `.xlsx/.xlsm` 产出 `WorkbookIR.snapshot`、raw-grid、coverage/reconstruction diagnostics 和 source-aware chunks；非分页且不生成 `Unnamed:*` |
+| Excel 逻辑结构解释（Phase 2+） | 未实现 | 多表区域检测、重复打印片段合并、多级表头/板块/合计解释、可选 LLM/VLM fallback；`.xls/.xlsb` rich adapter 也待实现 |
 | PDF 解析（simple） | 可用 | pdfplumber，含表格提取与扫描件 OCR 兜底 |
 | PDF 解析（MinerU） | 可用 | 经 `mineru-api`，含服务生命周期管理、表格/图片/caption 抽取 |
 | PDF 解析（DeepDoc） | 可用 | 移植自 RAGFlow：OCR + 版面分析 + 表格结构识别，ONNX/CPU 推理，模型按需从 HuggingFace `InfiniFlow/deepdoc` 下载到 `~/.langparse/models/deepdoc`；已知局限：复杂/多行竖排标签版式下表格结构识别仍可能出现行拆分或印章文字碎片误判为单元格 |
@@ -44,7 +46,7 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | Benchmark | 可用 | 结构阈值 + 保真度（文本编辑距离 / 表格 TEDS），需 manifest 提供参考输出 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-"187 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+"268 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
 
 ---
 
@@ -66,7 +68,13 @@ langparse/
 │   └── markdown_ / docx_ / excel_ / pdf_parser.py
 ├── chunkers/
 │   ├── blocks.py         # Markdown 块扫描器（fence 状态机）
-│   └── semantic.py       # 分节 + 尺寸装箱
+│   ├── semantic.py       # 分节 + 尺寸装箱
+│   └── workbook.py       # WorkbookIR raw-grid 完整行分块
+├── workbooks/
+│   ├── types.py          # WorkbookSnapshot / WorkbookIR / source refs
+│   ├── adapters.py       # OOXML 事实提取
+│   ├── assembly.py       # 基线 IR + coverage/reconstruction diagnostics
+│   └── rendering.py      # 坐标保真 Markdown / 兼容 Sheet 视图
 ├── engines/pdf/          # simple / mineru(+client, service) / deepdoc / 未实现的两个（vision_llm、paddle）
 └── services/
     ├── parse_service.py      # 单文件解析、渲染、扩展名路由
@@ -83,6 +91,22 @@ langparse/
 ## 路线图 / 已知缺口
 
 优先级按"是否直接服务项目定位（引擎中立编排层）"排列，不是按实现难度。
+
+### Excel 结构解析阶段
+
+1. ✅ **Phase 1（2026-08-25）事实层与兼容接口**：OOXML 双路读取公式/缓存值，
+   保留合并、样式、可见性、尺寸、打印信息和对象锚点；`ParsedDocumentResult`
+   直接暴露 `structure/chunks/diagnostics`；Excel 为非分页格式。真实 15-Sheet
+   预算工作簿冒烟结果为 coverage 1.0、reconstruction passed、45 chunks，且第 8
+   Sheet 保留 `A1:L74` 与 A–L 坐标列。
+2. ⬜ **Phase 2 逻辑区域解释**：一个 Sheet 内识别多个独立表/文本/表单区域，
+   对重复打印表头、跨页片段、板块、subtotal/total 建立逻辑结构，同时保留物理来源。
+3. ⬜ **Phase 3 语义 chunk profiles**：按 logical table/section/header path 生成
+   retrieval 与 analysis 两类 chunks，而不只按 raw-grid 行窗口。
+4. ⬜ **Phase 4 可选模型 fallback**：仅对低置信候选调用 LLM/VLM，使用 schema
+   约束与坐标校验；模型不能改写事实层。
+5. ⬜ **Phase 5 格式与 bundle**：补齐 `.xls/.xlsb` rich adapters，以及
+   `document.json`、raw/semantic Markdown、chunks、diagnostics 的标准输出包。
 
 **P0 —— 直接验证"通用引擎与垂直引擎平权"这条核心主张**
 1. ✅ **已完成（2026-08-05）——把 DeepDoc 从占位实现补成真实可用**：[langparse/engines/pdf/deepdoc_engine.py](../langparse/engines/pdf/deepdoc_engine.py) 现在是移植自 RAGFlow 的完整 OCR + 版面分析 + 表格结构识别流水线（ONNX/CPU 推理，见 `langparse/engines/pdf/deepdoc/`），已注册进 `ENGINE_MAP`，`--engine deepdoc` 端到端可用，CLI 无需新增任何 flag（`--device` `--model-dir` `--download-dir` `--model-policy` 本就是通用转发的 kwargs）。用真实扫描件 PDF 做过一次人工冒烟验证（非 CI 用例，模型从 HuggingFace `InfiniFlow/deepdoc` 首次运行时下载到 `~/.langparse/models/deepdoc`）：产出的 `markdown_content` 是可读的中文文本和结构化表格，整体非乱码非空。对照源图像逐项核对后，发现两类已知局限而非"完美识别"：字符级 OCR 误差（"竣工"识别成"峻工"、两处日期字段缺字/错位，属扫描件 OCR 正常范围）之外，表格结构重建在复杂版式下有真实缺陷——源文档一段竖排多字标签被表格结构识别器拆成 5 行乱序字符，另有 2 行在源图像里找不到对应内容，疑似红色签章文字碎片被误判为单元格；后者是表格结构还原本身的局限，不是简单的字符识别误差（见上方完成度表 DeepDoc 行的注记）。跑起来的垂直引擎从 MinerU 一个变成两个，"平权"主张不再只有单一样本支撑，但表格结构还原在复杂版式上的鲁棒性仍是待改进项，不宜过度宣称"识别干净"。
@@ -107,3 +131,5 @@ langparse/
 - `docs/superpowers/specs/2026-04-16-parser-platform-mineru-design.md`
 - `docs/superpowers/specs/2026-06-02-langparse-product-readiness-design.md`
 - `docs/superpowers/specs/2026-07-30-semantic-chunking-design.md`
+- `docs/superpowers/specs/2026-08-25-excel-structural-parsing-design.md`
+- `docs/superpowers/plans/2026-08-25-excel-structural-parsing-phase-1.md`

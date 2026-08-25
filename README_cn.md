@@ -10,7 +10,7 @@
 
 ## 🚀 项目状态
 
-LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（187 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
+LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（268 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
 
 项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（PaddleOCR-VL、vision-LLM 后端），以及帮忙压测"引擎中立路由"这个设计本身。
 
@@ -110,7 +110,8 @@ flowchart LR
 ## ✨ 核心特性
 
 * **🔌 引擎中立路由**：通用引擎（`simple`）和垂直引擎（`mineru`、`deepdoc`，`paddle` 推进中）共享同一套接口和同一种输出形状（`ParsedDocumentResult`）。没有默认"主推"引擎，按你的文档特点自己选。
-* **📄 多格式解析**：开箱即用支持 `.pdf` `.docx` `.doc` `.xlsx` `.xls` `.csv` `.md` `.txt`，全部归一化到同一套结构化结果。
+* **📄 多格式解析**：开箱即用支持 `.pdf` `.docx` `.doc` `.xlsx` `.xlsm` `.xls` `.csv` `.md` `.txt`，全部归一化到同一套结构化结果。
+* **📗 OOXML 事实保真**：`.xlsx`/`.xlsm` 会在 `WorkbookIR.snapshot` 中保留坐标、原始/显示值、公式及缓存值、合并关系、样式指纹、可见性、行列尺寸、打印区域、批注、超链接和对象锚点。
 * **🧩 可插拔语义分块**：基于 Markdown 结构（标题、列表、表格、代码块）分块，和是哪个引擎产出的内容无关。
 * **📡 统一输出**：拿解析原文，或者拿带丰富 metadata（`source_file`、`page_number`、`header` 等）的分块结果——同一套 API,你决定。
 * **📊 可选的保真度评分**：`services/fidelity.py` 加上 `benchmark` CLI 命令,让你在需要证据支持选型决策时,在自己的文档上量化对比几个引擎。
@@ -162,6 +163,25 @@ CLI 侧用 `--chunk` 在 JSON 输出中加入 `chunks` 数组（Markdown 输出�
 langparse parse paper.pdf --chunk --format json
 langparse parse docs/ --batch --chunk --metrics --output-dir out
 ```
+
+### Excel 结构化结果
+
+OOXML 工作簿不再被当作分页的 pandas 表格。每个 Sheet 只保留稳定的兼容序号，
+结果设置 `paginated=False`，并从同一次解析中提供源事实、基线 block、覆盖率诊断、
+原始 Markdown 和带源范围的行级 chunks：
+
+```python
+from langparse.services.parse_service import ParseService
+
+result = ParseService().parse_result("budget.xlsx", chunk=True)
+print(result.structure.snapshot.sheets[0].cells["B2"].formula)
+print(result.diagnostics.coverage_ratio)
+print(result.chunks[0].metadata["source_ranges"])
+```
+
+Phase 1 的边界是无损 raw-grid 结构。多表区域检测、重复打印片段合并、多级表头/
+板块/合计解释，以及可选 LLM/VLM fallback 仍属于后续阶段，当前不宣称已经实现。
+旧版 `.xls` 与分隔文本目前继续走兼容 adapter。
 
 ### 扫描件
 
@@ -238,7 +258,7 @@ langparse parse notes.md --output notes.out.md
 langparse parse mixed_folder/ --batch --output-dir out --metrics
 ```
 
-支持的扩展名：`.pdf`、`.docx`、`.doc`、`.xlsx`、`.xls`、`.csv`、`.md`、`.txt`。
+支持的扩展名：`.pdf`、`.docx`、`.doc`、`.xlsx`、`.xlsm`、`.xls`、`.csv`、`.md`、`.txt`。
 批处理的目录展开会全部识别；不支持的文件以退出码 2 和单行错误信息结束。
 
 单文件解析：

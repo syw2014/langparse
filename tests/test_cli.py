@@ -63,6 +63,15 @@ def test_cli_batch_command_supports_output_dir():
     assert args.api_port == 8010
 
 
+def test_cli_accepts_analysis_chunk_profile():
+    args = build_parser().parse_args(
+        ["parse", "book.xlsx", "--chunk", "--chunk-profile", "analysis"]
+    )
+
+    assert args.chunk is True
+    assert args.chunk_profile == "analysis"
+
+
 def test_cli_main_help_exits_cleanly(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -248,6 +257,27 @@ def test_cli_main_single_parse_delegates_to_service(monkeypatch):
     ]
 
 
+def test_cli_single_parse_forwards_profile_only_as_chunk_option(monkeypatch):
+    calls = []
+
+    class FakeService:
+        def parse_output(self, file_path, engine_name="simple", fmt="markdown", **kwargs):
+            calls.append((file_path, engine_name, fmt, kwargs))
+            return "rendered"
+
+    monkeypatch.setattr("langparse.cli.ParseService", FakeService)
+
+    assert main(["parse", "book.xlsx", "--chunk", "--chunk-profile", "analysis"]) == 0
+    assert calls == [
+        (
+            "book.xlsx",
+            "simple",
+            "markdown",
+            {"chunk": True, "chunk_profile": "analysis"},
+        )
+    ]
+
+
 def test_cli_main_single_parse_passes_mineru_api_kwargs(monkeypatch):
     calls = []
 
@@ -321,6 +351,21 @@ def test_cli_main_batch_delegates_to_batch_service_and_prints(monkeypatch, capsy
     assert capsys.readouterr().out == "first\nsecond\n"
     assert calls[0][0] == ["docs"]
     assert calls[0][1]["output_dir"] is None
+
+
+def test_cli_batch_forwards_profile_outside_engine_kwargs(monkeypatch):
+    calls = []
+
+    class FakeBatchService:
+        def run(self, inputs, **kwargs):
+            calls.append((inputs, kwargs))
+            return BatchRunResult()
+
+    monkeypatch.setattr("langparse.cli.BatchParseService", FakeBatchService)
+
+    assert main(["parse", "books", "--batch", "--chunk", "--chunk-profile", "analysis"]) == 0
+    assert calls[0][1]["chunk"] is True
+    assert calls[0][1]["chunk_profile"] == "analysis"
 
 
 def test_cli_parse_accepts_batch_metrics_options():

@@ -4,23 +4,35 @@ import pytest
 
 from langparse.metrics import BatchRunResult
 from langparse.services.batch_service import BatchParseService
-from langparse.types import ParsedDocumentResult, ParsedPageResult
+from langparse.types import Chunk, ParsedDocumentResult, ParsedPageResult
 
 
 class StubParseService:
     def __init__(self):
         self.calls = []
         self.engines_seen = []
+        self.profiles_seen = []
+        self.engine_kwargs_seen = []
         self.created_engines = 0
 
     def create_engine(self, engine_name="simple", **kwargs):
         self.created_engines += 1
         return f"engine-{self.created_engines}"
 
-    def parse_result(self, file_path, engine_name="simple", engine=None, **kwargs):
+    def parse_result(
+        self,
+        file_path,
+        engine_name="simple",
+        engine=None,
+        chunk=False,
+        chunk_profile=None,
+        **kwargs,
+    ):
         self.calls.append((Path(file_path), engine_name, kwargs))
         self.engines_seen.append(engine)
-        return ParsedDocumentResult(
+        self.profiles_seen.append((chunk, chunk_profile))
+        self.engine_kwargs_seen.append(kwargs)
+        result = ParsedDocumentResult(
             source=str(file_path),
             filename=Path(file_path).name,
             engine=engine_name,
@@ -28,9 +40,20 @@ class StubParseService:
             markdown_content="Hello",
             metadata={},
         )
+        if chunk:
+            result.chunks = [
+                Chunk(
+                    content="analysis",
+                    metadata={
+                        "chunk_profile": chunk_profile,
+                        "chunk_profile_version": 1,
+                    },
+                )
+            ]
+        return result
 
     def chunk_result(self, parsed, chunker=None):
-        return []
+        raise AssertionError("BatchParseService must not chunk a parsed result twice")
 
     def render_output(self, parsed, fmt, chunks=None):
         return parsed.markdown_content if fmt == "markdown" else "{}"
@@ -140,6 +163,24 @@ def test_batch_service_does_not_forward_collect_metrics_to_parser(tmp_path):
     )
 
     assert parse_service.calls == [(pdf, "simple", {})]
+
+
+def test_batch_service_passes_analysis_profile_to_parse_result_only(tmp_path):
+    source = tmp_path / "book.xlsx"
+    source.write_text("placeholder", encoding="utf-8")
+    parse_service = StubParseService()
+
+    result = BatchParseService(parse_service=parse_service).run(
+        [source],
+        output_dir=tmp_path / "out",
+        max_workers=1,
+        chunk=True,
+        chunk_profile="analysis",
+    )
+
+    assert result.success_count == 1
+    assert parse_service.profiles_seen == [(True, "analysis")]
+    assert parse_service.engine_kwargs_seen == [{}]
 
 
 def test_batch_service_records_failure_when_fail_fast_false(tmp_path):

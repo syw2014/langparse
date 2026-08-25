@@ -31,6 +31,7 @@ class BatchParseService:
         fail_fast: bool = False,
         collect_metrics: bool = True,
         chunk: bool = False,
+        chunk_profile: str | None = None,
         **kwargs,
     ) -> BatchRunResult:
         # No output directory means render to memory and let the caller print;
@@ -62,6 +63,7 @@ class BatchParseService:
                 fail_fast,
                 collect_metrics,
                 chunk,
+                chunk_profile,
             )
             for path, output_path in zip(paths, output_paths, strict=True)
         ]
@@ -113,6 +115,7 @@ class BatchParseService:
         fail_fast: bool,
         collect_metrics: bool,
         chunk: bool,
+        chunk_profile: str | None,
         **kwargs,
     ) -> tuple[BatchItemResult, str | None]:
         """Return the report item and, when nothing was written, the rendered text."""
@@ -133,9 +136,14 @@ class BatchParseService:
         start = time.perf_counter()
         try:
             parsed = self.parse_service.parse_result(
-                path, engine_name=engine_name, engine=engine, **kwargs
+                path,
+                engine_name=engine_name,
+                engine=engine,
+                chunk=chunk,
+                chunk_profile=chunk_profile,
+                **kwargs,
             )
-            chunks = self.parse_service.chunk_result(parsed) if chunk else None
+            chunks = parsed.chunks if chunk else None
             rendered = self.parse_service.render_output(parsed, fmt, chunks=chunks)
             if output_path is not None:
                 output_path.parent.mkdir(parents=True, exist_ok=True)

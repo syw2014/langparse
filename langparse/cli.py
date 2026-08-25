@@ -44,6 +44,12 @@ def build_parser():
         action="store_true",
         help="semantically chunk the parsed document and include chunks in the output",
     )
+    parse_cmd.add_argument(
+        "--chunk-profile",
+        choices=["retrieval", "analysis"],
+        default="retrieval",
+        help="choose retrieval-oriented or analysis-oriented chunks",
+    )
 
     benchmark_cmd = subparsers.add_parser("benchmark")
     benchmark_cmd.add_argument("manifest")
@@ -119,6 +125,7 @@ def _run(args, parser) -> int:
         }.items()
         if value is not None and value is not False
     }
+    chunk_kwargs = {"chunk_profile": args.chunk_profile} if args.chunk else {}
 
     if args.batch:
         # One implementation regardless of flags. Without --output-dir the run
@@ -132,6 +139,7 @@ def _run(args, parser) -> int:
             skip_existing=args.skip_existing,
             collect_metrics=args.metrics,
             chunk=args.chunk,
+            **chunk_kwargs,
             **parse_kwargs,
         )
         for rendered in result.rendered_outputs:
@@ -148,6 +156,7 @@ def _run(args, parser) -> int:
         engine_name=engine_name,
         fmt=args.format,
         chunk=args.chunk,
+        **chunk_kwargs,
         **parse_kwargs,
     )
 

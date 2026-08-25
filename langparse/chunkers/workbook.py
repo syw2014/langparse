@@ -4,12 +4,12 @@ from collections.abc import Callable
 
 from openpyxl.utils import get_column_letter, range_boundaries
 
-from langparse.core.rendering import document_metadata
 from langparse.chunkers.profiles import (
     WorkbookChunkPolicy,
     WorkbookChunkProfile,
     resolve_workbook_chunk_policy,
 )
+from langparse.core.rendering import document_metadata
 from langparse.types import Chunk, ParsedDocumentResult
 from langparse.workbooks.types import (
     FormBlock,
@@ -90,7 +90,74 @@ class WorkbookStructuralChunker:
                         chunk_index_offset=len(chunks),
                     )
                 )
+        self._finalize_chunks(parsed, chunks)
+        self._validate_chunks(parsed, chunks)
         return chunks
+
+    def _finalize_chunks(self, parsed: ParsedDocumentResult, chunks: list[Chunk]) -> None:
+        workbook_ir = parsed.structure
+        assert isinstance(workbook_ir, WorkbookIR)
+        for index, chunk in enumerate(chunks):
+            chunk.metadata["chunk_index"] = index
+            chunk.metadata["chunk_profile"] = self.policy.name.value
+            chunk.metadata["chunk_profile_version"] = self.policy.version
+            ordinal = int(chunk.metadata["sheet_ordinal"])
+            sheet_ir = workbook_ir.sheets[ordinal - 1]
+            snapshot = workbook_ir.snapshot
+            sheet_snapshot = snapshot.sheets[ordinal - 1] if snapshot is not None else None
+            hidden_rows = set(sheet_snapshot.hidden_rows) if sheet_snapshot is not None else set()
+            referenced_rows = set(chunk.metadata.get("row_numbers", []))
+            if not referenced_rows:
+                referenced_rows = _row_numbers_from_source_ranges(chunk.metadata["source_ranges"])
+            chunk.metadata["sheet_visibility"] = (
+                sheet_snapshot.visibility if sheet_snapshot is not None else sheet_ir.visibility
+            )
+            chunk.metadata["hidden_row_numbers"] = sorted(referenced_rows & hidden_rows)
+
+    def _validate_chunks(self, parsed: ParsedDocumentResult, chunks: list[Chunk]) -> None:
+        workbook_ir = parsed.structure
+        assert isinstance(workbook_ir, WorkbookIR)
+        expected_row_ids = [
+            row.row_id
+            for sheet in workbook_ir.sheets
+            for block in sheet.blocks
+            if block.logical_table is not None
+            for row in block.logical_table.rows
+            if row.role in {"data", "total"}
+        ]
+        actual_row_ids = [
+            row_id
+            for chunk in chunks
+            if chunk.metadata["chunk_type"] == "table_rows"
+            for row_id in chunk.metadata["row_ids"]
+        ]
+        if len(actual_row_ids) != len(set(actual_row_ids)) or set(actual_row_ids) != set(
+            expected_row_ids
+        ):
+            raise ValueError("Workbook chunk row conservation failed")
+        if [chunk.metadata["chunk_index"] for chunk in chunks] != list(range(len(chunks))):
+            raise ValueError("Workbook chunk indexes are not contiguous")
+
+        for chunk in chunks:
+            source_ranges = chunk.metadata["source_ranges"]
+            for source_range in source_ranges:
+                _source_range_is_valid(workbook_ir.snapshot, source_range)
+            if chunk.metadata["chunk_type"] != "table_rows":
+                continue
+            payload = chunk.structured_payload
+            if len(chunk.metadata["row_ids"]) != len(payload["rows"]):
+                raise ValueError("Workbook table chunk row payload mismatch")
+            if self.policy.analysis_records:
+                records = payload["records"]
+                if len(chunk.metadata["row_ids"]) != len(records):
+                    raise ValueError("Workbook table chunk analysis record mismatch")
+                record_ranges = list(
+                    dict.fromkeys(
+                        source_ref for record in records for source_ref in record["source_refs"]
+                    )
+                )
+                if source_ranges != record_ranges:
+                    raise ValueError("Workbook table chunk source ranges mismatch")
 
     def _chunk_block(
         self,
@@ -174,6 +241,7 @@ class WorkbookStructuralChunker:
                             chunk_index_offset + len(chunks),
                             self.max_chunk_size,
                             self.length_function,
+                            self.policy,
                         )
                     )
                     pending = []
@@ -192,6 +260,7 @@ class WorkbookStructuralChunker:
                         chunk_index_offset + len(chunks),
                         self.max_chunk_size,
                         self.length_function,
+                        self.policy,
                     )
                 )
         return chunks
@@ -358,6 +427,29 @@ class WorkbookStructuralChunker:
                 return
             source_range = _source_range(sheet_name, columns, pending_numbers)
             content = _render_chunk(sheet_name, source_range, columns, pending_rows)
+            payload = {
+                "columns": list(columns),
+                "rows": [list(row) for row in pending_rows],
+            }
+            if self.policy.analysis_records:
+                payload["column_schema"] = [
+                    {
+                        "column_index": index,
+                        "coordinate": column,
+                        "header_path": [],
+                    }
+                    for index, column in enumerate(columns)
+                ]
+                payload["records"] = [
+                    {
+                        "row_number": row_number,
+                        "role": "raw",
+                        "section_path": [],
+                        "values": list(row),
+                        "source_refs": [_source_range(sheet_name, columns, [row_number])],
+                    }
+                    for row, row_number in zip(pending_rows, pending_numbers, strict=True)
+                ]
             metadata = document_metadata(parsed)
             metadata.update(
                 {
@@ -379,10 +471,7 @@ class WorkbookStructuralChunker:
                 Chunk(
                     content=content,
                     metadata=metadata,
-                    structured_payload={
-                        "columns": list(columns),
-                        "rows": [list(row) for row in pending_rows],
-                    },
+                    structured_payload=payload,
                 )
             )
             pending_rows.clear()
@@ -414,6 +503,36 @@ def _row_numbers(source_range: str | None, count: int) -> list[int]:
         return list(range(1, count + 1))
     _, min_row, _, _ = range_boundaries(source_range)
     return list(range(min_row, min_row + count))
+
+
+def _row_numbers_from_source_ranges(source_ranges: list[str]) -> set[int]:
+    row_numbers = set()
+    for source_range in source_ranges:
+        _, cell_range = source_range.rsplit("!", 1)
+        _, min_row, _, max_row = range_boundaries(cell_range)
+        row_numbers.update(range(min_row, max_row + 1))
+    return row_numbers
+
+
+def _source_range_is_valid(snapshot, source_ref: str) -> None:
+    if snapshot is None:
+        raise ValueError("WorkbookIR snapshot is required for source-range validation")
+    sheet_name, cell_range = source_ref.rsplit("!", 1)
+    sheet = next((item for item in snapshot.sheets if item.name == sheet_name), None)
+    if sheet is None:
+        raise ValueError(f"Workbook source range references unknown sheet: {sheet_name}")
+    if sheet.used_range is None:
+        raise ValueError(f"Workbook sheet used_range is required: {sheet_name}")
+    try:
+        min_col, min_row, max_col, max_row = range_boundaries(cell_range)
+        used_min_col, used_min_row, used_max_col, used_max_row = range_boundaries(sheet.used_range)
+    except ValueError as exc:
+        raise ValueError(f"Workbook source range is invalid: {source_ref}") from exc
+    if not (
+        used_min_col <= min_col <= max_col <= used_max_col
+        and used_min_row <= min_row <= max_row <= used_max_row
+    ):
+        raise ValueError(f"Workbook source range is outside sheet used_range: {source_ref}")
 
 
 def _source_range(sheet_name: str, columns: list[str], row_numbers: list[int]) -> str:
@@ -642,6 +761,7 @@ def _logical_chunk(
     chunk_index: int,
     max_chunk_size: int,
     length_function: Callable[[str], int],
+    policy: WorkbookChunkPolicy,
 ) -> Chunk:
     content = _render_logical_chunk(table.title, section_path, columns, rows)
     metadata = document_metadata(parsed)
@@ -673,14 +793,35 @@ def _logical_chunk(
         )
     if length_function(content) > max_chunk_size:
         metadata["oversized"] = True
+    payload = {
+        "columns": columns,
+        "rows": [list(row.values) for row in rows],
+        "roles": [row.role for row in rows],
+    }
+    if policy.analysis_records:
+        payload["column_schema"] = [
+            {
+                "column_index": index,
+                "coordinate": column.coordinate,
+                "header_path": list(column.path),
+            }
+            for index, column in enumerate(table.columns)
+        ]
+        payload["records"] = [
+            {
+                "row_id": row.row_id,
+                "row_number": int(row.metadata["row_number"]),
+                "role": row.role,
+                "section_path": list(row.section_path),
+                "values": list(row.values),
+                "source_refs": [row.source_ref.key],
+            }
+            for row in rows
+        ]
     return Chunk(
         content=content,
         metadata=metadata,
-        structured_payload={
-            "columns": columns,
-            "rows": [list(row.values) for row in rows],
-            "roles": [row.role for row in rows],
-        },
+        structured_payload=payload,
     )
 
 

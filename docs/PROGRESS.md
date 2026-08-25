@@ -36,7 +36,8 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | 文件类型路由 | 可用 | 扩展名 + 内容双重判定（`parsers/sniff.py`）：能确定性识别的格式（PDF 魔数、OOXML zip 内部结构）以内容为准，覆盖被改错扩展名的文件；纯文本格式与旧版 OLE 二进制（.doc/.xls）无法可靠嗅探，退回扩展名 |
 | Markdown / DOCX 解析 | 可用 | 均产出结构化 pages/tables/elements |
 | Excel OOXML 事实解析（Phase 1） | 可用 | `.xlsx/.xlsm` 产出 `WorkbookIR.snapshot`、raw-grid、coverage/reconstruction diagnostics 和 source-aware chunks；非分页且不生成 `Unnamed:*` |
-| Excel 逻辑结构解释（Phase 2+） | 未实现 | 多表区域检测、重复打印片段合并、多级表头/板块/合计解释、可选 LLM/VLM fallback；`.xls/.xlsb` rich adapter 也待实现 |
+| Excel 确定性逻辑表（Phase 2A） | 可用 | Sheet 内空白带多表区域、重复打印片段、多级表头、板块/数据/合计角色、语义 Markdown 与 source-aware `table_rows` chunks |
+| Excel 高阶解释（Phase 2B+） | 未实现 | 跨 Sheet 续接、Form/Matrix block 分类、低置信模型 fallback；`.xls/.xlsb` rich adapter 也待实现 |
 | PDF 解析（simple） | 可用 | pdfplumber，含表格提取与扫描件 OCR 兜底 |
 | PDF 解析（MinerU） | 可用 | 经 `mineru-api`，含服务生命周期管理、表格/图片/caption 抽取 |
 | PDF 解析（DeepDoc） | 可用 | 移植自 RAGFlow：OCR + 版面分析 + 表格结构识别，ONNX/CPU 推理，模型按需从 HuggingFace `InfiniFlow/deepdoc` 下载到 `~/.langparse/models/deepdoc`；已知局限：复杂/多行竖排标签版式下表格结构识别仍可能出现行拆分或印章文字碎片误判为单元格 |
@@ -99,10 +100,14 @@ langparse/
    直接暴露 `structure/chunks/diagnostics`；Excel 为非分页格式。真实 15-Sheet
    预算工作簿冒烟结果为 coverage 1.0、reconstruction passed、45 chunks，且第 8
    Sheet 保留 `A1:L74` 与 A–L 坐标列。
-2. ⬜ **Phase 2 逻辑区域解释**：一个 Sheet 内识别多个独立表/文本/表单区域，
-   对重复打印表头、跨页片段、板块、subtotal/total 建立逻辑结构，同时保留物理来源。
-3. ⬜ **Phase 3 语义 chunk profiles**：按 logical table/section/header path 生成
-   retrieval 与 analysis 两类 chunks，而不只按 raw-grid 行窗口。
+2. ✅ **Phase 2A（2026-08-25）Sheet 内确定性逻辑表**：按空白行/列带识别多个
+   候选区域；合并连续且表头指纹一致的打印片段；建立多级表头路径、板块、数据与
+   total 行角色，同时在 snapshot 中保留物理事实。真实预算工作簿第 8 Sheet 验收为
+   1 个逻辑表、6 个片段、12 列、2 个板块、47 条数据、1 条合计，coverage 1.0 且
+   reconstruction passed。
+3. 🟨 **Phase 3 基础语义 chunk 已完成，profiles 待补**：现已按 logical
+   table/section/header path 生成 `table_rows` chunks，不跨板块并携带 row/fragment
+   source ranges；retrieval 与 analysis 两套可配置 profiles 尚未实现。
 4. ⬜ **Phase 4 可选模型 fallback**：仅对低置信候选调用 LLM/VLM，使用 schema
    约束与坐标校验；模型不能改写事实层。
 5. ⬜ **Phase 5 格式与 bundle**：补齐 `.xls/.xlsb` rich adapters，以及

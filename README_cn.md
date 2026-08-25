@@ -10,7 +10,7 @@
 
 ## 🚀 项目状态
 
-LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（268 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
+LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（282 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
 
 项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（PaddleOCR-VL、vision-LLM 后端），以及帮忙压测"引擎中立路由"这个设计本身。
 
@@ -167,8 +167,8 @@ langparse parse docs/ --batch --chunk --metrics --output-dir out
 ### Excel 结构化结果
 
 OOXML 工作簿不再被当作分页的 pandas 表格。每个 Sheet 只保留稳定的兼容序号，
-结果设置 `paginated=False`，并从同一次解析中提供源事实、基线 block、覆盖率诊断、
-原始 Markdown 和带源范围的行级 chunks：
+结果设置 `paginated=False`，并从同一次解析中提供无损源事实、确定性逻辑表、
+覆盖率诊断、语义 Markdown 和带源范围的逻辑表行 chunks：
 
 ```python
 from langparse.services.parse_service import ParseService
@@ -176,12 +176,16 @@ from langparse.services.parse_service import ParseService
 result = ParseService().parse_result("budget.xlsx", chunk=True)
 print(result.structure.snapshot.sheets[0].cells["B2"].formula)
 print(result.diagnostics.coverage_ratio)
+print(result.structure.sheets[0].blocks[0].logical_table.columns)
+print(result.chunks[0].metadata["section_path"])
 print(result.chunks[0].metadata["source_ranges"])
 ```
 
-Phase 1 的边界是无损 raw-grid 结构。多表区域检测、重复打印片段合并、多级表头/
-板块/合计解释，以及可选 LLM/VLM fallback 仍属于后续阶段，当前不宣称已经实现。
-旧版 `.xls` 与分隔文本目前继续走兼容 adapter。
+解析器现在可确定性地按空白行/列带拆分独立表格，合并重复打印片段，构造多级
+表头路径，识别板块、数据行和合计行，并在不跨板块的前提下按完整逻辑行分块。
+`structure.snapshot` 与兼容表仍保留原始单元格视图。跨 Sheet 表格续接、Form/Matrix
+block 分类、按置信度触发的 LLM/VLM fallback，以及富信息 `.xls`/`.xlsb` adapter
+仍待后续实现；分隔文本和旧版输入目前继续走兼容 adapter。
 
 ### 扫描件
 

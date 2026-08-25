@@ -10,7 +10,7 @@
 
 ## 🚀 Project Status
 
-LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (268 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
+LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (282 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
 
 Still pre-1.0. Looking for early contributors and design partners, particularly to help wire up additional vertical engines (PaddleOCR-VL, vision-LLM backends) and pressure-test the engine-neutral routing design.
 
@@ -204,8 +204,9 @@ langparse parse docs/ --batch --chunk --metrics --output-dir out
 
 OOXML workbooks are not treated as paginated pandas tables. Each sheet keeps a
 stable compatibility ordinal, while the result sets `paginated=False` and
-exposes the source facts, baseline blocks, coverage diagnostics, raw Markdown,
-and source-aware row chunks from one parse:
+exposes lossless source facts, deterministic logical tables, coverage
+diagnostics, semantic Markdown, and source-aware table-row chunks from one
+parse:
 
 ```python
 from langparse.services.parse_service import ParseService
@@ -213,14 +214,19 @@ from langparse.services.parse_service import ParseService
 result = ParseService().parse_result("budget.xlsx", chunk=True)
 print(result.structure.snapshot.sheets[0].cells["B2"].formula)
 print(result.diagnostics.coverage_ratio)
+print(result.structure.sheets[0].blocks[0].logical_table.columns)
+print(result.chunks[0].metadata["section_path"])
 print(result.chunks[0].metadata["source_ranges"])
 ```
 
-Phase 1 deliberately provides a lossless raw-grid structure. Automatic
-multi-table region detection, repeated print-fragment merging, multi-level
-header/section/total interpretation, and optional LLM/VLM fallback are planned
-follow-up phases; they are not claimed as implemented yet. Legacy `.xls` and
-delimited inputs retain the compatibility adapter for now.
+The parser deterministically separates tables across blank row/column bands,
+merges repeated print fragments, builds multi-level header paths, classifies
+sections/data/totals, and chunks complete logical rows without crossing section
+boundaries. `structure.snapshot` and compatibility tables retain the original
+cell-level view. Cross-sheet table continuation, Form/Matrix block
+classification, confidence-driven LLM/VLM fallback, and rich `.xls`/`.xlsb`
+adapters remain follow-up work; delimited and legacy inputs keep the
+compatibility adapter for now.
 
 ### Scanned PDFs
 

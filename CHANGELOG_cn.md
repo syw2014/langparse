@@ -14,6 +14,10 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
   对象锚点。
 - 新增解析覆盖率/重建诊断，以及保持完整源行并携带精确 Sheet/范围 metadata
   的 raw-grid workbook chunks。
+- 新增 Sheet 内确定性逻辑表：空白带候选区域、重复打印片段、多行合并表头路径、
+  行角色、板块、合计，以及稳定且可追溯到源坐标的标识。
+- 新增 Excel 语义 Markdown 与 `table_rows` chunks，携带表格/板块/表头、行、
+  物理片段和精确源范围 metadata。
 
 ### 变更（Changed）
 - Excel 结果改为非分页。Sheet 序号仅作为兼容标识，不再注入虚构页码标记。
@@ -23,8 +27,8 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
   输出可安全序列化 Excel 原生日期等值。
 
 ### 已知限制
-- 逻辑多表/板块检测、重复打印片段合并、模型 fallback 属于后续阶段；富信息
-  `.xls`/`.xlsb` adapter 也不在本阶段范围内。
+- 跨 Sheet 续接、Form/Matrix block 分类、retrieval/analysis 双 chunk profiles、
+  模型 fallback 仍属于后续阶段；富信息 `.xls`/`.xlsb` adapter 也不在本阶段范围内。
 
 ## [2026-08-04]
 

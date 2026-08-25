@@ -15,6 +15,11 @@ version sections.
   dimensions, print areas, comments, hyperlinks, and object anchors.
 - Parse coverage/reconstruction diagnostics and source-aware raw-grid workbook
   chunks with complete source rows and exact sheet/range metadata.
+- Deterministic within-sheet logical tables: blank-band candidate regions,
+  repeated print fragments, merged multi-row header paths, row roles, sections,
+  totals, and stable source-linked identifiers.
+- Semantic Excel Markdown and `table_rows` chunks carrying table/section/header,
+  row, physical fragment, and exact source-range metadata.
 
 ### Changed
 - Excel results are non-paginated. Sheet ordinals remain available as
@@ -25,9 +30,9 @@ version sections.
   `diagnostics`; JSON output includes native spreadsheet scalars safely.
 
 ### Known limitations
-- Logical multi-table/section detection, repeated print-fragment merging, and
-  model-assisted fallback are later phases. Rich `.xls`/`.xlsb` adapters are
-  also not part of this phase.
+- Cross-sheet continuation, Form/Matrix block classification, retrieval versus
+  analysis chunk profiles, and model-assisted fallback remain later phases.
+  Rich `.xls`/`.xlsb` adapters are also not part of this phase.
 
 ## [2026-08-04]
 

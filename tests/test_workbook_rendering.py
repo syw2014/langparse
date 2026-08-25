@@ -152,7 +152,8 @@ def test_renderer_emits_every_mixed_block_and_keeps_full_compatibility_grid():
     markdown = render_workbook_markdown(snapshot, ir)
     pages = compatibility_pages(snapshot, ir)
 
-    assert markdown.index("### Form: 项目登记") < markdown.index("### Table: Name")
+    assert markdown.index("### Form: 项目登记") < markdown.index("| Name | Value |")
+    assert "### Table: Name" not in markdown
     assert "| Field | Value |" in markdown
     assert "| 项目名称 | 道路工程 |" in markdown
     assert pages[0].metadata["source_range"] == "A1:B8"

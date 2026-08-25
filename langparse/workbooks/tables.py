@@ -44,8 +44,8 @@ def interpret_logical_table(
         min_col,
         max_col,
     )
-    title_row = fragments[0].title_row_numbers[0] if fragments[0].title_row_numbers else min_row
-    title = _first_text(sheet, title_row, min_col, max_col)
+    title_rows = fragments[0].title_row_numbers if fragments else []
+    title = _first_text(sheet, title_rows[0], min_col, max_col) if title_rows else ""
     context = [
         text
         for row_number in fragments[0].context_row_numbers

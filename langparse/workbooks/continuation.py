@@ -109,6 +109,7 @@ def link_table_continuations(
             diagnostics.append(_candidate_diagnostic(candidate, status, extra_reason_codes))
 
     groups = []
+    pending_assignments: list[tuple[LogicalTable, str, str]] = []
     for member_table_ids, chain_edges in _continuation_chains(accepted_edges, table_order):
         member_tables = [tables_by_id[table_id] for table_id in member_table_ids]
         continuation_id = stable_id("continuation", snapshot.source, *member_table_ids)
@@ -119,9 +120,14 @@ def link_table_continuations(
             chain_edges,
             reason_codes,
         )
-        for index, member_table in enumerate(member_tables):
-            member_table.continuation_id = continuation_id
-            member_table.continuation_role = _continuation_role(index, len(member_tables))
+        pending_assignments.extend(
+            (
+                member_table,
+                continuation_id,
+                _continuation_role(index, len(member_tables)),
+            )
+            for index, member_table in enumerate(member_tables)
+        )
         groups.append(
             TableContinuation(
                 continuation_id=continuation_id,
@@ -132,6 +138,9 @@ def link_table_continuations(
                 reason_codes=reason_codes,
             )
         )
+    for member_table, continuation_id, continuation_role in pending_assignments:
+        member_table.continuation_id = continuation_id
+        member_table.continuation_role = continuation_role
     return groups, diagnostics
 
 

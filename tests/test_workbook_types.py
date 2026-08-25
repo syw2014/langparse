@@ -111,6 +111,36 @@ def test_continuation_types_have_backward_compatible_defaults():
     assert diagnostics.continuation_candidates == []
 
 
+def test_parse_diagnostics_preserves_pre_continuation_positional_bindings():
+    # Break caught: adding continuation diagnostics must not shift existing positional fields.
+    diagnostics = ParseDiagnostics(
+        "partial",
+        0.25,
+        False,
+        0.5,
+        {"logical_table": 2},
+        [{"region": "ambiguous"}],
+        [{"provider": "model"}],
+        ["macros"],
+        ["warning"],
+        ["error"],
+        {"assembly": 1.5},
+    )
+
+    assert diagnostics.status == "partial"
+    assert diagnostics.coverage_ratio == 0.25
+    assert diagnostics.reconstruction_passed is False
+    assert diagnostics.source_ref_validity_ratio == 0.5
+    assert diagnostics.block_count_by_kind == {"logical_table": 2}
+    assert diagnostics.ambiguous_regions == [{"region": "ambiguous"}]
+    assert diagnostics.model_calls == [{"provider": "model"}]
+    assert diagnostics.unsupported_features == ["macros"]
+    assert diagnostics.warnings == ["warning"]
+    assert diagnostics.errors == ["error"]
+    assert diagnostics.timings_by_stage == {"assembly": 1.5}
+    assert diagnostics.continuation_candidates == []
+
+
 def test_table_continuation_serializes_aggregate_table():
     continuation = TableContinuation(
         continuation_id="continuation_1",

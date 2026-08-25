@@ -28,7 +28,7 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
 - 新增公开端到端续接覆盖和只读 15-Sheet 私有工作簿回归：14 个
   LogicalTable + 1 个 TextBlock、零 accepted 续接、质量比率
   `1.0` / `true` / `1.0`，以及 39 个无重复 chunks 与精确的 data/total `row_id` 守恒。
-  完整测试套件为 331 个测试全部通过。
+  完整测试套件为 336 个测试全部通过。
 
 ### 变更（Changed）
 - Excel 结果改为非分页。Sheet 序号仅作为兼容标识，不再注入虚构页码标记。

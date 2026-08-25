@@ -33,7 +33,7 @@ version sections.
 - Public end-to-end continuation coverage plus a read-only 15-Sheet private
   workbook regression: 14 LogicalTable + 1 TextBlock, zero accepted
   continuations, quality ratios `1.0` / `true` / `1.0`, and 39 unique chunks
-  with exact data/total `row_id` conservation. The full suite passes 331 tests.
+  with exact data/total `row_id` conservation. The full suite passes 336 tests.
 
 ### Changed
 - Excel results are non-paginated. Sheet ordinals remain available as

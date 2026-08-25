@@ -1,3 +1,4 @@
+import langparse.workbooks.continuation as continuation_module
 from langparse.workbooks.assembly import assemble_workbook, validate_workbook_source_refs
 from langparse.workbooks.types import (
     CellSnapshot,
@@ -49,6 +50,63 @@ def _continuation_snapshot() -> WorkbookSnapshot:
                         display_value=str(value),
                     )
                     for coordinate, value in values.items()
+                },
+            )
+        )
+    return WorkbookSnapshot(source="book.xlsx", filename="book.xlsx", sheets=sheets)
+
+
+def _untitled_sequence_snapshot() -> WorkbookSnapshot:
+    sheets = []
+    for index, item in enumerate(("Alpha", "Beta"), start=1):
+        values = {"A1": "Name", "B1": "Value", "A2": item, "B2": index}
+        sheets.append(
+            SheetSnapshot(
+                name=f"Data{index}",
+                index=index - 1,
+                used_range="A1:B2",
+                cells={
+                    coordinate: CellSnapshot(
+                        coordinate=coordinate,
+                        raw_value=value,
+                        display_value=str(value),
+                    )
+                    for coordinate, value in values.items()
+                },
+            )
+        )
+    return WorkbookSnapshot(source="book.xlsx", filename="book.xlsx", sheets=sheets)
+
+
+def _two_group_continuation_snapshot() -> WorkbookSnapshot:
+    sheets = []
+    specs = (
+        ("Alpha1", "Alpha table", 1, "Name", "Value", "A"),
+        ("Alpha2", "Alpha table", 2, "Name", "Value", "B"),
+        ("Beta1", "Beta table", 1, "Code", "Amount", "C"),
+        ("Beta2", "Beta table", 2, "Code", "Amount", "D"),
+    )
+    for index, (name, title, page, first_header, second_header, value) in enumerate(specs):
+        values = {
+            "A1": title,
+            "A2": f"第 {page} 页 共 2 页",
+            "A3": first_header,
+            "B3": second_header,
+            "A4": page,
+            "B4": value,
+        }
+        sheets.append(
+            SheetSnapshot(
+                name=name,
+                index=index,
+                used_range="A1:B4",
+                cells={
+                    coordinate: CellSnapshot(
+                        coordinate=coordinate,
+                        raw_value=cell_value,
+                        display_value=str(cell_value),
+                    )
+                    for coordinate, cell_value in values.items()
                 },
             )
         )
@@ -115,6 +173,30 @@ def test_assembly_links_cross_sheet_table_continuations():
     assert diagnostics.source_ref_validity_ratio == 1.0
 
 
+def test_assembly_keeps_untitled_sequential_tables_ambiguous_and_successful():
+    # Break caught: a generic header must not auto-link by masquerading as title evidence.
+    ir, diagnostics = assemble_workbook(_untitled_sequence_snapshot())
+
+    assert ir.table_continuations == []
+    assert diagnostics.continuation_candidates == [
+        {
+            "left_table_id": ir.sheets[0].blocks[0].logical_table.table_id,
+            "right_table_id": ir.sheets[1].blocks[0].logical_table.table_id,
+            "left_sheet": "Data1",
+            "right_sheet": "Data2",
+            "confidence": 0.6,
+            "status": "ambiguous",
+            "reason_codes": [
+                "header_fingerprint_match",
+                "sheet_name_sequence",
+                "below_auto_accept_threshold",
+            ],
+        }
+    ]
+    assert diagnostics.status == "success"
+    assert diagnostics.warnings == ["Workbook contains 1 ambiguous continuation candidates"]
+
+
 def test_assembly_preserves_sheet_blocks_when_continuation_linking_fails(monkeypatch):
     def raise_runtime_error(*_args, **_kwargs):
         raise RuntimeError
@@ -131,6 +213,46 @@ def test_assembly_preserves_sheet_blocks_when_continuation_linking_fails(monkeyp
         ["logical_table"],
     ]
     assert ir.table_continuations == []
+    assert diagnostics.status == "success"
+    assert diagnostics.warnings == ["cross_sheet_continuation_fallback:RuntimeError"]
+
+
+def test_assembly_rolls_back_all_member_assignments_when_a_late_group_build_fails(monkeypatch):
+    # Break caught: an earlier group must not retain dangling member tags after local fallback.
+    aggregate_table = continuation_module._aggregate_table
+    calls = 0
+
+    def fail_second_group(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("second group failed")
+        return aggregate_table(*args, **kwargs)
+
+    monkeypatch.setattr(continuation_module, "_aggregate_table", fail_second_group)
+
+    ir, diagnostics = assemble_workbook(_two_group_continuation_snapshot())
+
+    member_tables = [
+        block.logical_table
+        for sheet in ir.sheets
+        for block in sheet.blocks
+        if block.logical_table is not None
+    ]
+    assert calls == 2
+    assert [[block.kind for block in sheet.blocks] for sheet in ir.sheets] == [
+        ["logical_table"],
+        ["logical_table"],
+        ["logical_table"],
+        ["logical_table"],
+    ]
+    assert ir.table_continuations == []
+    assert [(table.continuation_id, table.continuation_role) for table in member_tables] == [
+        (None, None),
+        (None, None),
+        (None, None),
+        (None, None),
+    ]
     assert diagnostics.status == "success"
     assert diagnostics.warnings == ["cross_sheet_continuation_fallback:RuntimeError"]
 

@@ -1,5 +1,8 @@
 from langparse.workbooks.continuation import link_table_continuations, score_continuation
+from langparse.workbooks.tables import interpret_logical_table
 from langparse.workbooks.types import (
+    CandidateRegion,
+    CellSnapshot,
     HeaderColumn,
     LogicalRow,
     LogicalTable,
@@ -168,6 +171,38 @@ def test_score_recognizes_sequential_sheet_names():
 
     candidate = score_continuation(left_sheet, left, right_sheet, right)
 
+    assert candidate is not None
+    assert candidate.confidence == 0.6
+    assert candidate.reason_codes == ("header_fingerprint_match", "sheet_name_sequence")
+
+
+def test_score_does_not_double_count_an_untitled_header_as_title_evidence():
+    # Break caught: identical generic headers plus sequential names must stay at 0.60.
+    interpreted = []
+    for index, item in enumerate(("Alpha", "Beta"), start=1):
+        sheet = SheetSnapshot(name=f"Data{index}", index=index - 1, used_range="A1:B2")
+        for coordinate, value in {
+            "A1": "Name",
+            "B1": "Value",
+            "A2": item,
+            "B2": index,
+        }.items():
+            sheet.cells[coordinate] = CellSnapshot(
+                coordinate=coordinate,
+                raw_value=value,
+                display_value=str(value),
+            )
+        candidate = CandidateRegion(
+            source_ref=SourceRef(sheet_name=sheet.name, range="A1:B2"),
+            cell_refs=list(sheet.cells),
+        )
+        interpreted.append((sheet, interpret_logical_table(sheet, candidate)))
+
+    left_sheet, left_table = interpreted[0]
+    right_sheet, right_table = interpreted[1]
+    candidate = score_continuation(left_sheet, left_table, right_sheet, right_table)
+
+    assert [left_table.title, right_table.title] == ["", ""]
     assert candidate is not None
     assert candidate.confidence == 0.6
     assert candidate.reason_codes == ("header_fingerprint_match", "sheet_name_sequence")

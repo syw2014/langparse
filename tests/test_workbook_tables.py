@@ -87,6 +87,7 @@ def test_detects_repeated_print_fragments():
     assert [fragment.page_number for fragment in table.fragments] == [1, 2]
     assert [fragment.source_ref.range for fragment in table.fragments] == ["A1:L6", "A7:L12"]
     assert table.fragments[1].header_row_numbers == [9, 10]
+    assert table.title == "表1-2 清单"
 
 
 def test_preserves_single_print_marker_for_cross_sheet_evidence():
@@ -109,6 +110,24 @@ def test_preserves_single_print_marker_for_cross_sheet_evidence():
     assert table.fragments[0].context_row_numbers == [2]
     assert table.fragments[0].header_row_numbers == [3]
     assert [column.path for column in table.columns] == [["Name"], ["Value"]]
+    assert table.title == "工程清单"
+
+
+def test_requires_explicit_title_ownership_before_exposing_table_title():
+    # Break caught: a generic header row must not also become continuation title evidence.
+    sheet = SheetSnapshot(name="Data1", index=0, used_range="A1:B2")
+    _put_row(sheet, 1, ["Name", "Value"])
+    _put_row(sheet, 2, ["Alpha", 1])
+    candidate = CandidateRegion(
+        source_ref=SourceRef(sheet_name=sheet.name, range="A1:B2"),
+        cell_refs=list(sheet.cells),
+    )
+
+    table = interpret_logical_table(sheet, candidate)
+
+    assert table.fragments[0].title_row_numbers == []
+    assert [row.role for row in table.rows] == ["header", "data"]
+    assert table.title == ""
 
 
 def test_builds_multi_row_header_paths_from_merges():

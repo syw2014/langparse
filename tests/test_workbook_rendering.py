@@ -120,3 +120,72 @@ def test_semantic_renderer_deduplicates_print_fragments_and_preserves_snapshot()
     assert "合计" in markdown
     assert ir.snapshot is snapshot
     assert ir.snapshot.sheets[0].cells["A6"].display_value == "清单"
+
+
+def test_renderer_emits_every_mixed_block_and_keeps_full_compatibility_grid():
+    sheet = SheetSnapshot(name="Mixed", index=0, used_range="A1:B8")
+
+    def put(coordinate: str, value: object) -> None:
+        sheet.cells[coordinate] = CellSnapshot(
+            coordinate=coordinate,
+            raw_value=value,
+            display_value=str(value),
+        )
+
+    for coordinate, value in {
+        "A1": "项目登记",
+        "A2": "项目名称",
+        "B2": "道路工程",
+        "A3": "建设单位",
+        "B3": "示例公司",
+        "A6": "Name",
+        "B6": "Value",
+        "A7": "Alpha",
+        "B7": 1,
+        "A8": "Beta",
+        "B8": 2,
+    }.items():
+        put(coordinate, value)
+    snapshot = WorkbookSnapshot(source="book.xlsx", filename="book.xlsx", sheets=[sheet])
+    ir, _ = assemble_workbook(snapshot)
+
+    markdown = render_workbook_markdown(snapshot, ir)
+    pages = compatibility_pages(snapshot, ir)
+
+    assert markdown.index("### Form: 项目登记") < markdown.index("### Table: Name")
+    assert "| Field | Value |" in markdown
+    assert "| 项目名称 | 道路工程 |" in markdown
+    assert pages[0].metadata["source_range"] == "A1:B8"
+    assert pages[0].tables[0]["source_range"] == "A1:B8"
+    assert len(pages[0].tables[0]["rows"]) == 9
+
+
+def test_renderer_preserves_matrix_axes_and_text_line_order():
+    matrix_sheet = SheetSnapshot(name="Matrix", index=0, used_range="A1:C3")
+    for row_number, values in enumerate(
+        [["指标", "1月", "2月"], ["收入", 10, 12], ["成本", 3, 4]], start=1
+    ):
+        for column_number, value in enumerate(values, start=1):
+            coordinate = f"{get_column_letter(column_number)}{row_number}"
+            matrix_sheet.cells[coordinate] = CellSnapshot(
+                coordinate=coordinate,
+                raw_value=value,
+                display_value=str(value),
+            )
+    text_sheet = SheetSnapshot(name="Notes", index=1, used_range="A1:A2")
+    text_sheet.cells = {
+        "A1": CellSnapshot(coordinate="A1", raw_value="第一行", display_value="第一行"),
+        "A2": CellSnapshot(coordinate="A2", raw_value="第二行", display_value="第二行"),
+    }
+    snapshot = WorkbookSnapshot(
+        source="book.xlsx", filename="book.xlsx", sheets=[matrix_sheet, text_sheet]
+    )
+    ir, _ = assemble_workbook(snapshot)
+
+    markdown = render_workbook_markdown(snapshot, ir)
+
+    assert "### Matrix: 指标" in markdown
+    assert "|  | 1月 | 2月 |" in markdown
+    assert "| 收入 | 10 | 12 |" in markdown
+    assert markdown.index("第一行") < markdown.index("第二行")
+    assert "Unnamed:" not in markdown

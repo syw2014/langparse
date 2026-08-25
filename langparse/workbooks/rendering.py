@@ -4,10 +4,14 @@ from openpyxl.utils import get_column_letter, range_boundaries
 
 from langparse.types import ParsedElement, ParsedPageResult
 from langparse.workbooks.types import (
+    FormBlock,
     LogicalRow,
     LogicalTable,
+    MatrixBlock,
     SheetIR,
     SheetSnapshot,
+    TextBlock,
+    WorkbookBlock,
     WorkbookIR,
     WorkbookSnapshot,
 )
@@ -77,17 +81,27 @@ def _render_sheet_markdown(sheet: SheetSnapshot, sheet_ir: SheetIR | None) -> st
     source_range = _source_range(sheet, sheet_ir)
     if source_range is None:
         return f"{heading}\n\n_Empty sheet._"
-    logical_tables = [
-        block.logical_table
-        for block in (sheet_ir.blocks if sheet_ir is not None else [])
-        if block.logical_table is not None
-    ]
-    if logical_tables:
-        rendered = [_render_logical_table(table) for table in logical_tables]
+    if sheet_ir is not None and sheet_ir.blocks:
+        rendered = [_render_block(sheet, block) for block in sheet_ir.blocks]
         return "\n\n".join([heading, *rendered])
     columns, _, data_rows = _sheet_grid(sheet, source_range)
     source_comment = f"<!-- source_range: {sheet.name}!{source_range} -->"
     return f"{heading}\n\n{source_comment}\n\n{_render_grid(columns, data_rows)}"
+
+
+def _render_block(sheet: SheetSnapshot, block: WorkbookBlock) -> str:
+    if block.logical_table is not None:
+        return _render_logical_table(block.logical_table)
+    if block.form is not None:
+        return _render_form(block.form)
+    if block.matrix is not None:
+        return _render_matrix(block.matrix)
+    if block.text is not None:
+        return _render_text(block.text)
+    source_range = block.source_refs[0].range
+    columns, _, rows = _sheet_grid(sheet, source_range)
+    source_comment = f"<!-- source_range: {sheet.name}!{source_range} -->"
+    return f"{source_comment}\n\n{_render_grid(columns, rows)}"
 
 
 def _render_logical_table(table: LogicalTable) -> str:
@@ -110,6 +124,40 @@ def _render_logical_table(table: LogicalTable) -> str:
     return "\n\n".join(parts)
 
 
+def _render_form(form: FormBlock) -> str:
+    source_ranges = ", ".join(source_ref.key for source_ref in form.source_refs)
+    parts = [f"<!-- source_ranges: {source_ranges} -->"]
+    if form.title:
+        parts.append(f"### Form: {form.title}")
+    if form.fields:
+        parts.append(
+            _render_grid(["Field", "Value"], [[field.label, field.value] for field in form.fields])
+        )
+    parts.extend(line.text for line in form.free_text)
+    return "\n\n".join(parts)
+
+
+def _render_matrix(matrix: MatrixBlock) -> str:
+    source_ranges = ", ".join(source_ref.key for source_ref in matrix.source_refs)
+    parts = [f"<!-- source_ranges: {source_ranges} -->"]
+    if matrix.title:
+        parts.append(f"### Matrix: {matrix.title}")
+    columns = ["", *[header.value for header in matrix.column_headers]]
+    rows = [
+        [header.value, *values]
+        for header, values in zip(matrix.row_headers, matrix.values, strict=True)
+    ]
+    parts.append(_render_grid(columns, rows))
+    return "\n\n".join(parts)
+
+
+def _render_text(text: TextBlock) -> str:
+    source_ranges = ", ".join(source_ref.key for source_ref in text.source_refs)
+    return "\n\n".join(
+        [f"<!-- source_ranges: {source_ranges} -->", *[line.text for line in text.lines]]
+    )
+
+
 def _group_rows_by_section(rows: list[LogicalRow]) -> list[tuple[list[str], list[LogicalRow]]]:
     groups: list[tuple[list[str], list[LogicalRow]]] = []
     for row in rows:
@@ -120,9 +168,11 @@ def _group_rows_by_section(rows: list[LogicalRow]) -> list[tuple[list[str], list
 
 
 def _source_range(sheet: SheetSnapshot, sheet_ir: SheetIR | None) -> str | None:
+    if sheet.used_range is not None:
+        return sheet.used_range
     if sheet_ir is not None and sheet_ir.blocks and sheet_ir.blocks[0].source_refs:
         return sheet_ir.blocks[0].source_refs[0].range
-    return sheet.used_range
+    return None
 
 
 def _sheet_grid(

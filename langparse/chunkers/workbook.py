@@ -2,11 +2,22 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from openpyxl.utils import range_boundaries
+from openpyxl.utils import get_column_letter, range_boundaries
 
 from langparse.core.rendering import document_metadata
 from langparse.types import Chunk, ParsedDocumentResult
-from langparse.workbooks.types import LogicalRow, LogicalTable, WorkbookIR
+from langparse.workbooks.types import (
+    FormBlock,
+    FormField,
+    LogicalRow,
+    LogicalTable,
+    MatrixBlock,
+    MatrixHeader,
+    TextBlock,
+    TextLine,
+    WorkbookBlock,
+    WorkbookIR,
+)
 
 
 class WorkbookStructuralChunker:
@@ -31,19 +42,14 @@ class WorkbookStructuralChunker:
         for page in parsed.pages:
             sheet_name = page.metadata.get("sheet_name")
             sheet_ir = ir_sheets.get(page.page_number - 1)
-            logical_blocks = [
-                block
-                for block in (sheet_ir.blocks if sheet_ir is not None else [])
-                if block.logical_table is not None
-            ]
-            if logical_blocks:
-                for block in logical_blocks:
+            if sheet_ir is not None and sheet_ir.blocks:
+                for block in sheet_ir.blocks:
                     chunks.extend(
-                        self._chunk_logical_table(
+                        self._chunk_block(
                             parsed,
                             str(sheet_name),
                             page.page_number,
-                            block.logical_table,
+                            block,
                             len(chunks),
                         )
                     )
@@ -73,6 +79,51 @@ class WorkbookStructuralChunker:
                     )
                 )
         return chunks
+
+    def _chunk_block(
+        self,
+        parsed: ParsedDocumentResult,
+        sheet_name: str,
+        sheet_ordinal: int,
+        block: WorkbookBlock,
+        chunk_index_offset: int,
+    ) -> list[Chunk]:
+        if block.logical_table is not None:
+            return self._chunk_logical_table(
+                parsed,
+                sheet_name,
+                sheet_ordinal,
+                block.logical_table,
+                chunk_index_offset,
+            )
+        if block.form is not None:
+            return self._chunk_form(
+                parsed, sheet_name, sheet_ordinal, block.form, chunk_index_offset
+            )
+        if block.matrix is not None:
+            return self._chunk_matrix(
+                parsed, sheet_name, sheet_ordinal, block.matrix, chunk_index_offset
+            )
+        if block.text is not None:
+            return self._chunk_text(
+                parsed, sheet_name, sheet_ordinal, block.text, chunk_index_offset
+            )
+        source_range = block.source_refs[0].range
+        columns, rows, row_numbers = _raw_block_grid(
+            parsed.structure,
+            sheet_ordinal,
+            source_range,
+        )
+        return self._pack_table(
+            parsed=parsed,
+            sheet_name=sheet_name,
+            sheet_ordinal=sheet_ordinal,
+            columns=columns,
+            rows=rows,
+            row_numbers=row_numbers,
+            confidence=block.confidence,
+            chunk_index_offset=chunk_index_offset,
+        )
 
     def _chunk_logical_table(
         self,
@@ -128,6 +179,147 @@ class WorkbookStructuralChunker:
                         self.length_function,
                     )
                 )
+        return chunks
+
+    def _chunk_form(
+        self,
+        parsed: ParsedDocumentResult,
+        sheet_name: str,
+        sheet_ordinal: int,
+        form: FormBlock,
+        chunk_index_offset: int,
+    ) -> list[Chunk]:
+        chunks: list[Chunk] = []
+        pending: list[FormField] = []
+
+        def emit(*, oversized: bool = False) -> None:
+            if not pending:
+                return
+            chunks.append(
+                _form_chunk(
+                    parsed,
+                    form,
+                    sheet_name,
+                    sheet_ordinal,
+                    pending,
+                    [],
+                    chunk_index_offset + len(chunks),
+                    oversized,
+                )
+            )
+            pending.clear()
+
+        for field in form.fields:
+            candidate = [*pending, field]
+            content = _render_form_chunk(form.title, candidate, [])
+            if pending and self.length_function(content) > self.max_chunk_size:
+                emit()
+                candidate = [field]
+                content = _render_form_chunk(form.title, candidate, [])
+            pending.append(field)
+            if self.length_function(content) > self.max_chunk_size:
+                emit(oversized=True)
+        emit()
+        if form.free_text:
+            content = _render_form_chunk(form.title, [], form.free_text)
+            chunks.append(
+                _form_chunk(
+                    parsed,
+                    form,
+                    sheet_name,
+                    sheet_ordinal,
+                    [],
+                    form.free_text,
+                    chunk_index_offset + len(chunks),
+                    self.length_function(content) > self.max_chunk_size,
+                )
+            )
+        return chunks
+
+    def _chunk_matrix(
+        self,
+        parsed: ParsedDocumentResult,
+        sheet_name: str,
+        sheet_ordinal: int,
+        matrix: MatrixBlock,
+        chunk_index_offset: int,
+    ) -> list[Chunk]:
+        chunks: list[Chunk] = []
+        pending: list[tuple[MatrixHeader, list[str], list]] = []
+
+        def emit(*, oversized: bool = False) -> None:
+            if not pending:
+                return
+            chunks.append(
+                _matrix_chunk(
+                    parsed,
+                    matrix,
+                    sheet_name,
+                    sheet_ordinal,
+                    pending,
+                    chunk_index_offset + len(chunks),
+                    oversized,
+                )
+            )
+            pending.clear()
+
+        rows = zip(
+            matrix.row_headers,
+            matrix.values,
+            matrix.value_source_refs,
+            strict=True,
+        )
+        for header, values, refs in rows:
+            candidate = [*pending, (header, values, refs)]
+            content = _render_matrix_chunk(matrix, candidate)
+            if pending and self.length_function(content) > self.max_chunk_size:
+                emit()
+                candidate = [(header, values, refs)]
+                content = _render_matrix_chunk(matrix, candidate)
+            pending.append((header, values, refs))
+            if self.length_function(content) > self.max_chunk_size:
+                emit(oversized=True)
+        emit()
+        return chunks
+
+    def _chunk_text(
+        self,
+        parsed: ParsedDocumentResult,
+        sheet_name: str,
+        sheet_ordinal: int,
+        text: TextBlock,
+        chunk_index_offset: int,
+    ) -> list[Chunk]:
+        chunks: list[Chunk] = []
+        pending: list[TextLine] = []
+
+        def emit(*, oversized: bool = False) -> None:
+            if not pending:
+                return
+            chunks.append(
+                _text_chunk(
+                    parsed,
+                    text,
+                    sheet_name,
+                    sheet_ordinal,
+                    pending,
+                    chunk_index_offset + len(chunks),
+                    oversized,
+                )
+            )
+            pending.clear()
+
+        for line in text.lines:
+            candidate = [*pending, line]
+            content = "\n".join(item.text for item in candidate)
+            if pending and self.length_function(content) > self.max_chunk_size:
+                emit()
+                candidate = [line]
+                content = line.text
+            pending.append(line)
+            if self.length_function(content) > self.max_chunk_size:
+                emit(oversized=True)
+        emit()
         return chunks
 
     def _pack_table(
@@ -231,10 +423,179 @@ def _render_chunk(
 
 def _markdown_row(row: list[str]) -> str:
     escaped = [
-        value.replace("\r\n", "\n").replace("\r", "\n").replace("|", r"\|").replace("\n", "<br>")
+        str(value)
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("|", r"\|")
+        .replace("\n", "<br>")
         for value in row
     ]
     return "| " + " | ".join(escaped) + " |"
+
+
+def _render_form_chunk(
+    title: str,
+    fields: list[FormField],
+    lines: list[TextLine],
+) -> str:
+    parts = [f"### Form: {title}"] if title else []
+    if fields:
+        parts.append(
+            "\n".join(
+                [
+                    _markdown_row(["Field", "Value"]),
+                    "| --- | --- |",
+                    *[_markdown_row([field.label, field.value]) for field in fields],
+                ]
+            )
+        )
+    parts.extend(line.text for line in lines)
+    return "\n\n".join(parts)
+
+
+def _form_chunk(
+    parsed: ParsedDocumentResult,
+    form: FormBlock,
+    sheet_name: str,
+    sheet_ordinal: int,
+    fields: list[FormField],
+    lines: list[TextLine],
+    chunk_index: int,
+    oversized: bool,
+) -> Chunk:
+    metadata = document_metadata(parsed)
+    source_ranges = [
+        ref.key for field in fields for ref in [*field.label_source_refs, *field.value_source_refs]
+    ]
+    source_ranges.extend(ref.key for line in lines for ref in line.source_refs)
+    metadata.update(
+        {
+            "chunk_type": "form_fields",
+            "chunk_index": chunk_index,
+            "sheet_name": sheet_name,
+            "sheet_ordinal": sheet_ordinal,
+            "form_id": form.form_id,
+            "field_ids": [field.field_id for field in fields],
+            "source_ranges": source_ranges,
+            "confidence": min([form.confidence, *[field.confidence for field in fields]]),
+            "warnings": list(parsed.diagnostics.warnings) if parsed.diagnostics is not None else [],
+        }
+    )
+    if oversized:
+        metadata["oversized"] = True
+    return Chunk(
+        content=_render_form_chunk(form.title, fields, lines),
+        metadata=metadata,
+        structured_payload={
+            "fields": [[field.label, field.value] for field in fields],
+            "free_text": [line.text for line in lines],
+        },
+    )
+
+
+def _render_matrix_chunk(matrix: MatrixBlock, rows: list[tuple]) -> str:
+    parts = [f"### Matrix: {matrix.title}"] if matrix.title else []
+    columns = ["", *[header.value for header in matrix.column_headers]]
+    table_lines = [
+        _markdown_row(columns),
+        "| " + " | ".join("---" for _ in columns) + " |",
+        *[_markdown_row([header.value, *values]) for header, values, _ in rows],
+    ]
+    parts.append("\n".join(table_lines))
+    return "\n\n".join(parts)
+
+
+def _matrix_chunk(
+    parsed: ParsedDocumentResult,
+    matrix: MatrixBlock,
+    sheet_name: str,
+    sheet_ordinal: int,
+    rows: list[tuple],
+    chunk_index: int,
+    oversized: bool,
+) -> Chunk:
+    metadata = document_metadata(parsed)
+    source_ranges = []
+    for header, _, refs in rows:
+        source_ranges.extend(ref.key for ref in header.source_refs)
+        source_ranges.extend(ref.key for ref in refs if ref is not None)
+    metadata.update(
+        {
+            "chunk_type": "matrix_rows",
+            "chunk_index": chunk_index,
+            "sheet_name": sheet_name,
+            "sheet_ordinal": sheet_ordinal,
+            "matrix_id": matrix.matrix_id,
+            "row_headers": [header.value for header, _, _ in rows],
+            "source_ranges": source_ranges,
+            "confidence": matrix.confidence,
+            "warnings": list(parsed.diagnostics.warnings) if parsed.diagnostics is not None else [],
+        }
+    )
+    if oversized:
+        metadata["oversized"] = True
+    return Chunk(
+        content=_render_matrix_chunk(matrix, rows),
+        metadata=metadata,
+        structured_payload={
+            "column_headers": [header.value for header in matrix.column_headers],
+            "row_headers": [header.value for header, _, _ in rows],
+            "values": [list(values) for _, values, _ in rows],
+        },
+    )
+
+
+def _text_chunk(
+    parsed: ParsedDocumentResult,
+    text: TextBlock,
+    sheet_name: str,
+    sheet_ordinal: int,
+    lines: list[TextLine],
+    chunk_index: int,
+    oversized: bool,
+) -> Chunk:
+    metadata = document_metadata(parsed)
+    metadata.update(
+        {
+            "chunk_type": "text_block",
+            "chunk_index": chunk_index,
+            "sheet_name": sheet_name,
+            "sheet_ordinal": sheet_ordinal,
+            "text_id": text.text_id,
+            "source_ranges": [ref.key for line in lines for ref in line.source_refs],
+            "confidence": text.confidence,
+            "warnings": list(parsed.diagnostics.warnings) if parsed.diagnostics is not None else [],
+        }
+    )
+    if oversized:
+        metadata["oversized"] = True
+    return Chunk(
+        content="\n".join(line.text for line in lines),
+        metadata=metadata,
+        structured_payload={"lines": [line.text for line in lines]},
+    )
+
+
+def _raw_block_grid(
+    workbook_ir: WorkbookIR,
+    sheet_ordinal: int,
+    source_range: str,
+) -> tuple[list[str], list[list[str]], list[int]]:
+    if workbook_ir.snapshot is None:
+        raise ValueError("WorkbookIR snapshot is required for raw block chunks")
+    sheet = workbook_ir.snapshot.sheets[sheet_ordinal - 1]
+    min_col, min_row, max_col, max_row = range_boundaries(source_range)
+    columns = [get_column_letter(column) for column in range(min_col, max_col + 1)]
+    row_numbers = list(range(min_row, max_row + 1))
+    rows = []
+    for row_number in row_numbers:
+        row = []
+        for column in range(min_col, max_col + 1):
+            coordinate = f"{get_column_letter(column)}{row_number}"
+            cell = sheet.cells.get(coordinate)
+            row.append("" if cell is None or cell.merge_anchor is not None else cell.display_value)
+        rows.append(row)
+    return columns, rows, row_numbers
 
 
 def _render_logical_chunk(

@@ -96,4 +96,3 @@ class WorkbookIR(ParsedStructure):
     sheets: list[SheetIR] = field(default_factory=list)
     filename: str = ""
     metadata: StructuredData = field(default_factory=dict)
-

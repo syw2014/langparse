@@ -180,6 +180,8 @@ def test_private_budget_workbook_sheet_8_acceptance():
         if chunk.metadata["chunk_type"] == "table_rows"
         for row_id in chunk.metadata["row_ids"]
     ]
+    assert len(logical_row_ids) == 228
+    assert len(chunk_row_ids) == 228
     assert len(logical_row_ids) == len(set(logical_row_ids))
     assert len(chunk_row_ids) == len(set(chunk_row_ids))
     assert len(chunk_row_ids) == len(logical_row_ids)

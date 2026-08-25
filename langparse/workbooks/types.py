@@ -69,6 +69,74 @@ class WorkbookSnapshot:
 
 
 @dataclass
+class CandidateRegion:
+    source_ref: SourceRef
+    cell_refs: list[str] = field(default_factory=list)
+    kind: str = "unknown"
+    confidence: float = 1.0
+    features: StructuredData = field(default_factory=dict)
+    diagnostics: list[StructuredData] = field(default_factory=list)
+
+
+@dataclass
+class HeaderColumn:
+    column_id: str
+    coordinate: str
+    path: list[str] = field(default_factory=list)
+    source_refs: list[SourceRef] = field(default_factory=list)
+    inferred_type: str = "unknown"
+    unit: str | None = None
+
+
+@dataclass
+class LogicalRow:
+    row_id: str
+    source_ref: SourceRef
+    role: str
+    values: list[Any] = field(default_factory=list)
+    source_cells: list[str] = field(default_factory=list)
+    section_path: list[str] = field(default_factory=list)
+    confidence: float = 1.0
+    metadata: StructuredData = field(default_factory=dict)
+
+
+@dataclass
+class TableFragment:
+    fragment_id: str
+    source_ref: SourceRef
+    page_number: int | None = None
+    total_pages: int | None = None
+    title_row_numbers: list[int] = field(default_factory=list)
+    context_row_numbers: list[int] = field(default_factory=list)
+    header_row_numbers: list[int] = field(default_factory=list)
+    confidence: float = 1.0
+    diagnostics: list[StructuredData] = field(default_factory=list)
+
+
+@dataclass
+class TableSection:
+    section_id: str
+    title: str
+    source_ref: SourceRef
+    row_ids: list[str] = field(default_factory=list)
+    parent_path: list[str] = field(default_factory=list)
+
+
+@dataclass
+class LogicalTable:
+    table_id: str
+    title: str = ""
+    context: list[str] = field(default_factory=list)
+    columns: list[HeaderColumn] = field(default_factory=list)
+    rows: list[LogicalRow] = field(default_factory=list)
+    fragments: list[TableFragment] = field(default_factory=list)
+    sections: list[TableSection] = field(default_factory=list)
+    source_refs: list[SourceRef] = field(default_factory=list)
+    confidence: float = 1.0
+    diagnostics: list[StructuredData] = field(default_factory=list)
+
+
+@dataclass
 class WorkbookBlock:
     block_id: str
     kind: str
@@ -77,6 +145,7 @@ class WorkbookBlock:
     confidence: float = 1.0
     metadata: StructuredData = field(default_factory=dict)
     diagnostics: list[StructuredData] = field(default_factory=list)
+    logical_table: LogicalTable | None = None
 
 
 @dataclass

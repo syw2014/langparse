@@ -1,9 +1,13 @@
 from langparse.types import ParsedStructure
 from langparse.workbooks.types import (
     CellSnapshot,
+    HeaderColumn,
+    LogicalRow,
+    LogicalTable,
     SheetIR,
     SheetSnapshot,
     SourceRef,
+    TableFragment,
     WorkbookBlock,
     WorkbookIR,
     WorkbookSnapshot,
@@ -40,3 +44,32 @@ def test_workbook_ir_is_a_parsed_structure():
     assert isinstance(ir, ParsedStructure)
     assert ir.kind == "workbook"
     assert ir.sheets[0].blocks[0].source_refs[0].key == "Data!A1:B2"
+
+
+def test_logical_table_types_preserve_semantics_and_sources():
+    header = HeaderColumn(column_id="col_a", coordinate="A", path=["其中", "人工费"])
+    row = LogicalRow(
+        row_id="row_1",
+        source_ref=SourceRef(sheet_name="Data", range="A5:L5"),
+        role="data",
+    )
+    fragment = TableFragment(
+        fragment_id="frag_1",
+        source_ref=SourceRef(sheet_name="Data", range="A1:L10"),
+    )
+    table = LogicalTable(
+        table_id="table_1",
+        title="清单",
+        columns=[header],
+        rows=[row],
+        fragments=[fragment],
+    )
+    block = WorkbookBlock(
+        block_id="b",
+        kind="logical_table",
+        logical_table=table,
+    )
+
+    assert block.logical_table is not None
+    assert block.logical_table.columns[0].path == ["其中", "人工费"]
+    assert block.logical_table.fragments[0].source_ref.key == "Data!A1:L10"

@@ -13,10 +13,12 @@ from langparse.workbooks.blocks import (
     interpret_text_block,
 )
 from langparse.workbooks.classification import classify_candidate_region
+from langparse.workbooks.continuation import link_table_continuations
 from langparse.workbooks.regions import detect_candidate_regions
 from langparse.workbooks.tables import interpret_logical_table
 from langparse.workbooks.types import (
     CellSnapshot,
+    LogicalTable,
     SheetIR,
     SourceRef,
     WorkbookBlock,
@@ -72,6 +74,20 @@ def assemble_workbook(snapshot: WorkbookSnapshot) -> tuple[WorkbookIR, ParseDiag
 
     diagnostics.block_count_by_kind = dict(sorted(block_counts.items()))
     diagnostics.ambiguous_regions = ambiguous_regions
+    try:
+        groups, candidates = link_table_continuations(snapshot, workbook_ir)
+    except Exception as exc:
+        diagnostics.warnings.append(
+            f"cross_sheet_continuation_fallback:{type(exc).__name__}"
+        )
+    else:
+        workbook_ir.table_continuations = groups
+        diagnostics.continuation_candidates = candidates
+        ambiguous_count = sum(item["status"] == "ambiguous" for item in candidates)
+        if ambiguous_count:
+            diagnostics.warnings.append(
+                f"Workbook contains {ambiguous_count} ambiguous continuation candidates"
+            )
     _update_coverage(snapshot, workbook_ir, diagnostics)
     validity_ratio, invalid_refs = validate_workbook_source_refs(snapshot, workbook_ir)
     diagnostics.source_ref_validity_ratio = validity_ratio
@@ -168,12 +184,7 @@ def validate_workbook_source_refs(
         for block in sheet_ir.blocks:
             refs.extend(block.source_refs)
             if block.logical_table is not None:
-                table = block.logical_table
-                refs.extend(table.source_refs)
-                refs.extend(ref for column in table.columns for ref in column.source_refs)
-                refs.extend(row.source_ref for row in table.rows)
-                refs.extend(fragment.source_ref for fragment in table.fragments)
-                refs.extend(section.source_ref for section in table.sections)
+                refs.extend(_logical_table_source_refs(block.logical_table))
             if block.form is not None:
                 refs.extend(block.form.source_refs)
                 refs.extend(ref for field in block.form.fields for ref in field.label_source_refs)
@@ -194,10 +205,24 @@ def validate_workbook_source_refs(
                 refs.extend(block.text.source_refs)
                 refs.extend(ref for line in block.text.lines for ref in line.source_refs)
 
+    for continuation in workbook_ir.table_continuations:
+        refs.extend(_logical_table_source_refs(continuation.logical_table))
+        refs.extend(continuation.source_refs)
+
     invalid = sorted({ref.key for ref in refs if not _valid_source_ref(ref, sheet_bounds)})
     invalid_count = sum(not _valid_source_ref(ref, sheet_bounds) for ref in refs)
     ratio = (len(refs) - invalid_count) / len(refs) if refs else 1.0
     return ratio, invalid
+
+
+def _logical_table_source_refs(table: LogicalTable) -> list[SourceRef]:
+    return [
+        *table.source_refs,
+        *(ref for column in table.columns for ref in column.source_refs),
+        *(row.source_ref for row in table.rows),
+        *(fragment.source_ref for fragment in table.fragments),
+        *(section.source_ref for section in table.sections),
+    ]
 
 
 def _valid_source_ref(ref: SourceRef, sheet_bounds) -> bool:

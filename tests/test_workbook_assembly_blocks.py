@@ -26,6 +26,35 @@ def _snapshot(values: dict[str, object], used_range: str) -> WorkbookSnapshot:
     return WorkbookSnapshot(source="book.xlsx", filename="book.xlsx", sheets=[sheet])
 
 
+def _continuation_snapshot() -> WorkbookSnapshot:
+    sheets = []
+    for index, page_number in enumerate((1, 2), start=1):
+        values = {
+            "A1": "工程清单",
+            "A2": f"第 {page_number} 页 共 2 页",
+            "A3": "Name",
+            "B3": "Value",
+            "A4": page_number,
+            "B4": f"Item {page_number}",
+        }
+        sheets.append(
+            SheetSnapshot(
+                name=f"清单{index}",
+                index=index - 1,
+                used_range="A1:B4",
+                cells={
+                    coordinate: CellSnapshot(
+                        coordinate=coordinate,
+                        raw_value=value,
+                        display_value=str(value),
+                    )
+                    for coordinate, value in values.items()
+                },
+            )
+        )
+    return WorkbookSnapshot(source="book.xlsx", filename="book.xlsx", sheets=sheets)
+
+
 def test_assembly_classifies_mixed_form_and_table_regions():
     snapshot = _snapshot(
         {
@@ -74,6 +103,51 @@ def test_assembly_keeps_ambiguous_sparse_region_explicit():
             "reason_codes": ["insufficient_semantic_evidence"],
         }
     ]
+
+
+def test_assembly_links_cross_sheet_table_continuations():
+    ir, diagnostics = assemble_workbook(_continuation_snapshot())
+
+    assert len(ir.table_continuations) == 1
+    assert diagnostics.continuation_candidates[0]["status"] == "accepted"
+    assert diagnostics.coverage_ratio == 1.0
+    assert diagnostics.reconstruction_passed is True
+    assert diagnostics.source_ref_validity_ratio == 1.0
+
+
+def test_assembly_preserves_sheet_blocks_when_continuation_linking_fails(monkeypatch):
+    def raise_runtime_error(*_args, **_kwargs):
+        raise RuntimeError
+
+    monkeypatch.setattr(
+        "langparse.workbooks.assembly.link_table_continuations",
+        raise_runtime_error,
+    )
+
+    ir, diagnostics = assemble_workbook(_continuation_snapshot())
+
+    assert [[block.kind for block in sheet.blocks] for sheet in ir.sheets] == [
+        ["logical_table"],
+        ["logical_table"],
+    ]
+    assert ir.table_continuations == []
+    assert diagnostics.status == "success"
+    assert diagnostics.warnings == ["cross_sheet_continuation_fallback:RuntimeError"]
+
+
+def test_source_ref_validation_checks_aggregate_continuation_refs():
+    snapshot = _continuation_snapshot()
+    ir, _ = assemble_workbook(snapshot)
+    continuation = ir.table_continuations[0]
+    continuation.logical_table.columns[0].source_refs.append(
+        SourceRef(sheet_name="清单2", range="Z99")
+    )
+    continuation.source_refs.append(SourceRef(sheet_name="清单2", range="Y99"))
+
+    ratio, invalid_refs = validate_workbook_source_refs(snapshot, ir)
+
+    assert ratio < 1.0
+    assert invalid_refs == ["清单2!Y99", "清单2!Z99"]
 
 
 def test_source_ref_validation_rejects_derived_refs_outside_sheet():

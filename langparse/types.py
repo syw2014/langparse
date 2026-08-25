@@ -15,6 +15,7 @@ class Chunk:
 
     content: str
     metadata: dict[str, Any] = field(default_factory=dict)
+    structured_payload: StructuredData = field(default_factory=dict)
 
 
 @dataclass
@@ -52,6 +53,29 @@ class ParsedPageResult:
 
 
 @dataclass
+class ParsedStructure:
+    """Typed structural representation produced by a format parser."""
+
+    kind: str
+
+
+@dataclass
+class ParseDiagnostics:
+    """Machine-readable quality and coverage information for a parse."""
+
+    status: str = "success"
+    coverage_ratio: float = 1.0
+    reconstruction_passed: bool = True
+    block_count_by_kind: dict[str, int] = field(default_factory=dict)
+    ambiguous_regions: list[StructuredData] = field(default_factory=list)
+    model_calls: list[StructuredData] = field(default_factory=list)
+    unsupported_features: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    timings_by_stage: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
 class ParsedDocumentResult:
     source: str
     filename: str
@@ -63,3 +87,6 @@ class ParsedDocumentResult:
     #: pagination (plain Markdown) set this False so downstream code neither
     #: injects page markers nor scores page coverage against a fiction.
     paginated: bool = True
+    structure: ParsedStructure | None = None
+    chunks: list[Chunk] = field(default_factory=list)
+    diagnostics: ParseDiagnostics | None = None

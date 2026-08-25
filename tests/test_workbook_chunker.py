@@ -173,3 +173,59 @@ def test_workbook_chunker_limits_raw_fallback_to_its_candidate_range(tmp_path):
     ]
     assert chunks[0].metadata["source_ranges"] == ["Sheet!A1:B2"]
     assert chunks[0].structured_payload["rows"] == [["左上", ""], ["", "右下"]]
+
+
+def test_workbook_chunker_adds_continuation_metadata_without_aggregate_chunks(tmp_path):
+    from openpyxl import Workbook
+
+    path = tmp_path / "continuation.xlsx"
+    workbook = Workbook()
+    for index, sheet_name in enumerate(("清单1", "清单2"), start=1):
+        sheet = workbook.active if index == 1 else workbook.create_sheet()
+        sheet.title = sheet_name
+        sheet.append(["清单"])
+        sheet.append(["单位工程", f"第 {index} 页 共 2 页"])
+        sheet.append(["序号", "名称", "说明", "金额"])
+        sheet.append([index, "土方" if index == 1 else "回填", "", 100])
+    workbook.save(path)
+
+    parsed = ExcelParser().parse_result(path)
+    group = parsed.structure.table_continuations[0]
+    chunks = WorkbookStructuralChunker(max_chunk_size=1000).chunk(parsed)
+
+    assert len(chunks) == len(group.member_table_ids) == 2
+    assert [chunk.metadata["table_id"] for chunk in chunks] == group.member_table_ids
+    for chunk in chunks:
+        assert chunk.metadata["continuation_id"] == group.continuation_id
+        assert chunk.metadata["continuation_role"] in {"head", "tail"}
+        assert chunk.metadata["continuation_member_table_ids"] == group.member_table_ids
+        assert chunk.metadata["continuation_source_ranges"] == [
+            ref.key for ref in group.source_refs
+        ]
+
+
+def test_workbook_chunker_omits_continuation_metadata_for_an_unrelated_table(tmp_path):
+    from openpyxl import Workbook
+
+    path = tmp_path / "unrelated.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["独立表"])
+    sheet.append(["独立工程", "本月"])
+    sheet.append(["序号", "名称", "说明", "金额"])
+    sheet.append([1, "独立", "", 7])
+    workbook.save(path)
+
+    parsed = ExcelParser().parse_result(path)
+    chunk = WorkbookStructuralChunker(max_chunk_size=1000).chunk(parsed)[0]
+
+    assert chunk.metadata["chunk_type"] == "table_rows"
+    assert all(
+        key not in chunk.metadata
+        for key in (
+            "continuation_id",
+            "continuation_role",
+            "continuation_member_table_ids",
+            "continuation_source_ranges",
+        )
+    )

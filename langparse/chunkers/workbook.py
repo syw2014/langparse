@@ -13,6 +13,7 @@ from langparse.workbooks.types import (
     LogicalTable,
     MatrixBlock,
     MatrixHeader,
+    TableContinuation,
     TextBlock,
     TextLine,
     WorkbookBlock,
@@ -134,6 +135,7 @@ class WorkbookStructuralChunker:
         chunk_index_offset: int,
     ) -> list[Chunk]:
         columns = [" / ".join(column.path) or column.coordinate for column in table.columns]
+        continuation = _continuation_for_table(parsed.structure, table)
         eligible = [row for row in table.rows if row.role in {"data", "total"}]
         grouped: list[tuple[list[str], list[LogicalRow]]] = []
         for row in eligible:
@@ -152,6 +154,7 @@ class WorkbookStructuralChunker:
                         _logical_chunk(
                             parsed,
                             table,
+                            continuation,
                             sheet_name,
                             sheet_ordinal,
                             section_path,
@@ -169,6 +172,7 @@ class WorkbookStructuralChunker:
                     _logical_chunk(
                         parsed,
                         table,
+                        continuation,
                         sheet_name,
                         sheet_ordinal,
                         section_path,
@@ -618,6 +622,7 @@ def _render_logical_chunk(
 def _logical_chunk(
     parsed: ParsedDocumentResult,
     table: LogicalTable,
+    continuation: TableContinuation | None,
     sheet_name: str,
     sheet_ordinal: int,
     section_path: list[str],
@@ -646,6 +651,15 @@ def _logical_chunk(
             "warnings": list(parsed.diagnostics.warnings) if parsed.diagnostics is not None else [],
         }
     )
+    if continuation is not None:
+        metadata.update(
+            {
+                "continuation_id": continuation.continuation_id,
+                "continuation_role": table.continuation_role,
+                "continuation_member_table_ids": list(continuation.member_table_ids),
+                "continuation_source_ranges": [ref.key for ref in continuation.source_refs],
+            }
+        )
     if length_function(content) > max_chunk_size:
         metadata["oversized"] = True
     return Chunk(
@@ -656,6 +670,23 @@ def _logical_chunk(
             "rows": [list(row.values) for row in rows],
             "roles": [row.role for row in rows],
         },
+    )
+
+
+def _continuation_for_table(
+    workbook_ir: WorkbookIR,
+    table: LogicalTable,
+) -> TableContinuation | None:
+    if table.continuation_id is None:
+        return None
+    return next(
+        (
+            group
+            for group in workbook_ir.table_continuations
+            if group.continuation_id == table.continuation_id
+            and table.table_id in group.member_table_ids
+        ),
+        None,
     )
 
 

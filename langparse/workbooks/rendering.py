@@ -107,6 +107,10 @@ def _render_block(sheet: SheetSnapshot, block: WorkbookBlock) -> str:
 def _render_logical_table(table: LogicalTable) -> str:
     source_ranges = ", ".join(source_ref.key for source_ref in table.source_refs)
     parts = [f"<!-- source_ranges: {source_ranges} -->"]
+    if table.continuation_id is not None:
+        parts.append(
+            f"<!-- continuation_id: {table.continuation_id}; role: {table.continuation_role} -->"
+        )
     if table.title:
         parts.append(f"### Table: {table.title}")
     if table.context:

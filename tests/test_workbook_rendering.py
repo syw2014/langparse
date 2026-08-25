@@ -189,3 +189,47 @@ def test_renderer_preserves_matrix_axes_and_text_line_order():
     assert "| 收入 | 10 | 12 |" in markdown
     assert markdown.index("第一行") < markdown.index("第二行")
     assert "Unnamed:" not in markdown
+
+
+def test_renderer_marks_continuation_members_without_rendering_the_aggregate(tmp_path):
+    from openpyxl import Workbook
+
+    from langparse.parsers.excel_parser import ExcelParser
+
+    path = tmp_path / "continuation.xlsx"
+    workbook = Workbook()
+    for index, sheet_name in enumerate(("清单1", "清单2"), start=1):
+        sheet = workbook.active if index == 1 else workbook.create_sheet()
+        sheet.title = sheet_name
+        sheet.append(["清单"])
+        sheet.append(["单位工程", f"第 {index} 页 共 2 页"])
+        sheet.append(["序号", "名称", "说明", "金额"])
+        sheet.append([index, "土方" if index == 1 else "回填", "", 100])
+    workbook.save(path)
+
+    parsed = ExcelParser().parse_result(path)
+    group = parsed.structure.table_continuations[0]
+
+    markdown = render_workbook_markdown(parsed.structure.snapshot, parsed.structure)
+
+    assert markdown == (
+        f"## Sheet: 清单1\n\n"
+        "<!-- source_ranges: 清单1!A1:D4 -->\n\n"
+        f"<!-- continuation_id: {group.continuation_id}; role: head -->\n\n"
+        "### Table: 清单\n\n"
+        "> 单位工程 | 第 1 页 共 2 页\n\n"
+        "| 序号 | 名称 | 说明 | 金额 |\n"
+        "| --- | --- | --- | --- |\n"
+        "| 1 | 土方 |  | 100 |\n\n"
+        "## Sheet: 清单2\n\n"
+        "<!-- source_ranges: 清单2!A1:D4 -->\n\n"
+        f"<!-- continuation_id: {group.continuation_id}; role: tail -->\n\n"
+        "### Table: 清单\n\n"
+        "> 单位工程 | 第 2 页 共 2 页\n\n"
+        "| 序号 | 名称 | 说明 | 金额 |\n"
+        "| --- | --- | --- | --- |\n"
+        "| 2 | 回填 |  | 100 |"
+    )
+    assert markdown.count(group.continuation_id) == 2
+    assert markdown.count("### Table: 清单") == 2
+    assert group.logical_table.table_id not in markdown

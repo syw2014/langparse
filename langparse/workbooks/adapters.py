@@ -24,20 +24,25 @@ class OOXMLWorkbookAdapter:
     def snapshot(self, path: str | Path) -> WorkbookSnapshot:
         workbook_path = Path(path)
         keep_vba = workbook_path.suffix.lower() == ".xlsm"
-        formula_book = load_workbook(
-            workbook_path,
-            data_only=False,
-            keep_vba=keep_vba,
-            read_only=False,
-        )
-        value_book = load_workbook(
-            workbook_path,
-            data_only=True,
-            keep_vba=keep_vba,
-            read_only=False,
-        )
+        # File-like input intentionally bypasses openpyxl's extension gate.
+        # LangParse routes by content, so a valid OOXML workbook renamed to
+        # ``.csv`` must still be readable as a workbook.
+        formula_stream = workbook_path.open("rb")
+        value_stream = workbook_path.open("rb")
         warnings: list[str] = []
         try:
+            formula_book = load_workbook(
+                formula_stream,
+                data_only=False,
+                keep_vba=keep_vba,
+                read_only=False,
+            )
+            value_book = load_workbook(
+                value_stream,
+                data_only=True,
+                keep_vba=keep_vba,
+                read_only=False,
+            )
             sheets = [
                 self._snapshot_sheet(
                     formula_sheet,
@@ -48,8 +53,12 @@ class OOXMLWorkbookAdapter:
                 for index, formula_sheet in enumerate(formula_book.worksheets)
             ]
         finally:
-            formula_book.close()
-            value_book.close()
+            if "formula_book" in locals():
+                formula_book.close()
+            if "value_book" in locals():
+                value_book.close()
+            formula_stream.close()
+            value_stream.close()
 
         return WorkbookSnapshot(
             source=str(workbook_path),

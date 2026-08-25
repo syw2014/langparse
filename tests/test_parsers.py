@@ -31,11 +31,10 @@ def test_excel_parser(sample_excel_file):
 
     assert doc.metadata["extension"] == ".xlsx"
     # Check sheet headers
-    assert "### Sheet: Sheet1" in doc.content
-    assert "### Sheet: Sheet2" in doc.content
-    # Check page markers
-    assert "<!-- page_number: 1 -->" in doc.content
-    assert "<!-- page_number: 2 -->" in doc.content
+    assert "## Sheet: Sheet1" in doc.content
+    assert "## Sheet: Sheet2" in doc.content
+    # Sheets have stable ordinals but are not document pages.
+    assert "<!-- page_number:" not in doc.content
     # Check data
     # Remove whitespace for comparison to avoid alignment issues
     clean_content = doc.content.replace(" ", "")

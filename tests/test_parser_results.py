@@ -45,10 +45,12 @@ def test_docx_parse_result_records_element_kinds(sample_docx_file):
     assert "table" in kinds
 
 
-def test_excel_parse_result_makes_one_page_per_sheet(sample_excel_file):
+def test_excel_parse_result_exposes_one_non_paginated_part_per_sheet(sample_excel_file):
     parsed = ExcelParser().parse_result(sample_excel_file)
 
+    assert parsed.paginated is False
     assert [page.page_number for page in parsed.pages] == [1, 2]
+    assert all(page.metadata["part_kind"] == "sheet" for page in parsed.pages)
     assert all(page.tables for page in parsed.pages)
 
 

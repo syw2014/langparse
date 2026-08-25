@@ -1,3 +1,4 @@
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -94,6 +95,7 @@ def test_parse_service_analysis_profile_records_and_reuses_structure(tmp_path):
 
     assert parsed.structure is not None
     structure_before_retrieval = parsed.structure
+    structure_content_before_retrieval = deepcopy(parsed.structure)
     analysis_chunks = parsed.chunks
     table_chunk = next(
         chunk for chunk in analysis_chunks if chunk.metadata["chunk_type"] == "table_rows"
@@ -106,6 +108,7 @@ def test_parse_service_analysis_profile_records_and_reuses_structure(tmp_path):
     retrieval_chunks = ParseService().chunk_result(parsed, chunk_profile="retrieval")
 
     assert parsed.structure is structure_before_retrieval
+    assert parsed.structure == structure_content_before_retrieval
     assert parsed.chunks is analysis_chunks
     assert {chunk.metadata["chunk_profile"] for chunk in retrieval_chunks} == {"retrieval"}
 

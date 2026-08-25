@@ -289,6 +289,7 @@ class WorkbookStructuralChunker:
                     [],
                     chunk_index_offset + len(chunks),
                     oversized,
+                    analysis_records=self.policy.analysis_records,
                 )
             )
             pending.clear()
@@ -316,6 +317,7 @@ class WorkbookStructuralChunker:
                     form.free_text,
                     chunk_index_offset + len(chunks),
                     self.length_function(content) > self.max_chunk_size,
+                    analysis_records=self.policy.analysis_records,
                 )
             )
         return chunks
@@ -343,6 +345,7 @@ class WorkbookStructuralChunker:
                     pending,
                     chunk_index_offset + len(chunks),
                     oversized,
+                    analysis_records=self.policy.analysis_records,
                 )
             )
             pending.clear()
@@ -389,6 +392,7 @@ class WorkbookStructuralChunker:
                     pending,
                     chunk_index_offset + len(chunks),
                     oversized,
+                    analysis_records=self.policy.analysis_records,
                 )
             )
             pending.clear()
@@ -596,6 +600,8 @@ def _form_chunk(
     lines: list[TextLine],
     chunk_index: int,
     oversized: bool,
+    *,
+    analysis_records: bool,
 ) -> Chunk:
     metadata = document_metadata(parsed)
     source_ranges = [
@@ -617,13 +623,34 @@ def _form_chunk(
     )
     if oversized:
         metadata["oversized"] = True
+    payload = {
+        "fields": [[field.label, field.value] for field in fields],
+        "free_text": [line.text for line in lines],
+    }
+    if analysis_records:
+        payload["records"] = [
+            {
+                "record_type": "field",
+                "field_id": field.field_id,
+                "label": field.label,
+                "value": field.value,
+                "label_source_refs": [ref.key for ref in field.label_source_refs],
+                "value_source_refs": [ref.key for ref in field.value_source_refs],
+            }
+            for field in fields
+        ]
+        payload["records"].extend(
+            {
+                "record_type": "text",
+                "text": line.text,
+                "source_refs": [ref.key for ref in line.source_refs],
+            }
+            for line in lines
+        )
     return Chunk(
         content=_render_form_chunk(form.title, fields, lines),
         metadata=metadata,
-        structured_payload={
-            "fields": [[field.label, field.value] for field in fields],
-            "free_text": [line.text for line in lines],
-        },
+        structured_payload=payload,
     )
 
 
@@ -647,6 +674,8 @@ def _matrix_chunk(
     rows: list[tuple],
     chunk_index: int,
     oversized: bool,
+    *,
+    analysis_records: bool,
 ) -> Chunk:
     metadata = document_metadata(parsed)
     source_ranges = []
@@ -668,14 +697,25 @@ def _matrix_chunk(
     )
     if oversized:
         metadata["oversized"] = True
+    payload = {
+        "column_headers": [header.value for header in matrix.column_headers],
+        "row_headers": [header.value for header, _, _ in rows],
+        "values": [list(values) for _, values, _ in rows],
+    }
+    if analysis_records:
+        payload["records"] = [
+            {
+                "row_header": header.value,
+                "row_header_source_refs": [ref.key for ref in header.source_refs],
+                "values": list(values),
+                "value_source_refs": [ref.key if ref is not None else None for ref in refs],
+            }
+            for header, values, refs in rows
+        ]
     return Chunk(
         content=_render_matrix_chunk(matrix, rows),
         metadata=metadata,
-        structured_payload={
-            "column_headers": [header.value for header in matrix.column_headers],
-            "row_headers": [header.value for header, _, _ in rows],
-            "values": [list(values) for _, values, _ in rows],
-        },
+        structured_payload=payload,
     )
 
 
@@ -687,6 +727,8 @@ def _text_chunk(
     lines: list[TextLine],
     chunk_index: int,
     oversized: bool,
+    *,
+    analysis_records: bool,
 ) -> Chunk:
     metadata = document_metadata(parsed)
     metadata.update(
@@ -703,10 +745,16 @@ def _text_chunk(
     )
     if oversized:
         metadata["oversized"] = True
+    payload = {"lines": [line.text for line in lines]}
+    if analysis_records:
+        payload["records"] = [
+            {"text": line.text, "source_refs": [ref.key for ref in line.source_refs]}
+            for line in lines
+        ]
     return Chunk(
         content="\n".join(line.text for line in lines),
         metadata=metadata,
-        structured_payload={"lines": [line.text for line in lines]},
+        structured_payload=payload,
     )
 
 

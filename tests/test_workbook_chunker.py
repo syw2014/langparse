@@ -147,6 +147,97 @@ def test_workbook_chunker_keeps_oversized_form_field_intact(tmp_path):
     assert chunks[0].metadata["oversized"] is True
     assert chunks[0].structured_payload["fields"] == [["项目名称", "x" * 200]]
 
+    analysis_chunks = WorkbookStructuralChunker(
+        max_chunk_size=40, profile="analysis"
+    ).chunk(parsed)
+    assert len(analysis_chunks) == 2
+    assert analysis_chunks[0].metadata["oversized"] is True
+    assert analysis_chunks[0].structured_payload["records"] == [
+        {
+            "record_type": "field",
+            "field_id": analysis_chunks[0].metadata["field_ids"][0],
+            "label": "项目名称",
+            "value": "x" * 200,
+            "label_source_refs": ["Sheet!A2"],
+            "value_source_refs": ["Sheet!B2"],
+        }
+    ]
+
+
+def test_analysis_form_records_preserve_ids_values_and_source_refs(tmp_path):
+    from openpyxl import Workbook
+
+    path = tmp_path / "analysis-form.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["登记表"])
+    sheet.append(["项目名称", "道路工程"])
+    sheet.append(["建设单位", "示例公司"])
+    workbook.save(path)
+    parsed = ExcelParser().parse_result(path)
+
+    retrieval = WorkbookStructuralChunker(profile="retrieval").chunk(parsed)[0]
+    analysis = WorkbookStructuralChunker(profile="analysis").chunk(parsed)[0]
+
+    assert set(retrieval.structured_payload) == {"fields", "free_text"}
+    assert analysis.structured_payload["records"] == [
+        {
+            "record_type": "field",
+            "field_id": analysis.metadata["field_ids"][0],
+            "label": "项目名称",
+            "value": "道路工程",
+            "label_source_refs": ["Sheet!A2"],
+            "value_source_refs": ["Sheet!B2"],
+        },
+        {
+            "record_type": "field",
+            "field_id": analysis.metadata["field_ids"][1],
+            "label": "建设单位",
+            "value": "示例公司",
+            "label_source_refs": ["Sheet!A3"],
+            "value_source_refs": ["Sheet!B3"],
+        },
+    ]
+
+
+def test_analysis_matrix_and_text_records_preserve_source_refs(tmp_path):
+    from openpyxl import Workbook
+
+    path = tmp_path / "analysis-matrix-text.xlsx"
+    workbook = Workbook()
+    matrix = workbook.active
+    matrix.title = "Matrix"
+    for row in [["指标", "1月", "2月"], ["收入", 10, 12], ["成本", 3, 4]]:
+        matrix.append(row)
+    notes = workbook.create_sheet("Notes")
+    notes.append(["第一行"])
+    notes.append(["第二行"])
+    workbook.save(path)
+    parsed = ExcelParser().parse_result(path)
+
+    chunks = WorkbookStructuralChunker(profile="analysis").chunk(parsed)
+    matrix_chunk = next(item for item in chunks if item.metadata["chunk_type"] == "matrix_rows")
+    text_chunk = next(item for item in chunks if item.metadata["chunk_type"] == "text_block")
+
+    assert matrix_chunk.structured_payload["records"] == [
+        {
+            "row_header": "收入",
+            "row_header_source_refs": ["Matrix!A2"],
+            "values": ["10", "12"],
+            "value_source_refs": ["Matrix!B2", "Matrix!C2"],
+        },
+        {
+            "row_header": "成本",
+            "row_header_source_refs": ["Matrix!A3"],
+            "values": ["3", "4"],
+            "value_source_refs": ["Matrix!B3", "Matrix!C3"],
+        },
+    ]
+    assert text_chunk.structured_payload["records"] == [
+        {"text": "第一行", "source_refs": ["Notes!A1"]},
+        {"text": "第二行", "source_refs": ["Notes!A2"]},
+    ]
+
 
 def test_workbook_chunker_limits_raw_fallback_to_its_candidate_range(tmp_path):
     from openpyxl import Workbook

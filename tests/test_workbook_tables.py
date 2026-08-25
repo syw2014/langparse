@@ -99,3 +99,34 @@ def test_builds_multi_row_header_paths_from_merges():
     assert paths["I"] == ["其中", "人工费"]
     assert paths["J"] == ["其中", "机械费"]
     assert paths["K"] == ["其中", "管理费"]
+
+
+def test_classifies_budget_row_roles_and_sections():
+    sheet, candidate = _two_fragment_sheet()
+    _put_row(sheet, 5, [0, 0, "土方", 0, 0, 0, 0, 4974])
+    _put_row(sheet, 6, [1, "040101", "挖沟槽土方"])
+    _put_row(sheet, 11, [2, "040103", "回填方"])
+    _put_row(sheet, 12, ["合   计", None, None, None, None, None, None, 525891])
+
+    table = interpret_logical_table(sheet, candidate)
+    roles_by_row = {row.metadata["row_number"]: row.role for row in table.rows}
+
+    assert roles_by_row == {
+        1: "title",
+        2: "context",
+        3: "header",
+        4: "header",
+        5: "section_header",
+        6: "data",
+        7: "repeated_title",
+        8: "repeated_context",
+        9: "repeated_header",
+        10: "repeated_header",
+        11: "data",
+        12: "total",
+    }
+    assert [section.title for section in table.sections] == ["土方"]
+    assert next(row for row in table.rows if row.metadata["row_number"] == 11).section_path == [
+        "土方"
+    ]
+    assert len({row.source_ref.key for row in table.rows}) == 12

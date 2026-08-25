@@ -7,10 +7,12 @@ from openpyxl.utils import get_column_letter, range_boundaries
 from langparse.workbooks.types import (
     CandidateRegion,
     HeaderColumn,
+    LogicalRow,
     LogicalTable,
     SheetSnapshot,
     SourceRef,
     TableFragment,
+    TableSection,
     stable_id,
 )
 
@@ -50,14 +52,120 @@ def interpret_logical_table(
         for text in [_row_text(sheet, row_number, min_col, max_col)]
         if text
     ]
+    rows, sections = _build_rows_and_sections(
+        sheet,
+        candidate,
+        fragments,
+        min_col,
+        min_row,
+        max_col,
+        max_row,
+    )
     return LogicalTable(
         table_id=stable_id("table", candidate.source_ref.key),
         title=title,
         context=context,
         columns=columns,
+        rows=rows,
         fragments=fragments,
+        sections=sections,
         source_refs=[candidate.source_ref],
     )
+
+
+def _build_rows_and_sections(
+    sheet: SheetSnapshot,
+    candidate: CandidateRegion,
+    fragments: list[TableFragment],
+    min_col: int,
+    min_row: int,
+    max_col: int,
+    max_row: int,
+) -> tuple[list[LogicalRow], list[TableSection]]:
+    roles: dict[int, str] = {}
+    for fragment_index, fragment in enumerate(fragments):
+        for row_number in fragment.title_row_numbers:
+            roles[row_number] = "title" if fragment_index == 0 else "repeated_title"
+        for row_number in fragment.context_row_numbers:
+            roles[row_number] = "context" if fragment_index == 0 else "repeated_context"
+        for row_number in fragment.header_row_numbers:
+            roles[row_number] = "header" if fragment_index == 0 else "repeated_header"
+
+    logical_rows: list[LogicalRow] = []
+    sections: list[TableSection] = []
+    current_section: TableSection | None = None
+    for row_number in range(min_row, max_row + 1):
+        values = [
+            _raw_cell_text(sheet, row_number, column) for column in range(min_col, max_col + 1)
+        ]
+        role = roles.get(row_number) or _classify_content_row(values)
+        row_range = (
+            f"{get_column_letter(min_col)}{row_number}:{get_column_letter(max_col)}{row_number}"
+        )
+        source_ref = SourceRef(sheet_name=sheet.name, range=row_range)
+        row_id = stable_id("row", candidate.source_ref.key, str(row_number))
+        if role == "section_header":
+            title = _section_title(values)
+            current_section = TableSection(
+                section_id=stable_id("section", candidate.source_ref.key, str(row_number), title),
+                title=title,
+                source_ref=source_ref,
+            )
+            sections.append(current_section)
+        section_path = [current_section.title] if current_section is not None else []
+        source_cells = [
+            f"{get_column_letter(column)}{row_number}"
+            for column in range(min_col, max_col + 1)
+            if f"{get_column_letter(column)}{row_number}" in sheet.cells
+        ]
+        logical_row = LogicalRow(
+            row_id=row_id,
+            source_ref=source_ref,
+            role=role,
+            values=values,
+            source_cells=source_cells,
+            section_path=section_path,
+            metadata={"row_number": row_number},
+        )
+        logical_rows.append(logical_row)
+        if current_section is not None and role in {"data", "total"}:
+            current_section.row_ids.append(row_id)
+    return logical_rows, sections
+
+
+def _classify_content_row(values: list[str]) -> str:
+    normalized = "".join(values).replace(" ", "")
+    if "合计" in normalized or "总计" in normalized:
+        return "total"
+    first = values[0].strip() if values else ""
+    if first in {"", "0"} and _section_title(values):
+        if any(_is_number(value) and float(value) != 0 for value in values[3:]):
+            return "section_header"
+    if re.fullmatch(r"[1-9]\d*", first):
+        return "data"
+    if (
+        len(values) > 1
+        and values[1].strip()
+        and any(character.isdigit() for character in values[1])
+    ):
+        return "data"
+    return "unknown"
+
+
+def _section_title(values: list[str]) -> str:
+    for value in values[1:6]:
+        text = value.strip()
+        if text and not _is_number(text):
+            return text
+    return ""
+
+
+def _is_number(value: str) -> bool:
+    try:
+        float(value)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def _page_markers(
@@ -216,6 +324,14 @@ def _cell_text(sheet: SheetSnapshot, row_number: int, column: int) -> str:
     if cell.merge_anchor:
         anchor = sheet.cells.get(cell.merge_anchor)
         return anchor.display_value if anchor is not None else ""
+    return cell.display_value
+
+
+def _raw_cell_text(sheet: SheetSnapshot, row_number: int, column: int) -> str:
+    coordinate = f"{get_column_letter(column)}{row_number}"
+    cell = sheet.cells.get(coordinate)
+    if cell is None or cell.merge_anchor is not None:
+        return ""
     return cell.display_value
 
 

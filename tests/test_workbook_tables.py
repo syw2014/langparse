@@ -89,6 +89,28 @@ def test_detects_repeated_print_fragments():
     assert table.fragments[1].header_row_numbers == [9, 10]
 
 
+def test_preserves_single_print_marker_for_cross_sheet_evidence():
+    sheet = SheetSnapshot(name="清单1", index=0, used_range="A1:B4")
+    _put_row(sheet, 1, ["工程清单"])
+    _put_row(sheet, 2, ["第 1 页 共 2 页"])
+    _put_row(sheet, 3, ["Name", "Value"])
+    _put_row(sheet, 4, ["Alpha", 1])
+    candidate = CandidateRegion(
+        source_ref=SourceRef(sheet_name=sheet.name, range="A1:B4"),
+        cell_refs=list(sheet.cells),
+    )
+
+    table = interpret_logical_table(sheet, candidate)
+
+    assert len(table.fragments) == 1
+    assert table.fragments[0].page_number == 1
+    assert table.fragments[0].total_pages == 2
+    assert table.fragments[0].title_row_numbers == [1]
+    assert table.fragments[0].context_row_numbers == [2]
+    assert table.fragments[0].header_row_numbers == [3]
+    assert [column.path for column in table.columns] == [["Name"], ["Value"]]
+
+
 def test_builds_multi_row_header_paths_from_merges():
     sheet, candidate = _two_fragment_sheet()
 

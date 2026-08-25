@@ -192,6 +192,24 @@ def _build_fragments(
     max_col: int,
     max_row: int,
 ) -> list[TableFragment]:
+    if len(page_markers) == 1:
+        context_row, page_number, total_pages = page_markers[0]
+        header_rows = _header_rows_after(
+            sheet, context_row, context_row + 1, max_row, min_col, max_col
+        )
+        return [
+            TableFragment(
+                fragment_id=stable_id("fragment", candidate.source_ref.key, str(page_number)),
+                source_ref=candidate.source_ref,
+                page_number=page_number,
+                total_pages=total_pages,
+                title_row_numbers=[min_row] if min_row < context_row else [],
+                context_row_numbers=[context_row],
+                header_row_numbers=header_rows,
+                diagnostics=[{"reason_code": "single_print_fragment"}],
+            )
+        ]
+
     if not _valid_page_sequence(page_markers):
         header_rows = _header_rows_after(sheet, min_row - 1, min_row, max_row, min_col, max_col)
         return [

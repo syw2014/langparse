@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
+from langparse.chunkers.workbook import WorkbookStructuralChunker
 from langparse.parsers.excel_parser import ExcelParser
 from langparse.workbooks.assembly import assemble_workbook
 from langparse.workbooks.types import CellSnapshot, SheetSnapshot, WorkbookSnapshot
@@ -111,4 +112,22 @@ def test_private_budget_workbook_sheet_8_acceptance():
     assert parsed.diagnostics is not None
     assert parsed.diagnostics.coverage_ratio == 1.0
     assert parsed.diagnostics.reconstruction_passed is True
+    assert parsed.diagnostics.source_ref_validity_ratio == 1.0
+    assert parsed.structure.sheets[0].blocks[0].kind == "text"
+    block_kinds = {
+        block.kind for workbook_sheet in parsed.structure.sheets for block in workbook_sheet.blocks
+    }
+    assert block_kinds == {"logical_table", "text"}
+    chunks = WorkbookStructuralChunker().chunk(parsed)
+    expected_chunk_types = {
+        {
+            "logical_table": "table_rows",
+            "form": "form_fields",
+            "matrix": "matrix_rows",
+            "text": "text_block",
+            "unclassified": "raw_grid_rows",
+        }[kind]
+        for kind in block_kinds
+    }
+    assert {chunk.metadata["chunk_type"] for chunk in chunks} == expected_chunk_types
     assert "Unnamed:" not in parsed.markdown_content

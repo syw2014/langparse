@@ -98,3 +98,21 @@ def test_classifies_five_region_shapes_deterministically():
     assert ambiguous.kind == "unclassified"
     assert ambiguous.confidence < 0.8
     assert ambiguous.reason_codes == ["insufficient_semantic_evidence"]
+
+
+def test_classifies_presentation_cover_as_text_instead_of_table():
+    sheet, candidate = _fixture(
+        [
+            ["工程名称", None, "示例道路工程"],
+            ["招 标 控 制 价", None, None],
+            ["招标控制价", "(小写)：", "1584176元"],
+            ["招 标 人：", None, "中介机构："],
+            ["法定代表人：", None, "复核人："],
+        ]
+    )
+    sheet.cells["A2"].colspan = 3
+
+    result = classify_candidate_region(sheet, candidate)
+
+    assert result.kind == "text"
+    assert result.reason_codes == ["presentation_text_region"]

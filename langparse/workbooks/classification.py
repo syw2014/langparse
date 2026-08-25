@@ -113,8 +113,9 @@ def classify_candidate_region(
 
     features = features or extract_region_features(sheet, candidate)
     values, _ = _region_grid(sheet, candidate)
-    if _is_text(features):
-        return BlockClassification("text", 0.9, ["single_column_text"], features)
+    text_reason = _text_reason(features)
+    if text_reason:
+        return BlockClassification("text", 0.9, [text_reason], features)
     if _is_form(features):
         return BlockClassification("form", 0.9, ["stable_label_value_pairs"], features)
     if _is_matrix(values, features):
@@ -211,12 +212,26 @@ def _has_stable_table_schema(
     return bool(widths) and len(set(widths)) == 1 and widths[0] == len(header)
 
 
-def _is_text(features: RegionFeatures) -> bool:
-    return (
-        features.column_count == 1
+def _text_reason(features: RegionFeatures) -> str | None:
+    if (
+        features.row_count >= 2
+        and features.column_count == 1
         and features.text_ratio == 1.0
         and features.positive_ordinal_rows == 0
-    )
+    ):
+        return "single_column_text"
+    if (
+        features.row_count >= 2
+        and features.column_count >= 2
+        and features.text_ratio >= 0.8
+        and features.numeric_grid_rows < 2
+        and features.positive_ordinal_rows == 0
+        and features.label_value_pairs < 2
+        and not features.has_stable_table_schema
+        and (features.merged_title_rows >= 1 or features.long_text_rows >= 1)
+    ):
+        return "presentation_text_region"
+    return None
 
 
 def _is_form(features: RegionFeatures) -> bool:

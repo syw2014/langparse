@@ -1,7 +1,11 @@
 """Lossless workbook facts and structural intermediate representation."""
 
 from langparse.workbooks.adapters import OOXMLWorkbookAdapter, WorkbookAdapter
-from langparse.workbooks.assembly import assemble_baseline, assemble_workbook
+from langparse.workbooks.assembly import (
+    assemble_baseline,
+    assemble_workbook,
+    validate_workbook_source_refs,
+)
 from langparse.workbooks.blocks import (
     interpret_form_block,
     interpret_matrix_block,
@@ -65,4 +69,5 @@ __all__ = [
     "interpret_text_block",
     "render_workbook_markdown",
     "stable_id",
+    "validate_workbook_source_refs",
 ]

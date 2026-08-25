@@ -1,6 +1,7 @@
 """Lossless workbook facts and structural intermediate representation."""
 
 from langparse.workbooks.adapters import OOXMLWorkbookAdapter, WorkbookAdapter
+from langparse.workbooks.assembly import assemble_baseline
 from langparse.workbooks.types import (
     CellSnapshot,
     SheetIR,
@@ -22,5 +23,6 @@ __all__ = [
     "WorkbookAdapter",
     "WorkbookIR",
     "WorkbookSnapshot",
+    "assemble_baseline",
     "stable_id",
 ]

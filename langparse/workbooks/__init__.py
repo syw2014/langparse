@@ -2,6 +2,7 @@
 
 from langparse.workbooks.adapters import OOXMLWorkbookAdapter, WorkbookAdapter
 from langparse.workbooks.assembly import assemble_baseline
+from langparse.workbooks.rendering import compatibility_pages, render_workbook_markdown
 from langparse.workbooks.types import (
     CellSnapshot,
     SheetIR,
@@ -24,5 +25,7 @@ __all__ = [
     "WorkbookIR",
     "WorkbookSnapshot",
     "assemble_baseline",
+    "compatibility_pages",
+    "render_workbook_markdown",
     "stable_id",
 ]

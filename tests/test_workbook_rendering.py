@@ -1,4 +1,6 @@
-from langparse.workbooks.assembly import assemble_baseline
+from openpyxl.utils import get_column_letter
+
+from langparse.workbooks.assembly import assemble_baseline, assemble_workbook
 from langparse.workbooks.rendering import compatibility_pages, render_workbook_markdown
 from langparse.workbooks.types import CellSnapshot, SheetSnapshot, WorkbookSnapshot
 
@@ -80,3 +82,41 @@ def test_empty_sheet_is_preserved_without_a_fake_table():
     assert len(pages) == 1
     assert pages[0].tables == []
     assert "## Sheet: Empty" in pages[0].markdown_content
+
+
+def test_semantic_renderer_deduplicates_print_fragments_and_preserves_snapshot():
+    sheet = SheetSnapshot(name="Data", index=0, used_range="A1:D11")
+
+    def put_row(row_number: int, values: list[object | None]) -> None:
+        for column_number, value in enumerate(values, start=1):
+            if value is None:
+                continue
+            coordinate = f"{get_column_letter(column_number)}{row_number}"
+            sheet.cells[coordinate] = CellSnapshot(
+                coordinate=coordinate,
+                raw_value=value,
+                display_value=str(value),
+            )
+
+    put_row(1, ["清单"])
+    put_row(2, ["单位工程", "第 1 页 共 2 页"])
+    put_row(3, ["序号", "名称", "说明", "金额"])
+    put_row(4, [0, "土方", "", 100])
+    put_row(5, [1, "挖土", "", 40])
+    put_row(6, ["清单"])
+    put_row(7, ["单位工程", "第 2 页 共 2 页"])
+    put_row(8, ["序号", "名称", "说明", "金额"])
+    put_row(9, [2, "回填", "", 60])
+    put_row(10, ["合计", "", "", 100])
+    snapshot = WorkbookSnapshot(source="book.xlsx", filename="book.xlsx", sheets=[sheet])
+    ir, _ = assemble_workbook(snapshot)
+
+    markdown = render_workbook_markdown(snapshot, ir)
+
+    assert markdown.count("### Table: 清单") == 1
+    assert markdown.count("| 序号 | 名称 | 说明 | 金额 |") == 1
+    assert "#### Section: 土方" in markdown
+    assert "第 2 页 共 2 页" not in markdown
+    assert "合计" in markdown
+    assert ir.snapshot is snapshot
+    assert ir.snapshot.sheets[0].cells["A6"].display_value == "清单"

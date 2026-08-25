@@ -6,7 +6,7 @@ from openpyxl.utils import range_boundaries
 
 from langparse.core.rendering import document_metadata
 from langparse.types import Chunk, ParsedDocumentResult
-from langparse.workbooks.types import WorkbookIR
+from langparse.workbooks.types import LogicalRow, LogicalTable, WorkbookIR
 
 
 class WorkbookStructuralChunker:
@@ -31,6 +31,23 @@ class WorkbookStructuralChunker:
         for page in parsed.pages:
             sheet_name = page.metadata.get("sheet_name")
             sheet_ir = ir_sheets.get(page.page_number - 1)
+            logical_blocks = [
+                block
+                for block in (sheet_ir.blocks if sheet_ir is not None else [])
+                if block.logical_table is not None
+            ]
+            if logical_blocks:
+                for block in logical_blocks:
+                    chunks.extend(
+                        self._chunk_logical_table(
+                            parsed,
+                            str(sheet_name),
+                            page.page_number,
+                            block.logical_table,
+                            len(chunks),
+                        )
+                    )
+                continue
             confidence = (
                 sheet_ir.blocks[0].confidence if sheet_ir is not None and sheet_ir.blocks else 1.0
             )
@@ -53,6 +70,62 @@ class WorkbookStructuralChunker:
                         row_numbers=row_numbers,
                         confidence=confidence,
                         chunk_index_offset=len(chunks),
+                    )
+                )
+        return chunks
+
+    def _chunk_logical_table(
+        self,
+        parsed: ParsedDocumentResult,
+        sheet_name: str,
+        sheet_ordinal: int,
+        table: LogicalTable,
+        chunk_index_offset: int,
+    ) -> list[Chunk]:
+        columns = [" / ".join(column.path) or column.coordinate for column in table.columns]
+        eligible = [row for row in table.rows if row.role in {"data", "total"}]
+        grouped: list[tuple[list[str], list[LogicalRow]]] = []
+        for row in eligible:
+            if not grouped or grouped[-1][0] != row.section_path:
+                grouped.append((list(row.section_path), []))
+            grouped[-1][1].append(row)
+
+        chunks: list[Chunk] = []
+        for section_path, rows in grouped:
+            pending = []
+            for row in rows:
+                candidate = [*pending, row]
+                content = _render_logical_chunk(table.title, section_path, columns, candidate)
+                if pending and self.length_function(content) > self.max_chunk_size:
+                    chunks.append(
+                        _logical_chunk(
+                            parsed,
+                            table,
+                            sheet_name,
+                            sheet_ordinal,
+                            section_path,
+                            columns,
+                            pending,
+                            chunk_index_offset + len(chunks),
+                            self.max_chunk_size,
+                            self.length_function,
+                        )
+                    )
+                    pending = []
+                pending.append(row)
+            if pending:
+                chunks.append(
+                    _logical_chunk(
+                        parsed,
+                        table,
+                        sheet_name,
+                        sheet_ordinal,
+                        section_path,
+                        columns,
+                        pending,
+                        chunk_index_offset + len(chunks),
+                        self.max_chunk_size,
+                        self.length_function,
                     )
                 )
         return chunks
@@ -162,3 +235,74 @@ def _markdown_row(row: list[str]) -> str:
         for value in row
     ]
     return "| " + " | ".join(escaped) + " |"
+
+
+def _render_logical_chunk(
+    title: str,
+    section_path: list[str],
+    columns: list[str],
+    rows: list[LogicalRow],
+) -> str:
+    headings = [f"### Table: {title}"] if title else []
+    if section_path:
+        headings.append(f"#### Section: {' / '.join(section_path)}")
+    table_lines = [
+        _markdown_row(columns),
+        "| " + " | ".join("---" for _ in columns) + " |",
+        *[_markdown_row(row.values) for row in rows],
+    ]
+    return "\n\n".join([*headings, "\n".join(table_lines)])
+
+
+def _logical_chunk(
+    parsed: ParsedDocumentResult,
+    table: LogicalTable,
+    sheet_name: str,
+    sheet_ordinal: int,
+    section_path: list[str],
+    columns: list[str],
+    rows: list[LogicalRow],
+    chunk_index: int,
+    max_chunk_size: int,
+    length_function: Callable[[str], int],
+) -> Chunk:
+    content = _render_logical_chunk(table.title, section_path, columns, rows)
+    metadata = document_metadata(parsed)
+    metadata.update(
+        {
+            "chunk_type": "table_rows",
+            "chunk_index": chunk_index,
+            "sheet_name": sheet_name,
+            "sheet_ordinal": sheet_ordinal,
+            "table_id": table.table_id,
+            "section_path": list(section_path),
+            "header_paths": [list(column.path) for column in table.columns],
+            "row_ids": [row.row_id for row in rows],
+            "row_numbers": [row.metadata["row_number"] for row in rows],
+            "source_ranges": [row.source_ref.key for row in rows],
+            "fragment_ranges": _fragment_ranges_for_rows(table, rows),
+            "confidence": min([table.confidence, *[row.confidence for row in rows]]),
+            "warnings": list(parsed.diagnostics.warnings) if parsed.diagnostics is not None else [],
+        }
+    )
+    if length_function(content) > max_chunk_size:
+        metadata["oversized"] = True
+    return Chunk(
+        content=content,
+        metadata=metadata,
+        structured_payload={
+            "columns": columns,
+            "rows": [list(row.values) for row in rows],
+            "roles": [row.role for row in rows],
+        },
+    )
+
+
+def _fragment_ranges_for_rows(table: LogicalTable, rows: list[LogicalRow]) -> list[str]:
+    row_numbers = {int(row.metadata["row_number"]) for row in rows}
+    ranges = []
+    for fragment in table.fragments:
+        _, min_row, _, max_row = range_boundaries(fragment.source_ref.range)
+        if any(min_row <= row_number <= max_row for row_number in row_numbers):
+            ranges.append(fragment.source_ref.key)
+    return ranges

@@ -3,11 +3,18 @@ from __future__ import annotations
 from openpyxl.utils import get_column_letter, range_boundaries
 
 from langparse.types import ParsedElement, ParsedPageResult
-from langparse.workbooks.types import SheetIR, SheetSnapshot, WorkbookIR, WorkbookSnapshot
+from langparse.workbooks.types import (
+    LogicalRow,
+    LogicalTable,
+    SheetIR,
+    SheetSnapshot,
+    WorkbookIR,
+    WorkbookSnapshot,
+)
 
 
 def render_workbook_markdown(snapshot: WorkbookSnapshot, ir: WorkbookIR) -> str:
-    """Render a coordinate-preserving workbook view without inferring headers."""
+    """Render semantic logical tables while retaining source coordinates."""
 
     ir_by_index = {sheet.index: sheet for sheet in ir.sheets}
     sections = [
@@ -70,9 +77,46 @@ def _render_sheet_markdown(sheet: SheetSnapshot, sheet_ir: SheetIR | None) -> st
     source_range = _source_range(sheet, sheet_ir)
     if source_range is None:
         return f"{heading}\n\n_Empty sheet._"
+    logical_tables = [
+        block.logical_table
+        for block in (sheet_ir.blocks if sheet_ir is not None else [])
+        if block.logical_table is not None
+    ]
+    if logical_tables:
+        rendered = [_render_logical_table(table) for table in logical_tables]
+        return "\n\n".join([heading, *rendered])
     columns, _, data_rows = _sheet_grid(sheet, source_range)
     source_comment = f"<!-- source_range: {sheet.name}!{source_range} -->"
     return f"{heading}\n\n{source_comment}\n\n{_render_grid(columns, data_rows)}"
+
+
+def _render_logical_table(table: LogicalTable) -> str:
+    source_ranges = ", ".join(source_ref.key for source_ref in table.source_refs)
+    parts = [f"<!-- source_ranges: {source_ranges} -->"]
+    if table.title:
+        parts.append(f"### Table: {table.title}")
+    if table.context:
+        parts.append("\n".join(f"> {line}" for line in table.context))
+
+    columns = [" / ".join(column.path) or column.coordinate for column in table.columns]
+    eligible_rows = [row for row in table.rows if row.role in {"data", "total", "unknown"}]
+    groups = _group_rows_by_section(eligible_rows)
+    for section_path, rows in groups:
+        if section_path:
+            parts.append(f"#### Section: {' / '.join(section_path)}")
+        parts.append(_render_grid(columns, [row.values for row in rows]))
+    if not groups:
+        parts.append("_No semantic data rows._")
+    return "\n\n".join(parts)
+
+
+def _group_rows_by_section(rows: list[LogicalRow]) -> list[tuple[list[str], list[LogicalRow]]]:
+    groups: list[tuple[list[str], list[LogicalRow]]] = []
+    for row in rows:
+        if not groups or groups[-1][0] != row.section_path:
+            groups.append((list(row.section_path), []))
+        groups[-1][1].append(row)
+    return groups
 
 
 def _source_range(sheet: SheetSnapshot, sheet_ir: SheetIR | None) -> str | None:

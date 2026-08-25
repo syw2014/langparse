@@ -70,3 +70,4 @@ def test_excel_parser_uses_semantic_workbook_assembly(tmp_path):
     assert block.kind == "logical_table"
     assert block.logical_table is not None
     assert [row.role for row in block.logical_table.rows] == ["header", "data"]
+    assert parsed.markdown_content.count("| Name | Value |") == 1

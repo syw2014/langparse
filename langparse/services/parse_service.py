@@ -72,7 +72,7 @@ class ParseService:
             payload = asdict(parsed)
             if chunks is not None:
                 payload["chunks"] = [asdict(chunk) for chunk in chunks]
-            return json.dumps(payload, ensure_ascii=False, indent=2)
+            return json.dumps(payload, ensure_ascii=False, indent=2, default=_json_scalar)
         raise ValueError(f"Unsupported output format: {fmt}")
 
     def parse_output(
@@ -325,3 +325,11 @@ class ParseService:
 
     def _output_path_for_batch_item(self, source, fmt: str, used_paths: set[Path]) -> Path:
         return resolve_output_path(source, fmt, used_paths)
+
+
+def _json_scalar(value):
+    """Serialize native spreadsheet scalars such as dates and decimals."""
+
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)

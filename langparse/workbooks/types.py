@@ -95,4 +95,5 @@ class WorkbookIR(ParsedStructure):
     source: str
     sheets: list[SheetIR] = field(default_factory=list)
     filename: str = ""
+    snapshot: WorkbookSnapshot | None = None
     metadata: StructuredData = field(default_factory=dict)

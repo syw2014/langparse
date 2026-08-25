@@ -1,6 +1,6 @@
 from dataclasses import asdict
 
-from langparse.types import Chunk, ParseDiagnostics, ParsedDocumentResult, ParsedStructure
+from langparse.types import Chunk, ParsedDocumentResult, ParseDiagnostics, ParsedStructure
 
 
 def test_parsed_result_accepts_structure_chunks_and_diagnostics():

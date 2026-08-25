@@ -89,6 +89,7 @@ def assemble_baseline(snapshot: WorkbookSnapshot) -> tuple[WorkbookIR, ParseDiag
         source=snapshot.source,
         sheets=sheet_irs,
         filename=snapshot.filename,
+        snapshot=snapshot,
         metadata={"snapshot": snapshot.metadata},
     )
     return workbook_ir, diagnostics

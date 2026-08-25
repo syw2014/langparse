@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -98,6 +99,44 @@ def test_render_output_returns_json():
     rendered = ParseService().render_output(parsed, "json")
 
     assert json.loads(rendered)["metadata"] == {"kind": "demo"}
+
+
+def test_render_output_serializes_excel_native_date_values():
+    from langparse.workbooks.types import (
+        CellSnapshot,
+        SheetSnapshot,
+        WorkbookIR,
+        WorkbookSnapshot,
+    )
+
+    snapshot = WorkbookSnapshot(
+        source="book.xlsx",
+        filename="book.xlsx",
+        sheets=[
+            SheetSnapshot(
+                name="Data",
+                index=0,
+                cells={"A1": CellSnapshot(coordinate="A1", raw_value=date(2026, 8, 25))},
+            )
+        ],
+    )
+    parsed = ParsedDocumentResult(
+        source="book.xlsx",
+        filename="book.xlsx",
+        engine="excel",
+        structure=WorkbookIR(
+            kind="workbook",
+            workbook_id="wb-1",
+            source="book.xlsx",
+            snapshot=snapshot,
+        ),
+    )
+
+    payload = json.loads(ParseService().render_output(parsed, "json"))
+
+    assert payload["structure"]["snapshot"]["sheets"][0]["cells"]["A1"]["raw_value"] == (
+        "2026-08-25"
+    )
 
 
 def test_render_output_rejects_unknown_format():

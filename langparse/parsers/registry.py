@@ -12,6 +12,7 @@ PARSER_KIND_BY_EXTENSION: dict[str, str] = {
     ".docx": "docx",
     ".doc": "docx",
     ".xlsx": "excel",
+    ".xlsm": "excel",
     ".xls": "excel",
     ".csv": "excel",
     ".md": "markdown",

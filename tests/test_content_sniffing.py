@@ -91,6 +91,9 @@ class TestParserKindFor:
         # function itself should stay a safe no-op on a path that vanished.
         assert parser_kind_for(tmp_path / "gone.pdf") == "pdf"
 
+    def test_xlsm_is_an_explicitly_supported_excel_extension(self, tmp_path):
+        assert parser_kind_for(tmp_path / "book.xlsm") == "excel"
+
 
 class TestZipAndOleHelpers:
     def test_looks_like_zip_ooxml_true_for_real_xlsx(self, tmp_path):

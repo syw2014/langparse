@@ -28,6 +28,8 @@ def test_baseline_assembly_covers_every_non_empty_cell():
     assert diagnostics.coverage_ratio == 1.0
     assert diagnostics.reconstruction_passed is True
     assert diagnostics.block_count_by_kind == {"unclassified": 1}
+    assert ir.snapshot is snapshot
+    assert ir.snapshot.sheets[0].cells["B2"].raw_value == 2
     assert ir.sheets[0].blocks[0].source_refs[0].range == "A1:B2"
     assert ir.sheets[0].blocks[0].cell_refs == ["A1", "B2"]
 

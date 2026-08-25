@@ -3,6 +3,7 @@
 from langparse.workbooks.adapters import OOXMLWorkbookAdapter, WorkbookAdapter
 from langparse.workbooks.assembly import assemble_baseline
 from langparse.workbooks.rendering import compatibility_pages, render_workbook_markdown
+from langparse.workbooks.regions import detect_candidate_regions
 from langparse.workbooks.types import (
     CandidateRegion,
     CellSnapshot,
@@ -38,6 +39,7 @@ __all__ = [
     "WorkbookSnapshot",
     "assemble_baseline",
     "compatibility_pages",
+    "detect_candidate_regions",
     "render_workbook_markdown",
     "stable_id",
 ]

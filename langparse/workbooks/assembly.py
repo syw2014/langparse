@@ -6,6 +6,8 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_to_tuple
 
 from langparse.types import ParseDiagnostics
+from langparse.workbooks.regions import detect_candidate_regions
+from langparse.workbooks.tables import interpret_logical_table
 from langparse.workbooks.types import (
     CellSnapshot,
     SheetIR,
@@ -15,6 +17,54 @@ from langparse.workbooks.types import (
     WorkbookSnapshot,
     stable_id,
 )
+
+
+def assemble_workbook(snapshot: WorkbookSnapshot) -> tuple[WorkbookIR, ParseDiagnostics]:
+    """Upgrade baseline blocks to deterministic logical tables where safe."""
+
+    workbook_ir, diagnostics = assemble_baseline(snapshot)
+    block_counts: Counter[str] = Counter()
+    ambiguous_regions = []
+    for sheet, sheet_ir in zip(snapshot.sheets, workbook_ir.sheets, strict=True):
+        semantic_blocks: list[WorkbookBlock] = []
+        for candidate in detect_candidate_regions(sheet):
+            row_count = int(candidate.features.get("row_count", 0))
+            column_count = int(candidate.features.get("column_count", 0))
+            if row_count >= 2 and column_count >= 2:
+                table = interpret_logical_table(sheet, candidate)
+                block = WorkbookBlock(
+                    block_id=stable_id("block", snapshot.source, candidate.source_ref.key, "table"),
+                    kind="logical_table",
+                    source_refs=[candidate.source_ref],
+                    cell_refs=candidate.cell_refs,
+                    confidence=table.confidence,
+                    metadata={"view": "semantic_table", "cell_count": len(candidate.cell_refs)},
+                    logical_table=table,
+                )
+            else:
+                block = WorkbookBlock(
+                    block_id=stable_id(
+                        "block", snapshot.source, candidate.source_ref.key, "unclassified"
+                    ),
+                    kind="unclassified",
+                    source_refs=[candidate.source_ref],
+                    cell_refs=candidate.cell_refs,
+                    metadata={"view": "raw_grid", "cell_count": len(candidate.cell_refs)},
+                )
+                ambiguous_regions.append(
+                    {
+                        "sheet_name": sheet.name,
+                        "range": candidate.source_ref.range,
+                        "reason_code": "insufficient_tabular_extent",
+                    }
+                )
+            semantic_blocks.append(block)
+            block_counts[block.kind] += 1
+        sheet_ir.blocks = semantic_blocks
+
+    diagnostics.block_count_by_kind = dict(sorted(block_counts.items()))
+    diagnostics.ambiguous_regions = ambiguous_regions
+    return workbook_ir, diagnostics
 
 
 def assemble_baseline(snapshot: WorkbookSnapshot) -> tuple[WorkbookIR, ParseDiagnostics]:

@@ -67,7 +67,7 @@ class ExcelParser(BaseParser):
     def _parse_ooxml(self, path: Path) -> ParsedDocumentResult:
         try:
             from langparse.workbooks.adapters import OOXMLWorkbookAdapter
-            from langparse.workbooks.assembly import assemble_baseline
+            from langparse.workbooks.assembly import assemble_baseline, assemble_workbook
             from langparse.workbooks.rendering import (
                 compatibility_pages,
                 render_workbook_markdown,
@@ -79,7 +79,14 @@ class ExcelParser(BaseParser):
             ) from None
 
         snapshot = OOXMLWorkbookAdapter().snapshot(path)
-        structure, diagnostics = assemble_baseline(snapshot)
+        try:
+            structure, diagnostics = assemble_workbook(snapshot)
+        except Exception as exc:
+            structure, diagnostics = assemble_baseline(snapshot)
+            diagnostics.status = "partial"
+            diagnostics.warnings.append(
+                f"Semantic workbook assembly failed; retained raw-grid fallback: {type(exc).__name__}"
+            )
         pages = compatibility_pages(snapshot, structure)
         markdown = render_workbook_markdown(snapshot, structure)
         return ParsedDocumentResult(

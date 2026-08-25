@@ -284,6 +284,11 @@ def _looks_like_data_or_section(
     first = _cell_text(sheet, row_number, min_col).strip()
     if re.fullmatch(r"\d+", first):
         return True
+    values = [_raw_cell_text(sheet, row_number, column) for column in range(min_col, max_col + 1)]
+    if any(_is_number(value) for value in values) and any(
+        value.strip() and not _is_number(value) for value in values
+    ):
+        return True
     row_text = _row_text(sheet, row_number, min_col, max_col).replace(" ", "")
     return "合计" in row_text or "总计" in row_text
 

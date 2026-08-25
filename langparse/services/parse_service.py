@@ -43,10 +43,20 @@ PLANNED_ENGINES = {
 
 class ParseService:
     def chunk_result(self, parsed: ParsedDocumentResult, chunker=None) -> list[Chunk]:
-        """Chunk a parse result, rendering it to Markdown first."""
+        """Chunk a parse result from its richest available representation."""
+        if chunker is not None:
+            if parsed.structure is not None and parsed.structure.kind == "workbook":
+                return chunker.chunk(parsed)
+            return chunker.chunk(document_from_result(parsed))
+
+        if parsed.structure is not None and parsed.structure.kind == "workbook":
+            from langparse.chunkers.workbook import WorkbookStructuralChunker
+
+            return WorkbookStructuralChunker().chunk(parsed)
+
         from langparse.chunkers.semantic import SemanticChunker
 
-        return (chunker or SemanticChunker()).chunk(document_from_result(parsed))
+        return SemanticChunker().chunk(document_from_result(parsed))
 
     def render_output(
         self,
@@ -78,9 +88,10 @@ class ParseService:
             file_path,
             engine_name=engine_name,
             engine=engine,
+            chunk=chunk,
             **kwargs,
         )
-        return self.render_output(parsed, fmt, chunks=self.chunk_result(parsed) if chunk else None)
+        return self.render_output(parsed, fmt, chunks=parsed.chunks if chunk else None)
 
     def parse_batch_outputs(
         self,
@@ -150,7 +161,7 @@ class ParseService:
                 paths.append(path)
         return paths
 
-    def parse_result(self, file_path, engine_name="simple", engine=None, **kwargs):
+    def parse_result(self, file_path, engine_name="simple", engine=None, chunk=False, **kwargs):
         """
         Parse any supported format into a ParsedDocumentResult.
 
@@ -165,13 +176,17 @@ class ParseService:
         if kind is None:
             raise unsupported_extension_error(path)
         if kind == "pdf":
-            return self._collect_pdf_document_result(
+            parsed = self._collect_pdf_document_result(
                 path,
                 engine_name=engine_name,
                 engine=engine,
                 **kwargs,
             )
-        return self._parser_for_kind(kind).parse_result(path, **kwargs)
+        else:
+            parsed = self._parser_for_kind(kind).parse_result(path, **kwargs)
+        if chunk:
+            parsed.chunks = self.chunk_result(parsed)
+        return parsed
 
     def _parser_for_kind(self, kind: str):
         if kind == "docx":

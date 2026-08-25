@@ -34,10 +34,10 @@ def test_json_output_carries_chunks_when_asked():
     assert payload["chunks"][0]["metadata"]["header"] == "A"
 
 
-def test_json_output_has_no_chunks_key_by_default():
+def test_json_output_has_an_empty_chunks_array_by_default():
     payload = json.loads(ParseService().render_output(_parsed(), "json"))
 
-    assert "chunks" not in payload
+    assert payload["chunks"] == []
 
 
 def test_markdown_output_separates_chunks_with_a_rule():

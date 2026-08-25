@@ -114,6 +114,29 @@ def test_parse_result_returns_normalized_result(tmp_path):
     assert parsed.pages[0].markdown_content == "Hello"
 
 
+def test_parse_result_chunk_flag_does_not_reach_pdf_engine(tmp_path):
+    seen = {}
+
+    class FastPathEngine:
+        def process_document(self, file_path, **kwargs):
+            seen.update(kwargs)
+            return ParsedDocumentResult(
+                source=str(file_path),
+                filename=file_path.name,
+                engine="simple",
+                pages=[ParsedPageResult(page_number=1, markdown_content="# Title\n\nBody")],
+                markdown_content="# Title\n\nBody",
+            )
+
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+
+    parsed = ParseService().parse_result(pdf, engine=FastPathEngine(), chunk=True)
+
+    assert "chunk" not in seen
+    assert parsed.chunks
+
+
 def test_collect_parse_metrics_counts_pages_tables_and_output_size():
     parsed = ParsedDocumentResult(
         source="sample.pdf",

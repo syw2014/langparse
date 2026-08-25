@@ -3,7 +3,7 @@
 **版本**: 0.0.1（`pyproject.toml`，未发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
 **最后更新**: 2026-08-25
-**测试**: 268 passed
+**测试**: 331 passed
 
 > 本文档在 2026-07-30 重写。此前版本声称 v0.1.0、测试覆盖 100%、解析器完成度 100%，三项均与实际不符，已按代码现状订正。2026-08-03 补充"项目定位"一节并重排"已知缺口"优先级，理由见下。
 
@@ -38,7 +38,7 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | Excel OOXML 事实解析（Phase 1） | 可用 | `.xlsx/.xlsm` 产出 `WorkbookIR.snapshot`、raw-grid、coverage/reconstruction diagnostics 和 source-aware chunks；非分页且不生成 `Unnamed:*` |
 | Excel 确定性逻辑表（Phase 2A） | 可用 | Sheet 内空白带多表区域、重复打印片段、多级表头、板块/数据/合计角色、语义 Markdown 与 source-aware `table_rows` chunks |
 | Excel Block 分类（Phase 2B1） | 可用 | 确定性区分 LogicalTable/Form/Matrix/Text/Unclassified，携带 confidence/reason codes/source-ref validity；mixed Sheet 全 Block 渲染和 chunk |
-| Excel 跨 Sheet 续接（Phase 2B2+） | 未实现 | 同一逻辑表跨 Sheet 高置信关联、低置信候选诊断和模型 fallback；`.xls/.xlsb` rich adapter 也待实现 |
+| Excel 跨 Sheet 续接（Phase 2B2） | 可用 | 相邻逻辑表的高置信关联与聚合视图、模糊/拒绝候选诊断、源 Sheet Markdown/chunks 及 `continuation_id` 重组 metadata；模型 fallback 仍待实现 |
 | PDF 解析（simple） | 可用 | pdfplumber，含表格提取与扫描件 OCR 兜底 |
 | PDF 解析（MinerU） | 可用 | 经 `mineru-api`，含服务生命周期管理、表格/图片/caption 抽取 |
 | PDF 解析（DeepDoc） | 可用 | 移植自 RAGFlow：OCR + 版面分析 + 表格结构识别，ONNX/CPU 推理，模型按需从 HuggingFace `InfiniFlow/deepdoc` 下载到 `~/.langparse/models/deepdoc`；已知局限：复杂/多行竖排标签版式下表格结构识别仍可能出现行拆分或印章文字碎片误判为单元格 |
@@ -48,7 +48,7 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | Benchmark | 可用 | 结构阈值 + 保真度（文本编辑距离 / 表格 TEDS），需 manifest 提供参考输出 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-"268 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+"331 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
 
 ---
 
@@ -111,16 +111,21 @@ langparse/
    Markdown 与结构化 chunk，候选解释失败只降级本区域。真实预算工作簿为 14 个
    LogicalTable + 1 个封面 TextBlock、43 chunks，coverage/reconstruction/source-ref
    validity 均为 1.0/true。
-4. ⬜ **Phase 2B2 跨 Sheet continuation**：以 kind、schema fingerprint、标题、页码、
-   单位和列宽兼容性建立高置信关联；证据不足时保持独立并记录候选关系。
+4. ✅ **Phase 2B2（2026-08-25）跨 Sheet continuation**：以 kind、schema fingerprint、
+   标题、页码、单位和列宽兼容性建立高置信关联；证据不足时保持独立并记录
+   模糊/拒绝候选。聚合逻辑表可直接访问，Markdown/chunks 仍按源 Sheet 输出，
+   chunks 可按 `continuation_id` 重组。真实预算工作簿保持 14 个 LogicalTable +
+   1 个 TextBlock、零 accepted 续接、39 个无重复 chunks，data/total `row_id` 完整守恒，
+   coverage/reconstruction/source-ref validity 为 1.0/true/1.0。
 5. 🟨 **Phase 3 基础语义 chunk 已完成，profiles 待补**：现已按 logical
    table/section/header path 生成 `table_rows` chunks，不跨板块并携带 row/fragment
    source ranges，同时支持 Form/Matrix/Text/raw-grid chunks；retrieval 与 analysis
    两套可配置 profiles 尚未实现。
 6. ⬜ **Phase 4 可选模型 fallback**：仅对低置信候选调用 LLM/VLM，使用 schema
    约束与坐标校验；模型不能改写事实层。
-7. ⬜ **Phase 5 格式与 bundle**：补齐 `.xls/.xlsb` rich adapters，以及
-   `document.json`、raw/semantic Markdown、chunks、diagnostics 的标准输出包。
+7. ⬜ **Phase 5 格式、语义 Block 与 bundle**：补齐 `.xls/.xlsb` rich adapters、
+   图片/图表语义 Block，以及 `document.json`、raw/semantic Markdown、chunks、
+   diagnostics 的标准输出包；完成生产加固后再进入发布门。
 
 **P0 —— 直接验证"通用引擎与垂直引擎平权"这条核心主张**
 1. ✅ **已完成（2026-08-05）——把 DeepDoc 从占位实现补成真实可用**：[langparse/engines/pdf/deepdoc_engine.py](../langparse/engines/pdf/deepdoc_engine.py) 现在是移植自 RAGFlow 的完整 OCR + 版面分析 + 表格结构识别流水线（ONNX/CPU 推理，见 `langparse/engines/pdf/deepdoc/`），已注册进 `ENGINE_MAP`，`--engine deepdoc` 端到端可用，CLI 无需新增任何 flag（`--device` `--model-dir` `--download-dir` `--model-policy` 本就是通用转发的 kwargs）。用真实扫描件 PDF 做过一次人工冒烟验证（非 CI 用例，模型从 HuggingFace `InfiniFlow/deepdoc` 首次运行时下载到 `~/.langparse/models/deepdoc`）：产出的 `markdown_content` 是可读的中文文本和结构化表格，整体非乱码非空。对照源图像逐项核对后，发现两类已知局限而非"完美识别"：字符级 OCR 误差（"竣工"识别成"峻工"、两处日期字段缺字/错位，属扫描件 OCR 正常范围）之外，表格结构重建在复杂版式下有真实缺陷——源文档一段竖排多字标签被表格结构识别器拆成 5 行乱序字符，另有 2 行在源图像里找不到对应内容，疑似红色签章文字碎片被误判为单元格；后者是表格结构还原本身的局限，不是简单的字符识别误差（见上方完成度表 DeepDoc 行的注记）。跑起来的垂直引擎从 MinerU 一个变成两个，"平权"主张不再只有单一样本支撑，但表格结构还原在复杂版式上的鲁棒性仍是待改进项，不宜过度宣称"识别干净"。

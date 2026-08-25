@@ -77,9 +77,7 @@ def assemble_workbook(snapshot: WorkbookSnapshot) -> tuple[WorkbookIR, ParseDiag
     try:
         groups, candidates = link_table_continuations(snapshot, workbook_ir)
     except Exception as exc:
-        diagnostics.warnings.append(
-            f"cross_sheet_continuation_fallback:{type(exc).__name__}"
-        )
+        diagnostics.warnings.append(f"cross_sheet_continuation_fallback:{type(exc).__name__}")
     else:
         workbook_ir.table_continuations = groups
         diagnostics.continuation_candidates = candidates

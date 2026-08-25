@@ -79,6 +79,35 @@ def test_excel_parser_uses_semantic_workbook_assembly(tmp_path):
     assert parsed.markdown_content.count("| Name | Value |") == 1
 
 
+def test_excel_parser_links_cross_sheet_continuation_and_chunks_source_members(tmp_path):
+    path = tmp_path / "continued-table.xlsx"
+    workbook = Workbook()
+    for index, item in enumerate(("Alpha", "Beta"), start=1):
+        sheet = workbook.active if index == 1 else workbook.create_sheet()
+        sheet.title = f"清单{index}"
+        sheet.column_dimensions["A"].width = 18
+        sheet.column_dimensions["B"].width = 12
+        sheet.column_dimensions["C"].width = 10
+        sheet.append(["工程清单"])
+        sheet.append([f"第 {index} 页 共 2 页 ({index}/2)"])
+        sheet.append(["Name", "Code", "Value"])
+        sheet.append([item, f"Item {index}", index])
+    workbook.save(path)
+
+    parsed = ExcelParser().parse_result(path)
+
+    assert len(parsed.structure.table_continuations) == 1
+    group = parsed.structure.table_continuations[0]
+    assert [row.values[0] for row in group.logical_table.rows if row.role == "data"] == [
+        "Alpha",
+        "Beta",
+    ]
+    assert [item["status"] for item in parsed.diagnostics.continuation_candidates] == ["accepted"]
+    chunks = WorkbookStructuralChunker().chunk(parsed)
+    assert len(chunks) == 2
+    assert {chunk.metadata["continuation_id"] for chunk in chunks} == {group.continuation_id}
+
+
 @pytest.mark.skipif(
     not PRIVATE_BUDGET_WORKBOOK.exists(),
     reason="private budget workbook is not available",
@@ -87,6 +116,12 @@ def test_private_budget_workbook_sheet_8_acceptance():
     parsed = ExcelParser().parse_result(PRIVATE_BUDGET_WORKBOOK)
 
     assert parsed.structure is not None
+    assert len(parsed.structure.sheets) == 15
+    assert parsed.diagnostics.block_count_by_kind == {"logical_table": 14, "text": 1}
+    assert len(parsed.structure.table_continuations) == 0
+    assert not any(
+        item["status"] == "accepted" for item in parsed.diagnostics.continuation_candidates
+    )
     sheet = parsed.structure.sheets[7]
     assert sheet.name == "8.表1-2分部分项工程量清单与计价表(资格后审专用)"
     assert len(sheet.blocks) == 1
@@ -130,4 +165,23 @@ def test_private_budget_workbook_sheet_8_acceptance():
         for kind in block_kinds
     }
     assert {chunk.metadata["chunk_type"] for chunk in chunks} == expected_chunk_types
+    assert len(chunks) == 39
+    logical_row_ids = [
+        row.row_id
+        for workbook_sheet in parsed.structure.sheets
+        for workbook_block in workbook_sheet.blocks
+        if workbook_block.logical_table is not None
+        for row in workbook_block.logical_table.rows
+        if row.role in {"data", "total"}
+    ]
+    chunk_row_ids = [
+        row_id
+        for chunk in chunks
+        if chunk.metadata["chunk_type"] == "table_rows"
+        for row_id in chunk.metadata["row_ids"]
+    ]
+    assert len(logical_row_ids) == len(set(logical_row_ids))
+    assert len(chunk_row_ids) == len(set(chunk_row_ids))
+    assert len(chunk_row_ids) == len(logical_row_ids)
+    assert set(chunk_row_ids) == set(logical_row_ids)
     assert "Unnamed:" not in parsed.markdown_content

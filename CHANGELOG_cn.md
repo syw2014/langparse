@@ -22,6 +22,13 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
   携带可解释置信度/reason codes 与 source-ref validity diagnostics。
 - 新增 mixed Sheet 的完整渲染与结构化 chunks（`form_fields`、`matrix_rows`、
   `text_block` 和候选范围内的 `raw_grid_rows`），不再跳过同 Sheet 的其他 Block。
+- 新增保守的跨 Sheet 表格续接：高置信相邻表格暴露确定性聚合逻辑视图，
+  模糊/拒绝候选仍保持独立并携带可解释诊断。Markdown 和 chunks 仍按源
+  Sheet 输出，chunks 携带可重新分组的 metadata。
+- 新增公开端到端续接覆盖和只读 15-Sheet 私有工作簿回归：14 个
+  LogicalTable + 1 个 TextBlock、零 accepted 续接、质量比率
+  `1.0` / `true` / `1.0`，以及 39 个无重复 chunks 与精确的 data/total `row_id` 守恒。
+  完整测试套件为 331 个测试全部通过。
 
 ### 变更（Changed）
 - Excel 结果改为非分页。Sheet 序号仅作为兼容标识，不再注入虚构页码标记。
@@ -31,8 +38,8 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
   输出可安全序列化 Excel 原生日期等值。
 
 ### 已知限制
-- 跨 Sheet 续接、retrieval/analysis 双 chunk profiles、图片/图表语义 Block 和模型
-  fallback 仍属于后续阶段；富信息 `.xls`/`.xlsb` adapter 也不在本阶段范围内。
+- retrieval/analysis 双 chunk profiles、图片/图表语义 Block、模型 fallback、
+  富信息 `.xls`/`.xlsb` adapter、标准 bundle 输出和生产加固仍属于后续阶段。
 
 ## [2026-08-04]
 

@@ -26,6 +26,14 @@ version sections.
 - Mixed-Sheet rendering and structural chunks (`form_fields`, `matrix_rows`,
   `text_block`, and candidate-scoped `raw_grid_rows`) without skipping sibling
   blocks.
+- Conservative cross-Sheet table continuation: high-confidence adjacent tables
+  expose a deterministic aggregate logical view, while ambiguous/rejected
+  candidates remain independent with explainable diagnostics. Markdown and
+  chunks remain source-Sheet based and chunks carry regrouping metadata.
+- Public end-to-end continuation coverage plus a read-only 15-Sheet private
+  workbook regression: 14 LogicalTable + 1 TextBlock, zero accepted
+  continuations, quality ratios `1.0` / `true` / `1.0`, and 39 unique chunks
+  with exact data/total `row_id` conservation. The full suite passes 331 tests.
 
 ### Changed
 - Excel results are non-paginated. Sheet ordinals remain available as
@@ -36,9 +44,9 @@ version sections.
   `diagnostics`; JSON output includes native spreadsheet scalars safely.
 
 ### Known limitations
-- Cross-sheet continuation, retrieval versus analysis chunk profiles,
-  image/chart semantic blocks, and model-assisted fallback remain later phases.
-  Rich `.xls`/`.xlsb` adapters are also not part of this phase.
+- Retrieval versus analysis chunk profiles, image/chart semantic blocks,
+  model-assisted fallback, rich `.xls`/`.xlsb` adapters, standard bundle
+  output, and production hardening remain later phases.
 
 ## [2026-08-04]
 

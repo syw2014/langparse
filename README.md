@@ -10,7 +10,7 @@
 
 ## 🚀 Project Status
 
-LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (300 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
+LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (331 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
 
 Still pre-1.0. Looking for early contributors and design partners, particularly to help wire up additional vertical engines (PaddleOCR-VL, vision-LLM backends) and pressure-test the engine-neutral routing design.
 
@@ -211,13 +211,16 @@ parse:
 ```python
 from langparse.services.parse_service import ParseService
 
-result = ParseService().parse_result("budget.xlsx", chunk=True)
-print(result.structure.snapshot.sheets[0].cells["B2"].formula)
-print(result.diagnostics.coverage_ratio)
-print([block.kind for block in result.structure.sheets[0].blocks])
-print(result.diagnostics.source_ref_validity_ratio)
-print(result.chunks[0].metadata["chunk_type"])
-print(result.chunks[0].metadata["source_ranges"])
+parsed = ParseService().parse_result("budget.xlsx", chunk=True)
+print(parsed.structure.snapshot.sheets[0].cells["B2"].formula)
+print(parsed.diagnostics.coverage_ratio)
+print([block.kind for block in parsed.structure.sheets[0].blocks])
+print(parsed.diagnostics.source_ref_validity_ratio)
+print(parsed.chunks[0].metadata["chunk_type"])
+print(parsed.chunks[0].metadata["source_ranges"])
+
+sheet_table = parsed.structure.sheets[0].blocks[0].logical_table
+cross_sheet_table = parsed.structure.table_continuations[0].logical_table
 ```
 
 The parser deterministically separates tables across blank row/column bands,
@@ -226,10 +229,16 @@ sections/data/totals, and chunks complete logical rows without crossing section
 boundaries. Candidate regions are conservatively classified as logical tables,
 forms, matrices, text, or explicit unclassified raw grids; every kind has a
 source-aware Markdown and chunk path. `structure.snapshot` and compatibility
-tables retain the original cell-level view. Cross-sheet table continuation,
-retrieval/analysis chunk profiles, confidence-driven LLM/VLM fallback, and rich
-`.xls`/`.xlsb` adapters remain follow-up work; delimited and legacy inputs keep
-the compatibility adapter for now.
+tables retain the original cell-level view. High-confidence adjacent-Sheet
+continuations expose one aggregate logical table through
+`structure.table_continuations`; insufficient evidence keeps tables independent
+and records an ambiguous or rejected diagnostic. Markdown and chunks remain
+source-Sheet based rather than duplicating the aggregate, and source-member
+chunks can be regrouped by `continuation_id`. Retrieval/analysis dual chunk
+profiles, confidence-driven LLM/VLM fallback, rich `.xls`/`.xlsb` adapters,
+image/chart semantic blocks, standard bundle output, and production hardening
+remain follow-up work; delimited and legacy inputs keep the compatibility
+adapter for now.
 
 ### Scanned PDFs
 

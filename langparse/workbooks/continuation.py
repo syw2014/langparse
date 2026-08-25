@@ -274,7 +274,7 @@ def _aggregate_table(
     aggregate.rows = []
     aggregate.fragments = []
     aggregate.sections = [
-        deepcopy(section) for copied_member in copied_members for section in copied_member.sections
+        section for copied_member in copied_members for section in copied_member.sections
     ]
     aggregate.source_refs = [
         source_ref for copied_member in copied_members for source_ref in copied_member.source_refs
@@ -308,21 +308,27 @@ def _append_aggregate_rows(
     aggregate: LogicalTable,
     copied_members: list[LogicalTable],
 ) -> None:
-    sections_by_ref = {section.source_ref.key: section for section in aggregate.sections}
     active_path: list[str] = []
     active_section: TableSection | None = None
     for member_index, copied_member in enumerate(copied_members):
+        member_sections_by_ref = {
+            section.source_ref.key: section for section in copied_member.sections
+        }
         for row in copied_member.rows:
             if member_index and row.role in _REPEATED_PRESENTATION_ROLES:
                 row.role = _REPEATED_PRESENTATION_ROLES[row.role]
             if row.role == "section_header":
-                active_section = sections_by_ref.get(row.source_ref.key)
                 active_path = list(row.section_path)
+                active_section = member_sections_by_ref.get(row.source_ref.key)
+                if active_section is None:
+                    active_section = _section_for_path(active_path, copied_member.sections)
                 if not active_path and active_section is not None:
                     active_path = [active_section.title]
             elif row.section_path:
                 active_path = list(row.section_path)
-                active_section = _section_for_path(active_path, aggregate.sections)
+                member_section = _section_for_path(active_path, copied_member.sections)
+                if member_section is not None:
+                    active_section = member_section
             elif member_index and row.role == "data" and active_path:
                 row.section_path = list(active_path)
                 if active_section is not None and row.row_id not in active_section.row_ids:
@@ -333,7 +339,14 @@ def _append_aggregate_rows(
 def _section_for_path(path: list[str], sections: list[TableSection]) -> TableSection | None:
     if not path:
         return None
-    return next((section for section in reversed(sections) if section.title == path[-1]), None)
+    return next(
+        (
+            section
+            for section in reversed(sections)
+            if [*section.parent_path, section.title] == path
+        ),
+        None,
+    )
 
 
 def _continuation_role(index: int, member_count: int) -> str:

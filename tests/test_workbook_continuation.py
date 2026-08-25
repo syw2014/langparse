@@ -651,3 +651,67 @@ def test_aggregate_uses_copies_and_carries_a_section_path_across_members():
     ]
     assert [row.role for row in second.rows] == member_row_roles
     assert [row.section_path for row in second.rows] == member_paths
+
+
+def test_aggregate_keeps_inherited_rows_on_the_active_repeated_title_section():
+    # Break caught: equal section titles on later members must not replace the active section.
+    first_section = TableSection(
+        section_id="first_shared_section",
+        title="Shared section",
+        source_ref=SourceRef(sheet_name="清单1", range="A4:B4"),
+    )
+    first_sheet, first = _presentation_table(
+        "清单1",
+        0,
+        page=1,
+        data_rows=[("row_alpha", ["Alpha", "1"])],
+        section=first_section,
+    )
+    first.table_id = "table_1"
+
+    second_sheet, second = _presentation_table(
+        "清单2",
+        1,
+        page=2,
+        data_rows=[("row_beta", ["Beta", "2"])],
+    )
+    second.table_id = "table_2"
+    second.rows.extend(
+        [
+            LogicalRow(
+                row_id="second_shared_header",
+                source_ref=SourceRef(sheet_name="清单2", range="A5:B5"),
+                role="section_header",
+                values=["", "Shared section"],
+                section_path=["Shared section"],
+            ),
+            LogicalRow(
+                row_id="row_gamma",
+                source_ref=SourceRef(sheet_name="清单2", range="A6:B6"),
+                role="data",
+                values=["Gamma", "3"],
+                section_path=["Shared section"],
+            ),
+        ]
+    )
+    second.sections = [
+        TableSection(
+            section_id="second_shared_section",
+            title="Shared section",
+            source_ref=SourceRef(sheet_name="清单2", range="A5:B5"),
+            row_ids=["row_gamma"],
+        )
+    ]
+    snapshot, ir = _workbook_ir([(first_sheet, [first]), (second_sheet, [second])])
+
+    groups, _ = link_table_continuations(snapshot, ir)
+
+    aggregate = groups[0].logical_table
+    first_aggregate_section = next(
+        section for section in aggregate.sections if section.section_id == "first_shared_section"
+    )
+    second_aggregate_section = next(
+        section for section in aggregate.sections if section.section_id == "second_shared_section"
+    )
+    assert first_aggregate_section.row_ids == ["row_alpha", "row_beta"]
+    assert second_aggregate_section.row_ids == ["row_gamma"]

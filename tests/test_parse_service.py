@@ -205,3 +205,133 @@ def test_chunk_option_does_not_leak_into_engine_config(tmp_path):
         module.ENGINE_MAP.pop("recording", None)
 
     assert "chunk" not in seen
+
+
+def test_parse_service_reuses_one_workbook_result_for_both_profiles(sample_excel_file):
+    service = ParseService()
+    parsed = service.parse_result(sample_excel_file, chunk=True)
+    original_chunks = list(parsed.chunks)
+
+    analysis = service.chunk_result(parsed, chunk_profile="analysis")
+
+    assert {chunk.metadata["chunk_profile"] for chunk in parsed.chunks} == {"retrieval"}
+    assert {chunk.metadata["chunk_profile"] for chunk in analysis} == {"analysis"}
+    assert parsed.chunks == original_chunks
+
+
+def test_explicit_profile_and_custom_chunker_are_mutually_exclusive():
+    parsed = ParsedDocumentResult(source="a.md", filename="a.md", engine="markdown")
+
+    with pytest.raises(
+        ValueError,
+        match="custom chunker and chunk_profile are mutually exclusive",
+    ):
+        ParseService().chunk_result(parsed, chunker=object(), chunk_profile="retrieval")
+
+
+def test_direct_analysis_chunking_rejects_non_workbook_results():
+    parsed = ParsedDocumentResult(
+        source="a.md",
+        filename="a.md",
+        engine="markdown",
+        markdown_content="# A",
+    )
+
+    with pytest.raises(ValueError, match="analysis chunk profile requires WorkbookIR"):
+        ParseService().chunk_result(parsed, chunk_profile="analysis")
+
+
+def test_non_workbook_chunks_are_tagged_as_retrieval(tmp_path):
+    source = tmp_path / "a.md"
+    source.write_text("# A\n\nBody", encoding="utf-8")
+
+    parsed = ParseService().parse_result(source, chunk=True)
+
+    assert parsed.chunks
+    assert {chunk.metadata["chunk_profile"] for chunk in parsed.chunks} == {"retrieval"}
+    assert {chunk.metadata["chunk_profile_version"] for chunk in parsed.chunks} == {1}
+
+
+def test_invalid_profile_fails_before_pdf_engine_runs(tmp_path):
+    called = False
+
+    class RecordingEngine:
+        def process_document(self, file_path, **kwargs):
+            nonlocal called
+            called = True
+            raise AssertionError("engine must not run")
+
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+
+    with pytest.raises(ValueError, match="Unknown workbook chunk profile"):
+        ParseService().parse_result(
+            pdf,
+            engine=RecordingEngine(),
+            chunk=True,
+            chunk_profile="balanced",
+        )
+    assert called is False
+
+
+def test_chunk_false_ignores_profile_and_does_not_forward_it_to_engine(tmp_path):
+    seen = {}
+
+    class RecordingEngine:
+        def process_document(self, file_path, **kwargs):
+            seen.update(kwargs)
+            return ParsedDocumentResult(
+                source=str(file_path),
+                filename=file_path.name,
+                engine="simple",
+                markdown_content="Hello",
+            )
+
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+    parsed = ParseService().parse_result(
+        pdf,
+        engine=RecordingEngine(),
+        chunk=False,
+        chunk_profile="not-used",
+    )
+
+    assert parsed.markdown_content == "Hello"
+    assert "chunk_profile" not in seen
+
+
+def test_parse_result_preserves_workbook_when_chunker_fails(sample_excel_file, monkeypatch):
+    def fail_chunk(self, parsed):
+        raise RuntimeError("sensitive cell value must not be copied")
+
+    monkeypatch.setattr(
+        "langparse.chunkers.workbook.WorkbookStructuralChunker.chunk",
+        fail_chunk,
+    )
+    service = ParseService()
+
+    parsed = service.parse_result(sample_excel_file, chunk=True)
+
+    assert parsed.structure is not None
+    assert parsed.markdown_content
+    assert parsed.chunks == []
+    assert parsed.diagnostics is not None
+    assert parsed.diagnostics.status == "partial"
+    assert parsed.diagnostics.errors == ["Chunking profile 'retrieval' failed (RuntimeError)."]
+    assert "sensitive cell value" not in str(parsed.diagnostics.errors)
+    assert service.render_output(parsed, "markdown", chunks=[]) == parsed.markdown_content
+
+
+def test_parse_result_preserves_non_workbook_when_analysis_is_unsupported(tmp_path):
+    source = tmp_path / "a.md"
+    source.write_text("# A\n\nBody", encoding="utf-8")
+
+    parsed = ParseService().parse_result(source, chunk=True, chunk_profile="analysis")
+
+    assert parsed.markdown_content == "# A\n\nBody"
+    assert parsed.chunks == []
+    assert parsed.diagnostics is not None
+    assert parsed.diagnostics.status == "partial"
+    assert parsed.diagnostics.unsupported_features == [
+        "Chunking profile 'analysis' is not supported for engine 'markdown'."
+    ]

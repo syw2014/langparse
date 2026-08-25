@@ -5,6 +5,10 @@ from collections.abc import Iterable, Iterator
 from dataclasses import asdict
 from pathlib import Path
 
+from langparse.chunkers.profiles import (
+    ChunkProfileNotSupportedError,
+    resolve_workbook_chunk_policy,
+)
 from langparse.config import settings
 from langparse.core.rendering import document_from_result
 from langparse.engines.pdf.deepdoc_engine import DeepDocEngine
@@ -22,7 +26,13 @@ from langparse.services.output_paths import (
     resolve_output_path,
     resolve_output_paths,
 )
-from langparse.types import Chunk, Document, ParsedDocumentResult, ParsedPageResult
+from langparse.types import (
+    Chunk,
+    Document,
+    ParsedDocumentResult,
+    ParseDiagnostics,
+    ParsedPageResult,
+)
 
 #: Engines a caller can actually select. Advertising an engine that raises
 #: NotImplementedError only once it runs wastes the user's configuration effort
@@ -42,21 +52,38 @@ PLANNED_ENGINES = {
 
 
 class ParseService:
-    def chunk_result(self, parsed: ParsedDocumentResult, chunker=None) -> list[Chunk]:
+    def chunk_result(
+        self,
+        parsed: ParsedDocumentResult,
+        chunker=None,
+        *,
+        chunk_profile: str | None = None,
+    ) -> list[Chunk]:
         """Chunk a parse result from its richest available representation."""
+        if chunker is not None and chunk_profile is not None:
+            raise ValueError("custom chunker and chunk_profile are mutually exclusive")
+
         if chunker is not None:
             if parsed.structure is not None and parsed.structure.kind == "workbook":
                 return chunker.chunk(parsed)
             return chunker.chunk(document_from_result(parsed))
 
+        policy = resolve_workbook_chunk_policy(chunk_profile)
         if parsed.structure is not None and parsed.structure.kind == "workbook":
             from langparse.chunkers.workbook import WorkbookStructuralChunker
 
-            return WorkbookStructuralChunker().chunk(parsed)
+            return WorkbookStructuralChunker(profile=policy.name).chunk(parsed)
+
+        if policy.name.value == "analysis":
+            raise ChunkProfileNotSupportedError("analysis chunk profile requires WorkbookIR")
 
         from langparse.chunkers.semantic import SemanticChunker
 
-        return SemanticChunker().chunk(document_from_result(parsed))
+        chunks = SemanticChunker().chunk(document_from_result(parsed))
+        for chunk in chunks:
+            chunk.metadata["chunk_profile"] = policy.name.value
+            chunk.metadata["chunk_profile_version"] = policy.version
+        return chunks
 
     def render_output(
         self,
@@ -66,6 +93,8 @@ class ParseService:
     ) -> str:
         if fmt == "markdown":
             if chunks is None:
+                return parsed.markdown_content
+            if not chunks:
                 return parsed.markdown_content
             return "\n\n---\n\n".join(chunk.content for chunk in chunks)
         if fmt == "json":
@@ -82,6 +111,7 @@ class ParseService:
         fmt="markdown",
         engine=None,
         chunk=False,
+        chunk_profile: str | None = None,
         **kwargs,
     ) -> str:
         parsed = self.parse_result(
@@ -89,6 +119,7 @@ class ParseService:
             engine_name=engine_name,
             engine=engine,
             chunk=chunk,
+            chunk_profile=chunk_profile,
             **kwargs,
         )
         return self.render_output(parsed, fmt, chunks=parsed.chunks if chunk else None)
@@ -100,6 +131,7 @@ class ParseService:
         fmt="markdown",
         engine=None,
         chunk=False,
+        chunk_profile: str | None = None,
         **kwargs,
     ) -> list[tuple[Path, str]]:
         # `chunk` is named explicitly rather than left in **kwargs: kwargs also
@@ -117,6 +149,7 @@ class ParseService:
                         fmt=fmt,
                         engine=active_engine,
                         chunk=chunk,
+                        chunk_profile=chunk_profile,
                         **kwargs,
                     ),
                 )
@@ -161,13 +194,24 @@ class ParseService:
                 paths.append(path)
         return paths
 
-    def parse_result(self, file_path, engine_name="simple", engine=None, chunk=False, **kwargs):
+    def parse_result(
+        self,
+        file_path,
+        engine_name="simple",
+        engine=None,
+        chunk=False,
+        chunk_profile: str | None = None,
+        **kwargs,
+    ):
         """
         Parse any supported format into a ParsedDocumentResult.
 
         This is the one place extension routing happens; everything else reads
         the mapping from `langparse.parsers.registry`.
         """
+        if chunk:
+            resolve_workbook_chunk_policy(chunk_profile)
+
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
@@ -185,8 +229,36 @@ class ParseService:
         else:
             parsed = self._parser_for_kind(kind).parse_result(path, **kwargs)
         if chunk:
-            parsed.chunks = self.chunk_result(parsed)
+            self._populate_chunks(parsed, chunk_profile)
         return parsed
+
+    def _populate_chunks(
+        self,
+        parsed: ParsedDocumentResult,
+        chunk_profile: str | None,
+    ) -> None:
+        policy = resolve_workbook_chunk_policy(chunk_profile)
+        try:
+            parsed.chunks = self.chunk_result(parsed, chunk_profile=policy.name.value)
+        except ChunkProfileNotSupportedError:
+            if parsed.diagnostics is None:
+                parsed.diagnostics = ParseDiagnostics()
+            if parsed.diagnostics.status != "failed":
+                parsed.diagnostics.status = "partial"
+            parsed.diagnostics.unsupported_features.append(
+                f"Chunking profile '{policy.name.value}' is not supported for engine "
+                f"'{parsed.engine}'."
+            )
+            parsed.chunks = []
+        except Exception as exc:  # noqa: BLE001 - preserve parsed result at chunk boundary
+            if parsed.diagnostics is None:
+                parsed.diagnostics = ParseDiagnostics()
+            if parsed.diagnostics.status != "failed":
+                parsed.diagnostics.status = "partial"
+            parsed.diagnostics.errors.append(
+                f"Chunking profile '{policy.name.value}' failed ({type(exc).__name__})."
+            )
+            parsed.chunks = []
 
     def _parser_for_kind(self, kind: str):
         if kind == "docx":

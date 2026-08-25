@@ -66,6 +66,7 @@ class ParseDiagnostics:
     status: str = "success"
     coverage_ratio: float = 1.0
     reconstruction_passed: bool = True
+    source_ref_validity_ratio: float = 1.0
     block_count_by_kind: dict[str, int] = field(default_factory=dict)
     ambiguous_regions: list[StructuredData] = field(default_factory=list)
     model_calls: list[StructuredData] = field(default_factory=list)

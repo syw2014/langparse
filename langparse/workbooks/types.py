@@ -137,6 +137,61 @@ class LogicalTable:
 
 
 @dataclass
+class TextLine:
+    text: str
+    source_refs: list[SourceRef] = field(default_factory=list)
+
+
+@dataclass
+class FormField:
+    field_id: str
+    label: str
+    value: Any = None
+    label_source_refs: list[SourceRef] = field(default_factory=list)
+    value_source_refs: list[SourceRef] = field(default_factory=list)
+    confidence: float = 1.0
+
+
+@dataclass
+class FormBlock:
+    form_id: str
+    title: str = ""
+    fields: list[FormField] = field(default_factory=list)
+    free_text: list[TextLine] = field(default_factory=list)
+    source_refs: list[SourceRef] = field(default_factory=list)
+    confidence: float = 1.0
+    diagnostics: list[StructuredData] = field(default_factory=list)
+
+
+@dataclass
+class MatrixHeader:
+    value: str
+    source_refs: list[SourceRef] = field(default_factory=list)
+
+
+@dataclass
+class MatrixBlock:
+    matrix_id: str
+    title: str = ""
+    row_headers: list[MatrixHeader] = field(default_factory=list)
+    column_headers: list[MatrixHeader] = field(default_factory=list)
+    values: list[list[Any]] = field(default_factory=list)
+    source_refs: list[SourceRef] = field(default_factory=list)
+    value_source_refs: list[list[SourceRef | None]] = field(default_factory=list)
+    confidence: float = 1.0
+    diagnostics: list[StructuredData] = field(default_factory=list)
+
+
+@dataclass
+class TextBlock:
+    text_id: str
+    lines: list[TextLine] = field(default_factory=list)
+    source_refs: list[SourceRef] = field(default_factory=list)
+    confidence: float = 1.0
+    diagnostics: list[StructuredData] = field(default_factory=list)
+
+
+@dataclass
 class WorkbookBlock:
     block_id: str
     kind: str
@@ -146,6 +201,9 @@ class WorkbookBlock:
     metadata: StructuredData = field(default_factory=dict)
     diagnostics: list[StructuredData] = field(default_factory=list)
     logical_table: LogicalTable | None = None
+    form: FormBlock | None = None
+    matrix: MatrixBlock | None = None
+    text: TextBlock | None = None
 
 
 @dataclass

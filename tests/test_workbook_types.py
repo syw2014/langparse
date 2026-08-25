@@ -1,6 +1,8 @@
-from langparse.types import ParsedStructure
+from langparse.types import ParseDiagnostics, ParsedStructure
 from langparse.workbooks.types import (
     CellSnapshot,
+    FormBlock,
+    FormField,
     HeaderColumn,
     LogicalRow,
     LogicalTable,
@@ -73,3 +75,23 @@ def test_logical_table_types_preserve_semantics_and_sources():
     assert block.logical_table is not None
     assert block.logical_table.columns[0].path == ["其中", "人工费"]
     assert block.logical_table.fragments[0].source_ref.key == "Data!A1:L10"
+
+
+def test_semantic_block_types_preserve_payload_and_sources():
+    field = FormField(
+        field_id="field_1",
+        label="项目名称",
+        value="道路工程",
+        label_source_refs=[SourceRef(sheet_name="Cover", range="A2")],
+        value_source_refs=[SourceRef(sheet_name="Cover", range="B2")],
+    )
+    form = FormBlock(form_id="form_1", title="封面", fields=[field])
+    block = WorkbookBlock(block_id="b", kind="form", form=form)
+
+    assert block.form is not None
+    assert block.form.fields[0].value_source_refs[0].key == "Cover!B2"
+    assert block.logical_table is None
+
+
+def test_parse_diagnostics_defaults_source_ref_validity_to_one():
+    assert ParseDiagnostics().source_ref_validity_ratio == 1.0

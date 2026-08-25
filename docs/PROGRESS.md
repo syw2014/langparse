@@ -37,7 +37,8 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | Markdown / DOCX 解析 | 可用 | 均产出结构化 pages/tables/elements |
 | Excel OOXML 事实解析（Phase 1） | 可用 | `.xlsx/.xlsm` 产出 `WorkbookIR.snapshot`、raw-grid、coverage/reconstruction diagnostics 和 source-aware chunks；非分页且不生成 `Unnamed:*` |
 | Excel 确定性逻辑表（Phase 2A） | 可用 | Sheet 内空白带多表区域、重复打印片段、多级表头、板块/数据/合计角色、语义 Markdown 与 source-aware `table_rows` chunks |
-| Excel 高阶解释（Phase 2B+） | 未实现 | 跨 Sheet 续接、Form/Matrix block 分类、低置信模型 fallback；`.xls/.xlsb` rich adapter 也待实现 |
+| Excel Block 分类（Phase 2B1） | 可用 | 确定性区分 LogicalTable/Form/Matrix/Text/Unclassified，携带 confidence/reason codes/source-ref validity；mixed Sheet 全 Block 渲染和 chunk |
+| Excel 跨 Sheet 续接（Phase 2B2+） | 未实现 | 同一逻辑表跨 Sheet 高置信关联、低置信候选诊断和模型 fallback；`.xls/.xlsb` rich adapter 也待实现 |
 | PDF 解析（simple） | 可用 | pdfplumber，含表格提取与扫描件 OCR 兜底 |
 | PDF 解析（MinerU） | 可用 | 经 `mineru-api`，含服务生命周期管理、表格/图片/caption 抽取 |
 | PDF 解析（DeepDoc） | 可用 | 移植自 RAGFlow：OCR + 版面分析 + 表格结构识别，ONNX/CPU 推理，模型按需从 HuggingFace `InfiniFlow/deepdoc` 下载到 `~/.langparse/models/deepdoc`；已知局限：复杂/多行竖排标签版式下表格结构识别仍可能出现行拆分或印章文字碎片误判为单元格 |
@@ -105,12 +106,20 @@ langparse/
    total 行角色，同时在 snapshot 中保留物理事实。真实预算工作簿第 8 Sheet 验收为
    1 个逻辑表、6 个片段、12 列、2 个板块、47 条数据、1 条合计，coverage 1.0 且
    reconstruction passed。
-3. 🟨 **Phase 3 基础语义 chunk 已完成，profiles 待补**：现已按 logical
+3. ✅ **Phase 2B1（2026-08-25）确定性 Block 分类**：通过可序列化区域特征和
+   可解释规则分类 LogicalTable/Form/Matrix/Text/Unclassified；每类都有 source-aware
+   Markdown 与结构化 chunk，候选解释失败只降级本区域。真实预算工作簿为 14 个
+   LogicalTable + 1 个封面 TextBlock、43 chunks，coverage/reconstruction/source-ref
+   validity 均为 1.0/true。
+4. ⬜ **Phase 2B2 跨 Sheet continuation**：以 kind、schema fingerprint、标题、页码、
+   单位和列宽兼容性建立高置信关联；证据不足时保持独立并记录候选关系。
+5. 🟨 **Phase 3 基础语义 chunk 已完成，profiles 待补**：现已按 logical
    table/section/header path 生成 `table_rows` chunks，不跨板块并携带 row/fragment
-   source ranges；retrieval 与 analysis 两套可配置 profiles 尚未实现。
-4. ⬜ **Phase 4 可选模型 fallback**：仅对低置信候选调用 LLM/VLM，使用 schema
+   source ranges，同时支持 Form/Matrix/Text/raw-grid chunks；retrieval 与 analysis
+   两套可配置 profiles 尚未实现。
+6. ⬜ **Phase 4 可选模型 fallback**：仅对低置信候选调用 LLM/VLM，使用 schema
    约束与坐标校验；模型不能改写事实层。
-5. ⬜ **Phase 5 格式与 bundle**：补齐 `.xls/.xlsb` rich adapters，以及
+7. ⬜ **Phase 5 格式与 bundle**：补齐 `.xls/.xlsb` rich adapters，以及
    `document.json`、raw/semantic Markdown、chunks、diagnostics 的标准输出包。
 
 **P0 —— 直接验证"通用引擎与垂直引擎平权"这条核心主张**

@@ -20,6 +20,12 @@ version sections.
   totals, and stable source-linked identifiers.
 - Semantic Excel Markdown and `table_rows` chunks carrying table/section/header,
   row, physical fragment, and exact source-range metadata.
+- Deterministic region classification for logical tables, forms, matrices,
+  presentation text, and explicit unclassified raw grids, with explainable
+  confidence/reason codes and source-ref validity diagnostics.
+- Mixed-Sheet rendering and structural chunks (`form_fields`, `matrix_rows`,
+  `text_block`, and candidate-scoped `raw_grid_rows`) without skipping sibling
+  blocks.
 
 ### Changed
 - Excel results are non-paginated. Sheet ordinals remain available as
@@ -30,8 +36,8 @@ version sections.
   `diagnostics`; JSON output includes native spreadsheet scalars safely.
 
 ### Known limitations
-- Cross-sheet continuation, Form/Matrix block classification, retrieval versus
-  analysis chunk profiles, and model-assisted fallback remain later phases.
+- Cross-sheet continuation, retrieval versus analysis chunk profiles,
+  image/chart semantic blocks, and model-assisted fallback remain later phases.
   Rich `.xls`/`.xlsb` adapters are also not part of this phase.
 
 ## [2026-08-04]

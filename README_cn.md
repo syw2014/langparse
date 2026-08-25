@@ -10,7 +10,7 @@
 
 ## 🚀 项目状态
 
-LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（282 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
+LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（300 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
 
 项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（PaddleOCR-VL、vision-LLM 后端），以及帮忙压测"引擎中立路由"这个设计本身。
 
@@ -176,16 +176,19 @@ from langparse.services.parse_service import ParseService
 result = ParseService().parse_result("budget.xlsx", chunk=True)
 print(result.structure.snapshot.sheets[0].cells["B2"].formula)
 print(result.diagnostics.coverage_ratio)
-print(result.structure.sheets[0].blocks[0].logical_table.columns)
-print(result.chunks[0].metadata["section_path"])
+print([block.kind for block in result.structure.sheets[0].blocks])
+print(result.diagnostics.source_ref_validity_ratio)
+print(result.chunks[0].metadata["chunk_type"])
 print(result.chunks[0].metadata["source_ranges"])
 ```
 
 解析器现在可确定性地按空白行/列带拆分独立表格，合并重复打印片段，构造多级
 表头路径，识别板块、数据行和合计行，并在不跨板块的前提下按完整逻辑行分块。
-`structure.snapshot` 与兼容表仍保留原始单元格视图。跨 Sheet 表格续接、Form/Matrix
-block 分类、按置信度触发的 LLM/VLM fallback，以及富信息 `.xls`/`.xlsb` adapter
-仍待后续实现；分隔文本和旧版输入目前继续走兼容 adapter。
+候选区域会保守地分类为逻辑表、表单、矩阵、文本或明确的未分类 raw grid，每种
+Block 都有带源坐标的 Markdown 和 chunk 路径。`structure.snapshot` 与兼容表仍保留
+原始单元格视图。跨 Sheet 表格续接、retrieval/analysis 双 chunk profiles、按置信度
+触发的 LLM/VLM fallback，以及富信息 `.xls`/`.xlsb` adapter 仍待后续实现；分隔文本
+和旧版输入目前继续走兼容 adapter。
 
 ### 扫描件
 

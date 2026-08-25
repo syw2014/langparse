@@ -18,6 +18,10 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
   行角色、板块、合计，以及稳定且可追溯到源坐标的标识。
 - 新增 Excel 语义 Markdown 与 `table_rows` chunks，携带表格/板块/表头、行、
   物理片段和精确源范围 metadata。
+- 新增逻辑表、表单、矩阵、展示文本和明确未分类 raw grid 的确定性区域分类，
+  携带可解释置信度/reason codes 与 source-ref validity diagnostics。
+- 新增 mixed Sheet 的完整渲染与结构化 chunks（`form_fields`、`matrix_rows`、
+  `text_block` 和候选范围内的 `raw_grid_rows`），不再跳过同 Sheet 的其他 Block。
 
 ### 变更（Changed）
 - Excel 结果改为非分页。Sheet 序号仅作为兼容标识，不再注入虚构页码标记。
@@ -27,8 +31,8 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
   输出可安全序列化 Excel 原生日期等值。
 
 ### 已知限制
-- 跨 Sheet 续接、Form/Matrix block 分类、retrieval/analysis 双 chunk profiles、
-  模型 fallback 仍属于后续阶段；富信息 `.xls`/`.xlsb` adapter 也不在本阶段范围内。
+- 跨 Sheet 续接、retrieval/analysis 双 chunk profiles、图片/图表语义 Block 和模型
+  fallback 仍属于后续阶段；富信息 `.xls`/`.xlsb` adapter 也不在本阶段范围内。
 
 ## [2026-08-04]
 

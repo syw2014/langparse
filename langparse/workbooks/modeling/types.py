@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import Enum
+from types import MappingProxyType
 from typing import Literal, TypeAlias
 
 REGION_SCHEMA_VERSION = 1
@@ -103,17 +105,19 @@ class WorkbookModelRequest:
 class ProviderReply:
     body: bytes
     provider_request_id: str | None
-    usage: tuple[tuple[str, int], ...] = ()
+    usage: Mapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.usage, tuple):
-            raise TypeError("usage must be a tuple of (str, int) entries")
-        for entry in self.usage:
-            if not isinstance(entry, tuple) or len(entry) != 2:
-                raise TypeError("usage must contain (str, int) tuples")
-            key, value = entry
-            if type(key) is not str or type(value) is not int:
-                raise TypeError("usage entries must contain a string and integer value")
+        if not isinstance(self.usage, Mapping):
+            raise TypeError("usage must be a mapping of string keys to integer values")
+        copied_usage: dict[str, int] = {}
+        for key, value in self.usage.items():
+            if not isinstance(key, str):
+                raise TypeError("usage keys must be strings")
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError("usage values must be non-bool integers")
+            copied_usage[key] = value
+        object.__setattr__(self, "usage", MappingProxyType(copied_usage))
 
 
 @dataclass(frozen=True)

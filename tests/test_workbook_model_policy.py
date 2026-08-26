@@ -24,7 +24,7 @@ class RecordingAdapter:
 
     def complete(self, request: WorkbookModelRequest, *, timeout_seconds: float):
         self.requests.append((request, timeout_seconds))
-        return ProviderReply(body=b"{}", provider_request_id=None)
+        return ProviderReply(body=b"{}", provider_request_id=None, usage={})
 
 
 def test_workbook_disambiguation_defaults_to_off_without_an_adapter():
@@ -75,21 +75,26 @@ def test_policy_and_configuration_are_immutable():
 
 
 def test_provider_reply_usage_is_deeply_immutable_and_shape_checked():
+    source_usage = {"input_tokens": 4}
     reply = ProviderReply(
         body=b"{}",
         provider_request_id=None,
-        usage=(("input_tokens", 4),),
+        usage=source_usage,
     )
 
-    with pytest.raises(FrozenInstanceError):
-        reply.usage += (("output_tokens", 2),)
-    with pytest.raises(TypeError):
-        reply.usage[0][1] = 5
+    source_usage["input_tokens"] = 99
+    source_usage["output_tokens"] = 2
+    assert dict(reply.usage) == {"input_tokens": 4}
 
-    with pytest.raises(TypeError, match="usage must be a tuple"):
-        ProviderReply(body=b"{}", provider_request_id=None, usage={"input_tokens": 4})
-    with pytest.raises(TypeError, match="usage entries"):
-        ProviderReply(body=b"{}", provider_request_id=None, usage=(("input_tokens", []),))
+    with pytest.raises(TypeError):
+        reply.usage["input_tokens"] = 5
+
+    with pytest.raises(TypeError, match="usage keys"):
+        ProviderReply(body=b"{}", provider_request_id=None, usage={1: 4})
+    with pytest.raises(TypeError, match="usage values"):
+        ProviderReply(body=b"{}", provider_request_id=None, usage={"input_tokens": True})
+    with pytest.raises(TypeError, match="usage values"):
+        ProviderReply(body=b"{}", provider_request_id=None, usage={"input_tokens": "4"})
 
 
 def _region_case(

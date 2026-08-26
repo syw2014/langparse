@@ -1,0 +1,71 @@
+from dataclasses import FrozenInstanceError
+
+import pytest
+
+from langparse.workbooks.modeling import (
+    ModelIdentity,
+    ProviderReply,
+    WorkbookDisambiguation,
+    WorkbookModelConfigurationError,
+    WorkbookModelMode,
+    WorkbookModelPolicy,
+    WorkbookModelRequest,
+)
+
+
+class RecordingAdapter:
+    identity = ModelIdentity(provider="recording", model="fixture", revision="1")
+
+    def __init__(self):
+        self.requests = []
+
+    def complete(self, request: WorkbookModelRequest, *, timeout_seconds: float):
+        self.requests.append((request, timeout_seconds))
+        return ProviderReply(body=b"{}", provider_request_id=None, usage={})
+
+
+def test_workbook_disambiguation_defaults_to_off_without_an_adapter():
+    configured = WorkbookDisambiguation.off()
+
+    assert configured.mode is WorkbookModelMode.OFF
+    assert configured.adapter is None
+    assert configured.policy == WorkbookModelPolicy()
+
+
+def test_auto_and_required_require_explicit_adapters():
+    with pytest.raises(
+        WorkbookModelConfigurationError,
+        match="auto workbook disambiguation requires an adapter",
+    ):
+        WorkbookDisambiguation(mode=WorkbookModelMode.AUTO)
+
+    with pytest.raises(
+        WorkbookModelConfigurationError,
+        match="required workbook disambiguation requires an adapter",
+    ):
+        WorkbookDisambiguation(mode=WorkbookModelMode.REQUIRED)
+
+
+def test_off_rejects_an_adapter_to_keep_the_no_network_contract_explicit():
+    with pytest.raises(
+        WorkbookModelConfigurationError,
+        match="off workbook disambiguation cannot carry an adapter",
+    ):
+        WorkbookDisambiguation(
+            mode=WorkbookModelMode.OFF,
+            adapter=RecordingAdapter(),
+        )
+
+
+def test_policy_rejects_non_positive_limits():
+    with pytest.raises(ValueError, match="timeout_seconds must be positive"):
+        WorkbookModelPolicy(timeout_seconds=0)
+    with pytest.raises(ValueError, match="max_response_bytes must be positive"):
+        WorkbookModelPolicy(max_response_bytes=0)
+
+
+def test_policy_and_configuration_are_immutable():
+    configured = WorkbookDisambiguation.auto(RecordingAdapter())
+
+    with pytest.raises(FrozenInstanceError):
+        configured.policy.max_calls = 99

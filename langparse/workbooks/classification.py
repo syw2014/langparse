@@ -5,7 +5,9 @@ from dataclasses import dataclass
 
 from openpyxl.utils import get_column_letter, range_boundaries
 
-from langparse.workbooks.types import CandidateRegion, SheetSnapshot
+from langparse.workbooks.modeling import RegionChoice
+from langparse.workbooks.modeling.types import REGION_RULE_VERSION
+from langparse.workbooks.types import CandidateRegion, SheetSnapshot, stable_id
 
 PAGE_RE = re.compile(r"第\s*\d+\s*页\s*共\s*\d+\s*页")
 
@@ -38,6 +40,14 @@ class BlockClassification:
     confidence: float
     reason_codes: list[str]
     features: RegionFeatures
+
+
+@dataclass(frozen=True)
+class RegionAssessment:
+    deterministic: BlockClassification
+    choices: tuple[RegionChoice, ...]
+    ambiguous: bool
+    ambiguity_codes: tuple[str, ...]
 
 
 def extract_region_features(
@@ -111,8 +121,65 @@ def classify_candidate_region(
 ) -> BlockClassification:
     """Classify a region conservatively with mutually exclusive rules."""
 
-    features = features or extract_region_features(sheet, candidate)
+    features = features if features is not None else extract_region_features(sheet, candidate)
     values, _ = _region_grid(sheet, candidate)
+    return _classify_region(values, features)
+
+
+def assess_candidate_region(
+    sheet: SheetSnapshot,
+    candidate: CandidateRegion,
+) -> RegionAssessment:
+    """Assess a region and register only locally compatible alternative kinds."""
+
+    features = extract_region_features(sheet, candidate)
+    values, _ = _region_grid(sheet, candidate)
+    deterministic = _classify_region(values, features)
+    choices = [
+        RegionChoice(
+            choice_id=_choice_id(candidate, deterministic.kind, deterministic.reason_codes[0]),
+            kind=deterministic.kind,
+            local_score=deterministic.confidence,
+            reason_codes=tuple(deterministic.reason_codes),
+        )
+    ]
+    if deterministic.kind != "unclassified":
+        return RegionAssessment(
+            deterministic=deterministic,
+            choices=tuple(choices),
+            ambiguous=False,
+            ambiguity_codes=(),
+        )
+
+    seen_kinds = {deterministic.kind}
+    for kind, score, reason_code in _weak_choice_kinds(features):
+        if kind in seen_kinds:
+            continue
+        choices.append(
+            RegionChoice(
+                choice_id=_choice_id(candidate, kind, reason_code),
+                kind=kind,
+                local_score=score,
+                reason_codes=(reason_code,),
+            )
+        )
+        seen_kinds.add(kind)
+
+    ambiguous = len(choices) >= 2
+    return RegionAssessment(
+        deterministic=deterministic,
+        choices=tuple(choices),
+        ambiguous=ambiguous,
+        ambiguity_codes=("unclassified_with_compatible_choices",) if ambiguous else (),
+    )
+
+
+def _classify_region(
+    values: list[list[str]],
+    features: RegionFeatures,
+) -> BlockClassification:
+    """Apply the existing deterministic winner rules to precomputed facts."""
+
     text_reason = _text_reason(features)
     if text_reason:
         return BlockClassification("text", 0.9, [text_reason], features)
@@ -132,6 +199,33 @@ def classify_candidate_region(
         0.5,
         ["insufficient_semantic_evidence"],
         features,
+    )
+
+
+def _weak_choice_kinds(features: RegionFeatures) -> list[tuple[str, float, str]]:
+    choices = []
+    if (
+        features.row_count >= 2
+        and features.column_count >= 2
+        and max(features.nonempty_by_row, default=0) >= 2
+    ):
+        choices.append(("logical_table", 0.4, "weak_row_column_structure"))
+    if features.column_count >= 2 and features.label_value_pairs >= 1:
+        choices.append(("form", 0.4, "weak_label_value_pairs"))
+    if features.numeric_grid_rows >= 1 and features.numeric_grid_columns >= 1:
+        choices.append(("matrix", 0.4, "weak_numeric_axes"))
+    if features.occupied_count >= 2 and features.text_ratio >= 0.6:
+        choices.append(("text", 0.4, "weak_text_region"))
+    return choices
+
+
+def _choice_id(candidate: CandidateRegion, kind: str, reason_code: str) -> str:
+    return stable_id(
+        "region_choice",
+        REGION_RULE_VERSION,
+        candidate.source_ref.key,
+        kind,
+        reason_code,
     )
 
 

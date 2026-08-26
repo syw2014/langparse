@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Literal
+from typing import Literal, TypeAlias
 
 REGION_SCHEMA_VERSION = 1
 REGION_PROMPT_VERSION = "region-choice-v1"
 REGION_RULE_VERSION = "region-rules-v1"
 REGION_VALIDATOR_VERSION = "region-validator-v1"
+
+RegionFeatureScalar: TypeAlias = str | int | float | bool | None
+
+
+def _is_region_feature_scalar(value: object) -> bool:
+    return value is None or type(value) in (str, int, float, bool)
 
 
 class WorkbookModelMode(str, Enum):
@@ -67,10 +73,20 @@ class RegionAmbiguityCase:
     source_range: str
     fact_digest: str
     cells: tuple[RegionCellCue, ...]
-    feature_summary: tuple[tuple[str, object], ...]
+    feature_summary: tuple[tuple[str, RegionFeatureScalar], ...]
     choices: tuple[RegionChoice, ...]
     fallback_choice_id: str
     ambiguity_codes: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.feature_summary, tuple):
+            raise TypeError("feature_summary must be a tuple of (str, scalar) entries")
+        for entry in self.feature_summary:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise TypeError("feature_summary must contain (str, scalar) tuples")
+            key, value = entry
+            if type(key) is not str or not _is_region_feature_scalar(value):
+                raise TypeError("feature_summary entries must contain a string and scalar value")
 
 
 @dataclass(frozen=True)
@@ -87,7 +103,17 @@ class WorkbookModelRequest:
 class ProviderReply:
     body: bytes
     provider_request_id: str | None
-    usage: dict[str, int] = field(default_factory=dict)
+    usage: tuple[tuple[str, int], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.usage, tuple):
+            raise TypeError("usage must be a tuple of (str, int) entries")
+        for entry in self.usage:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise TypeError("usage must contain (str, int) tuples")
+            key, value = entry
+            if type(key) is not str or type(value) is not int:
+                raise TypeError("usage entries must contain a string and integer value")
 
 
 @dataclass(frozen=True)

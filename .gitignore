@@ -146,3 +146,6 @@ data/
 # Isolated workspaces for subagent-driven plan execution.
 .worktrees/
 .claude/worktrees/
+
+# Local Superpowers task artifacts are not repository source.
+.superpowers/sdd/

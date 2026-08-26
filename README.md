@@ -10,7 +10,7 @@
 
 ## 🚀 Project Status
 
-LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (365 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
+LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (512 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
 
 Still pre-1.0. Looking for early contributors and design partners, particularly to help wire up additional vertical engines (PaddleOCR-VL, vision-LLM backends) and pressure-test the engine-neutral routing design.
 
@@ -260,7 +260,67 @@ layer.
 langparse parse budget.xlsx --chunk --chunk-profile analysis --format json
 ```
 
-Summary/index chunks, confidence-driven LLM/VLM fallback, rich
+#### Optional Phase 4A model disambiguation
+
+Workbook model disambiguation is an explicit, caller-injected library API. The
+default is `off`: constructing `ExcelParser()` or calling `ParseService` without
+`workbook_disambiguation` performs no model Adapter or cache construction, reads
+no provider configuration, and creates no implicit model network work.
+
+```python
+from langparse.parsers.excel_parser import ExcelParser
+from langparse.services.parse_service import ParseService
+from langparse.workbooks.modeling import WorkbookDisambiguation
+
+# `adapter` is supplied by the caller and implements
+# WorkbookStructureModelAdapter.
+direct = ExcelParser(
+    disambiguation=WorkbookDisambiguation.auto(adapter)
+).parse_result("budget.xlsx")
+
+strict = ParseService().parse_result(
+    "budget.xlsx",
+    workbook_disambiguation=WorkbookDisambiguation.required(adapter),
+)
+```
+
+Phase 4A is limited to **choice-only region-kind disambiguation**. Only a locally
+ambiguous, unclassified region with at least two compatible registered kinds is
+eligible. A response can only be `selected` with that case's registered
+`case_id + choice_id`, or `abstained`; it cannot express a value, formula,
+coordinate, range, header, row role, continuation, or arbitrary structure.
+Provider-reported confidence is diagnostic only. The selected kind is applied
+from the retained workbook snapshot and must still pass local materialization,
+coverage, reconstruction, row-conservation, continuation, and source-reference
+validation.
+
+`auto` keeps the deterministic local fallback and records sanitized diagnostics
+when the provider, cache, limits, response contract, materialization, or final
+validation fails, or when the provider abstains. `required` raises
+`RequiredWorkbookDisambiguationError` for unresolved eligible ambiguity and the
+typed error passes through `ExcelParser` and `ParseService`; a workbook with no
+eligible ambiguity succeeds with zero calls in either mode.
+
+The candidate request is deliberately narrow. It can include the target Sheet
+name and source range, visible cell coordinates and display text, value type,
+style fingerprint, merge geometry, local scalar features, and the registered
+choices for that region. It omits hidden Sheets, formulas and cached formula
+values, comments, hyperlinks, images, other regions, credentials, and provider
+secrets. Cell text is treated as untrusted Prompt Injection data: the Adapter
+port exposes no tool channel, and exact response fields, request checksum,
+case/choice membership, size limits, and local validation prevent cell
+instructions from expanding the operation. Diagnostics and the in-memory cache
+do not retain prompts, cell text, raw responses, or provider exception messages.
+
+Phase 4A ships **no built-in production provider Adapter** and has no provider
+CLI or environment configuration. Its tests and read-only workbook acceptance
+prove the safety and compatibility of the opt-in seam, not that a real model
+improves parsing accuracy. A production Adapter, Golden Set/staging accuracy,
+latency/cost evidence, and provider privacy audit remain Phase 4B; screenshots
+and VLM are Phase 4C, and a second domain contract is Phase 4D.
+
+Summary/index chunks, a built-in production model Adapter and real-model effect
+evaluation, rich
 `.xls`/`.xlsb` adapters, image/chart semantic blocks, standard bundle output,
 and production hardening remain follow-up work; delimited and legacy inputs
 keep the compatibility adapter for now.

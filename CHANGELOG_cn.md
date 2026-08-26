@@ -6,6 +6,45 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 [语义化版本](https://semver.org/lang/zh-CN/) 的版本分区格式。
 
+## [2026-08-26]
+
+### 新增（Added）
+- 新增 Phase 4A 的 typed、调用方显式注入工作簿消歧 Interface：
+  `WorkbookDisambiguation.off()`、`.auto(adapter)`、`.required(adapter)`，以及
+  `WorkbookStructureModelAdapter` provider port、有界 policy、typed errors、严格
+  choice-only 请求/响应契约和进程内 memory cache。
+- 新增候选范围内的 region-kind assessment 与模型调用 diagnostics，包含稳定 case/choice
+  ID、request/response checksum、cache/attempt/size/outcome、本地 validation codes；除
+  实测 `elapsed_ms` 外，重复运行的 diagnostics 与真实 ParseService JSON 输出保持确定性。
+- 新增 `ExcelParser(disambiguation=...)` 和 ParseService/Batch
+  `workbook_disambiguation=...` 两条显式注入路径，required typed failure 穿透 service
+  边界。
+
+### 变更（Changed）
+- 工作簿消歧默认保持 `off`；只有调用方以 `auto` 或 `required` 注入 Adapter 后才会发生
+  Adapter、provider 配置、cache 或模型网络工作。默认/off 的 WorkbookIR、Markdown、
+  chunks、diagnostics 与非 Excel 路由保持 Phase 3 兼容行为。
+- 模型只能提供建议性的 region-kind choice。所有事实仍从 `WorkbookSnapshot` 物化，
+  provider confidence 不具备裁决权，coverage、reconstruction、row conservation、
+  continuation 与 source-ref validation 仍是强制门。`auto` 本地回退，`required` 对未解决
+  的合法歧义抛 typed error。
+
+### 已知限制
+- Phase 4A 没有内置 production provider Adapter、provider CLI/env 配置、图片/VLM
+  路径或第二个领域契约。它证明的是可审计 Seam 的安全性与兼容性，不证明真实模型提高
+  了解析准确率；production provider 的效果验收仍属于 Phase 4B。
+- 严格 JSON 校验仍沿用 Python 对重复 object member name 的 last-value-wins 行为；少数
+  service convenience entry point 也尚无直接 forwarding 回归。这两项 deferred Minor
+  不会被表述为已完成的 Phase 4A 能力。
+
+### 验证（Verification）
+- Phase 4A/service focused 门为 99 passed；项目全量为 512 passed。Ruff lint 为
+  `All checks passed!`，format 为 `111 files already formatted`，diff whitespace check
+  无异常。
+- 只读私有工作簿保持 retrieval 39、analysis 20、logical data/total rows 228、accepted
+  continuation 0 与 quality `(1.0, true, 1.0)`；`auto` 零 Adapter 请求，structure 和
+  Markdown 与 `off` 相同，源文件完整 stat 前后不变。
+
 ## [2026-08-25]
 
 ### 新增（Added）

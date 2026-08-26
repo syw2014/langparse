@@ -7,6 +7,52 @@ hang a version number on. Once there's a first release, this will switch to
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/)
 version sections.
 
+## [2026-08-26]
+
+### Added
+- Phase 4A's typed, caller-injected workbook disambiguation Interface:
+  `WorkbookDisambiguation.off()`, `.auto(adapter)`, and `.required(adapter)`
+  with a `WorkbookStructureModelAdapter` provider port, bounded policy, typed
+  errors, strict choice-only request/reply contract, and process-local memory
+  cache.
+- Candidate-local region-kind assessment and model-call diagnostics with stable
+  case/choice IDs, request/response checksums, cache/attempt/size/outcome fields,
+  local validation codes, and JSON-serializable deterministic output apart from
+  measured `elapsed_ms`.
+- Explicit injection through both `ExcelParser(disambiguation=...)` and
+  `ParseService`/batch `workbook_disambiguation=...`, including typed required
+  failures that pass through service boundaries.
+
+### Changed
+- Workbook disambiguation remains `off` by default and performs zero Adapter,
+  provider-configuration, cache, or model-network work unless a caller injects
+  an Adapter with `auto` or `required`. The default/off WorkbookIR, Markdown,
+  chunks, diagnostics, and non-Excel routing retain Phase 3 behavior.
+- Model choices are advisory region-kind selections only. Materialization still
+  reads all facts from `WorkbookSnapshot`, provider confidence is non-authority,
+  and coverage, reconstruction, row conservation, continuation, and source-ref
+  validation remain mandatory. `auto` falls back locally; `required` raises for
+  unresolved eligible ambiguity.
+
+### Known limitations
+- Phase 4A contains no built-in production provider Adapter, provider CLI/env
+  setup, image/VLM path, or second domain contract. It establishes an auditable
+  safety and compatibility seam, not evidence that a real model improves
+  parsing accuracy; production-provider effectiveness remains Phase 4B.
+- Strict JSON validation still uses Python's last-value-wins handling for
+  duplicate object member names, and direct forwarding regressions for a few
+  convenience service entry points remain deferred Minors. Neither limit is
+  presented as completed Phase 4A functionality.
+
+### Verification
+- Focused Phase 4A/service gates pass 99 tests; the full project suite passes
+  512 tests. Project Ruff lint reports `All checks passed!`, format reports
+  `111 files already formatted`, and the diff whitespace check is clean.
+- The read-only private workbook retains 39 retrieval chunks, 20 analysis
+  chunks, 228 logical data/total rows, zero accepted continuations, and quality
+  `(1.0, true, 1.0)`. `auto` makes zero Adapter requests and returns the same
+  structure and Markdown as `off`; the complete source stat is unchanged.
+
 ## [2026-08-25]
 
 ### Added

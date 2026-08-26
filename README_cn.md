@@ -10,7 +10,7 @@
 
 ## 🚀 项目状态
 
-LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（365 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
+LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（512 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
 
 项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（PaddleOCR-VL、vision-LLM 后端），以及帮忙压测"引擎中立路由"这个设计本身。
 
@@ -213,7 +213,56 @@ workbook 结果；CSV、旧版 `.xls` 和非 workbook 输入继续走兼容路�
 langparse parse budget.xlsx --chunk --chunk-profile analysis --format json
 ```
 
-summary/index chunks、按置信度触发的 LLM/VLM fallback、富信息 `.xls`/`.xlsb`
+#### 可选的 Phase 4A 模型消歧
+
+工作簿模型消歧是需要调用方显式注入的 library API。默认模式为 `off`：直接构造
+`ExcelParser()`，或调用 `ParseService` 时不传 `workbook_disambiguation`，都不会构造
+模型 Adapter/cache、读取 provider 配置或产生任何隐式模型网络请求。
+
+```python
+from langparse.parsers.excel_parser import ExcelParser
+from langparse.services.parse_service import ParseService
+from langparse.workbooks.modeling import WorkbookDisambiguation
+
+# `adapter` 由调用方提供，并实现 WorkbookStructureModelAdapter。
+direct = ExcelParser(
+    disambiguation=WorkbookDisambiguation.auto(adapter)
+).parse_result("budget.xlsx")
+
+strict = ParseService().parse_result(
+    "budget.xlsx",
+    workbook_disambiguation=WorkbookDisambiguation.required(adapter),
+)
+```
+
+Phase 4A 只处理 **choice-only 的 region-kind 消歧**：只有本地确定性结果为
+unclassified、同时存在至少两个不同 kind 的兼容已登记 choice 时才允许调用。响应只能是
+用该 case 已登记 `case_id + choice_id` 的 `selected`，或 `abstained`；不能表达 value、
+formula、coordinate、range、header、row role、continuation 或任意结构补丁。provider
+上报的 confidence 只进入审计，不能成为接受依据。选中的 kind 仍完全从保留的 workbook
+snapshot 物化，并继续经过本地 materialization、coverage、reconstruction、row
+conservation、continuation 和 source-reference 验证。
+
+`auto` 遇到 provider、cache、limit、响应契约、物化或最终验证失败，以及 provider
+弃权时，保留确定性本地 fallback 并记录净化后的 diagnostics。`required` 对仍未解决的
+合法歧义抛出 `RequiredWorkbookDisambiguationError`，该 typed error 会穿透
+`ExcelParser` 与 `ParseService`；没有可调用歧义的工作簿在两种模式下都零调用并成功。
+
+候选请求有严格的数据最小化边界：它可以携带目标 Sheet 名和 source range、可见单元格
+坐标与 display text、value type、style fingerprint、merge geometry、本地标量特征和已登记
+choices；不会携带隐藏 Sheet、公式及其缓存值、批注、超链接、图片、其他区域、credential
+或 provider secret。单元格文本一律视为不可信的 Prompt Injection 数据：Adapter port 不
+提供工具调用通道，严格响应字段、request checksum、case/choice membership、大小限制和
+本地验证共同阻止单元格指令扩大操作范围。diagnostics 与进程内 memory cache 不保存
+prompt、cell text、原始响应或 provider 异常正文。
+
+Phase 4A **没有内置 production provider Adapter**，也没有 provider CLI/env 配置。
+现有测试和只读工作簿验收证明的是显式 opt-in Seam 的安全性与兼容性，不证明真实模型
+提高了解析准确率。production Adapter、Golden Set/staging 的准确率、延迟/成本证据和
+provider 隐私审计属于 Phase 4B；截图/VLM 属于 Phase 4C，第二个领域契约属于 Phase 4D。
+
+summary/index chunks、内置 production 模型 Adapter 与真实模型效果评估、富信息
+`.xls`/`.xlsb`
 adapter、图片/图表语义 Block、标准 bundle 输出和生产加固仍待后续实现；分隔文本和
 旧版输入目前继续走兼容 adapter。
 

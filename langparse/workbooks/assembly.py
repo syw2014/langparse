@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from copy import deepcopy
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, fields, replace
 
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_to_tuple, range_boundaries
@@ -31,6 +31,7 @@ from langparse.workbooks.modeling import (
     build_region_case,
 )
 from langparse.workbooks.modeling.disambiguation import _audit_payload
+from langparse.workbooks.modeling.types import REGION_RULE_VERSION
 from langparse.workbooks.regions import detect_candidate_regions
 from langparse.workbooks.tables import interpret_logical_table
 from langparse.workbooks.types import (
@@ -54,6 +55,8 @@ class _RegionDraft:
     candidate: CandidateRegion
     assessment: RegionAssessment
     case: RegionAmbiguityCase | None
+    case_id: str | None = None
+    unavailable_audit: ModelCallAudit | None = None
 
 
 @dataclass(frozen=True)
@@ -78,7 +81,10 @@ def assemble_workbook(
         return _assemble_deterministic(snapshot)
 
     drafts = _region_drafts(snapshot, configured)
-    resolutions_by_case_id = _resolve_region_cases(drafts, configured)
+    try:
+        resolutions_by_case_id = _resolve_region_cases(drafts, configured)
+    except RequiredWorkbookDisambiguationError as error:
+        _raise_required_with_deterministic_fallback(snapshot, drafts, error)
     materialized = [
         _materialize_region(snapshot.source, draft, resolutions_by_case_id) for draft in drafts
     ]
@@ -95,17 +101,20 @@ def assemble_workbook(
         }
         workbook_ir = _workbook_from_materialized(snapshot, materialized, rollback_selected=True)
         diagnostics, rollback_validation_codes = _finalize_workbook(snapshot, workbook_ir)
-        if rollback_validation_codes:
+        if set(rollback_validation_codes) - {"continuation_error"}:
             raise RuntimeError("deterministic workbook rollback failed validation")
 
     unresolved_case_ids: list[str] = []
     finalized_audits: list[ModelCallAudit] = []
     for region in materialized:
-        if region.audit is None or region.draft.case is None:
+        if region.audit is None or region.draft.case_id is None:
             continue
-        case_id = region.draft.case.case_id
+        case_id = region.draft.case_id
         audit = region.audit
-        if region.materialization_failed:
+        if region.draft.case is None:
+            if configured.mode is WorkbookModelMode.REQUIRED:
+                unresolved_case_ids.append(case_id)
+        elif region.materialization_failed:
             if configured.mode is WorkbookModelMode.REQUIRED:
                 unresolved_case_ids.append(case_id)
         elif case_id in reverted_case_ids:
@@ -220,15 +229,31 @@ def _region_drafts(
         for candidate in detect_candidate_regions(sheet):
             assessment = assess_candidate_region(sheet, candidate)
             case = None
-            if (
-                configured.mode is not WorkbookModelMode.OFF
-                and assessment.ambiguous
-                and sheet.visibility == "visible"
-            ):
-                try:
-                    case = build_region_case(sheet, candidate, assessment)
-                except InvalidRegionAmbiguityCaseError:
-                    case = None
+            case_id = None
+            unavailable_audit = None
+            if configured.mode is not WorkbookModelMode.OFF and assessment.ambiguous:
+                case_id = _local_region_case_id(candidate, assessment)
+                unavailable_outcome = _unavailable_case_outcome(sheet, candidate)
+                if unavailable_outcome is not None:
+                    unavailable_audit = _local_unavailable_audit(
+                        case_id,
+                        candidate,
+                        configured,
+                        outcome=unavailable_outcome,
+                    )
+                else:
+                    try:
+                        case = build_region_case(sheet, candidate, assessment)
+                    except InvalidRegionAmbiguityCaseError as error:
+                        unavailable_audit = _local_unavailable_audit(
+                            case_id,
+                            candidate,
+                            configured,
+                            outcome="case_unavailable",
+                            error_type=type(error).__name__,
+                        )
+                    else:
+                        case_id = case.case_id
             drafts.append(
                 _RegionDraft(
                     sheet_index=sheet_index,
@@ -236,9 +261,73 @@ def _region_drafts(
                     candidate=candidate,
                     assessment=assessment,
                     case=case,
+                    case_id=case_id,
+                    unavailable_audit=unavailable_audit,
                 )
             )
     return drafts
+
+
+def _local_region_case_id(
+    candidate: CandidateRegion,
+    assessment: RegionAssessment,
+) -> str:
+    return stable_id(
+        "region_case_unavailable",
+        REGION_RULE_VERSION,
+        candidate.source_ref.key,
+        *(choice.choice_id for choice in assessment.choices),
+    )
+
+
+def _unavailable_case_outcome(
+    sheet: SheetSnapshot,
+    candidate: CandidateRegion,
+) -> str | None:
+    if sheet.visibility != "visible":
+        return "hidden_content"
+    min_column, min_row, max_column, max_row = range_boundaries(candidate.source_ref.range)
+    if any(min_row <= row <= max_row for row in sheet.hidden_rows):
+        return "hidden_content"
+    hidden_columns = {get_column_letter(column) for column in range(min_column, max_column + 1)}
+    if hidden_columns.intersection(sheet.hidden_columns):
+        return "hidden_content"
+    for coordinate, cell in sheet.cells.items():
+        row, column = coordinate_to_tuple(coordinate)
+        if min_row <= row <= max_row and min_column <= column <= max_column and cell.hidden:
+            return "hidden_content"
+    return None
+
+
+def _local_unavailable_audit(
+    case_id: str,
+    candidate: CandidateRegion,
+    configured: WorkbookDisambiguation,
+    *,
+    outcome: str,
+    error_type: str | None = None,
+) -> ModelCallAudit:
+    return ModelCallAudit(
+        case_id=case_id,
+        source_range=candidate.source_ref.range,
+        mode=configured.mode.value,
+        provider=None,
+        model=None,
+        model_revision=None,
+        request_checksum=None,
+        response_checksum=None,
+        cache_status="not_checked",
+        attempts=0,
+        elapsed_ms=0,
+        request_bytes=0,
+        response_bytes=0,
+        outcome=outcome,
+        selected_choice_id=None,
+        reported_confidence=None,
+        validation_codes=(outcome,),
+        reason_codes=("deterministic_fallback",),
+        error_type=error_type,
+    )
 
 
 def _resolve_region_cases(
@@ -252,14 +341,81 @@ def _resolve_region_cases(
     return {resolution.case_id: resolution for resolution in resolutions.resolutions}
 
 
-def _materialize_region(snapshot_source, draft: _RegionDraft, resolutions_by_case_id):
+def _raise_required_with_deterministic_fallback(
+    snapshot: WorkbookSnapshot,
+    drafts: list[_RegionDraft],
+    error: RequiredWorkbookDisambiguationError,
+) -> None:
+    materialized = [_deterministic_materialized_region(snapshot.source, draft) for draft in drafts]
+    workbook_ir = _workbook_from_materialized(snapshot, materialized, rollback_selected=False)
+    diagnostics, _ = _finalize_workbook(snapshot, workbook_ir)
+    diagnostics.model_calls = _ordered_error_audits(drafts, error.diagnostics.model_calls)
+    diagnostics.status = "failed"
+    raise RequiredWorkbookDisambiguationError(
+        _ordered_unresolved_case_ids(drafts, error.case_ids),
+        diagnostics,
+    ) from None
+
+
+def _ordered_error_audits(
+    drafts: list[_RegionDraft],
+    error_audits: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    audits_by_case_id = {
+        audit["case_id"]: _audit_field_payload(audit)
+        for audit in error_audits
+        if isinstance(audit.get("case_id"), str)
+    }
+    audits = []
+    for draft in drafts:
+        if draft.unavailable_audit is not None:
+            audits.append(_audit_payload(draft.unavailable_audit))
+        elif draft.case_id is not None and draft.case_id in audits_by_case_id:
+            audits.append(audits_by_case_id[draft.case_id])
+    return audits
+
+
+def _audit_field_payload(audit: dict[str, object]) -> dict[str, object]:
+    return {field.name: audit[field.name] for field in fields(ModelCallAudit)}
+
+
+def _ordered_unresolved_case_ids(
+    drafts: list[_RegionDraft],
+    disambiguator_case_ids: tuple[str, ...],
+) -> tuple[str, ...]:
+    unresolved_case_ids = set(disambiguator_case_ids)
+    unresolved_case_ids.update(
+        draft.case_id
+        for draft in drafts
+        if draft.case_id is not None and draft.unavailable_audit is not None
+    )
+    ordered = [
+        draft.case_id
+        for draft in drafts
+        if draft.case_id is not None and draft.case_id in unresolved_case_ids
+    ]
+    ordered.extend(case_id for case_id in disambiguator_case_ids if case_id not in ordered)
+    return tuple(ordered)
+
+
+def _deterministic_materialized_region(
+    snapshot_source: str,
+    draft: _RegionDraft,
+) -> _MaterializedRegion:
     deterministic_block = _materialize_deterministic(snapshot_source, draft)
+    return _MaterializedRegion(
+        draft=draft,
+        block=deterministic_block,
+        deterministic_block=deterministic_block,
+        audit=draft.unavailable_audit,
+    )
+
+
+def _materialize_region(snapshot_source, draft: _RegionDraft, resolutions_by_case_id):
+    deterministic_region = _deterministic_materialized_region(snapshot_source, draft)
+    deterministic_block = deterministic_region.deterministic_block
     if draft.case is None:
-        return _MaterializedRegion(
-            draft=draft,
-            block=deterministic_block,
-            deterministic_block=deterministic_block,
-        )
+        return deterministic_region
 
     resolution = resolutions_by_case_id[draft.case.case_id]
     if resolution.status == "local_fallback":
@@ -404,9 +560,11 @@ def _finalize_workbook(
 
     diagnostics.block_count_by_kind = dict(sorted(block_counts.items()))
     diagnostics.ambiguous_regions = ambiguous_regions
+    continuation_failed = False
     try:
         groups, candidates = link_table_continuations(snapshot, workbook_ir)
     except Exception as exc:
+        continuation_failed = True
         diagnostics.warnings.append(f"cross_sheet_continuation_fallback:{type(exc).__name__}")
     else:
         workbook_ir.table_continuations = groups
@@ -437,6 +595,8 @@ def _finalize_workbook(
         validation_codes.append("row_conservation_failed")
     if diagnostics.source_ref_validity_ratio != 1.0 or invalid_refs:
         validation_codes.append("invalid_source_refs")
+    if continuation_failed:
+        validation_codes.append("continuation_error")
     return diagnostics, tuple(validation_codes)
 
 

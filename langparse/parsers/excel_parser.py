@@ -3,6 +3,10 @@ from pathlib import Path
 from langparse.core.parser import BaseParser
 from langparse.parsers.sniff import looks_like_ole_binary, looks_like_zip_ooxml
 from langparse.types import ParsedDocumentResult, ParsedElement, ParseDiagnostics, ParsedPageResult
+from langparse.workbooks.modeling import (
+    RequiredWorkbookDisambiguationError,
+    WorkbookDisambiguation,
+)
 
 
 class ExcelParser(BaseParser):
@@ -12,6 +16,11 @@ class ExcelParser(BaseParser):
     Sheets keep stable ordinals but are not pages, so Excel results are always
     marked ``paginated=False``.
     """
+
+    def __init__(self, disambiguation: WorkbookDisambiguation | None = None) -> None:
+        self.disambiguation = (
+            WorkbookDisambiguation.off() if disambiguation is None else disambiguation
+        )
 
     def parse_result(self, file_path: str | Path, **kwargs) -> ParsedDocumentResult:
         path = self._resolve_existing_path(file_path)
@@ -80,7 +89,12 @@ class ExcelParser(BaseParser):
 
         snapshot = OOXMLWorkbookAdapter().snapshot(path)
         try:
-            structure, diagnostics = assemble_workbook(snapshot)
+            structure, diagnostics = assemble_workbook(
+                snapshot,
+                disambiguation=self.disambiguation,
+            )
+        except RequiredWorkbookDisambiguationError:
+            raise
         except Exception as exc:
             structure, diagnostics = assemble_baseline(snapshot)
             diagnostics.status = "partial"

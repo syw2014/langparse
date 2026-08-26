@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import asdict
+from copy import deepcopy
+from dataclasses import asdict, dataclass, replace
 
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_to_tuple, range_boundaries
@@ -12,14 +13,32 @@ from langparse.workbooks.blocks import (
     interpret_matrix_block,
     interpret_text_block,
 )
-from langparse.workbooks.classification import classify_candidate_region
+from langparse.workbooks.classification import (
+    BlockClassification,
+    RegionAssessment,
+    assess_candidate_region,
+    classify_candidate_region,
+)
 from langparse.workbooks.continuation import link_table_continuations
+from langparse.workbooks.modeling import (
+    InvalidRegionAmbiguityCaseError,
+    ModelCallAudit,
+    RegionAmbiguityCase,
+    RequiredWorkbookDisambiguationError,
+    WorkbookDisambiguation,
+    WorkbookModelMode,
+    WorkbookRegionDisambiguator,
+    build_region_case,
+)
+from langparse.workbooks.modeling.disambiguation import _audit_payload
 from langparse.workbooks.regions import detect_candidate_regions
 from langparse.workbooks.tables import interpret_logical_table
 from langparse.workbooks.types import (
+    CandidateRegion,
     CellSnapshot,
     LogicalTable,
     SheetIR,
+    SheetSnapshot,
     SourceRef,
     WorkbookBlock,
     WorkbookIR,
@@ -28,8 +47,103 @@ from langparse.workbooks.types import (
 )
 
 
-def assemble_workbook(snapshot: WorkbookSnapshot) -> tuple[WorkbookIR, ParseDiagnostics]:
+@dataclass(frozen=True)
+class _RegionDraft:
+    sheet_index: int
+    sheet: SheetSnapshot
+    candidate: CandidateRegion
+    assessment: RegionAssessment
+    case: RegionAmbiguityCase | None
+
+
+@dataclass(frozen=True)
+class _MaterializedRegion:
+    draft: _RegionDraft
+    block: WorkbookBlock
+    deterministic_block: WorkbookBlock
+    audit: ModelCallAudit | None = None
+    model_selected: bool = False
+    materialization_failed: bool = False
+
+
+def assemble_workbook(
+    snapshot: WorkbookSnapshot,
+    *,
+    disambiguation: WorkbookDisambiguation | None = None,
+) -> tuple[WorkbookIR, ParseDiagnostics]:
     """Classify and interpret candidate regions with local raw-grid fallback."""
+
+    configured = WorkbookDisambiguation.off() if disambiguation is None else disambiguation
+    if configured.mode is WorkbookModelMode.OFF:
+        return _assemble_deterministic(snapshot)
+
+    drafts = _region_drafts(snapshot, configured)
+    resolutions_by_case_id = _resolve_region_cases(drafts, configured)
+    materialized = [
+        _materialize_region(snapshot.source, draft, resolutions_by_case_id) for draft in drafts
+    ]
+    workbook_ir = _workbook_from_materialized(snapshot, materialized, rollback_selected=False)
+    diagnostics, tentative_validation_codes = _finalize_workbook(snapshot, workbook_ir)
+
+    selected_regions = [region for region in materialized if region.model_selected]
+    reverted_case_ids: set[str] = set()
+    if tentative_validation_codes and selected_regions:
+        reverted_case_ids = {
+            region.draft.case.case_id
+            for region in selected_regions
+            if region.draft.case is not None
+        }
+        workbook_ir = _workbook_from_materialized(snapshot, materialized, rollback_selected=True)
+        diagnostics, rollback_validation_codes = _finalize_workbook(snapshot, workbook_ir)
+        if rollback_validation_codes:
+            raise RuntimeError("deterministic workbook rollback failed validation")
+
+    unresolved_case_ids: list[str] = []
+    finalized_audits: list[ModelCallAudit] = []
+    for region in materialized:
+        if region.audit is None or region.draft.case is None:
+            continue
+        case_id = region.draft.case.case_id
+        audit = region.audit
+        if region.materialization_failed:
+            if configured.mode is WorkbookModelMode.REQUIRED:
+                unresolved_case_ids.append(case_id)
+        elif case_id in reverted_case_ids:
+            audit = replace(
+                audit,
+                outcome="validation_error",
+                validation_codes=_stable_codes(
+                    *audit.validation_codes,
+                    *tentative_validation_codes,
+                ),
+                reason_codes=("deterministic_fallback",),
+                error_type=None,
+            )
+            if configured.mode is WorkbookModelMode.REQUIRED:
+                unresolved_case_ids.append(case_id)
+        elif region.model_selected:
+            audit = replace(
+                audit,
+                outcome="accepted",
+                reason_codes=("model_selected_choice",),
+                error_type=None,
+            )
+        finalized_audits.append(audit)
+
+    diagnostics.model_calls = [_audit_payload(audit) for audit in finalized_audits]
+    if unresolved_case_ids:
+        diagnostics.status = "failed"
+        raise RequiredWorkbookDisambiguationError(
+            tuple(unresolved_case_ids),
+            diagnostics,
+        )
+    return workbook_ir, diagnostics
+
+
+def _assemble_deterministic(
+    snapshot: WorkbookSnapshot,
+) -> tuple[WorkbookIR, ParseDiagnostics]:
+    """Preserve the pre-model semantic assembly path byte-for-byte in behavior."""
 
     workbook_ir, diagnostics = assemble_baseline(snapshot)
     block_counts: Counter[str] = Counter()
@@ -95,6 +209,266 @@ def assemble_workbook(snapshot: WorkbookSnapshot) -> tuple[WorkbookIR, ParseDiag
             f"Workbook IR contains {len(invalid_refs)} invalid source refs: {invalid_refs[:10]}"
         )
     return workbook_ir, diagnostics
+
+
+def _region_drafts(
+    snapshot: WorkbookSnapshot,
+    configured: WorkbookDisambiguation,
+) -> list[_RegionDraft]:
+    drafts = []
+    for sheet_index, sheet in enumerate(snapshot.sheets):
+        for candidate in detect_candidate_regions(sheet):
+            assessment = assess_candidate_region(sheet, candidate)
+            case = None
+            if (
+                configured.mode is not WorkbookModelMode.OFF
+                and assessment.ambiguous
+                and sheet.visibility == "visible"
+            ):
+                try:
+                    case = build_region_case(sheet, candidate, assessment)
+                except InvalidRegionAmbiguityCaseError:
+                    case = None
+            drafts.append(
+                _RegionDraft(
+                    sheet_index=sheet_index,
+                    sheet=sheet,
+                    candidate=candidate,
+                    assessment=assessment,
+                    case=case,
+                )
+            )
+    return drafts
+
+
+def _resolve_region_cases(
+    drafts: list[_RegionDraft],
+    configured: WorkbookDisambiguation,
+):
+    cases = [draft.case for draft in drafts if draft.case is not None]
+    if not cases:
+        return {}
+    resolutions = WorkbookRegionDisambiguator().resolve(cases, configured)
+    return {resolution.case_id: resolution for resolution in resolutions.resolutions}
+
+
+def _materialize_region(snapshot_source, draft: _RegionDraft, resolutions_by_case_id):
+    deterministic_block = _materialize_deterministic(snapshot_source, draft)
+    if draft.case is None:
+        return _MaterializedRegion(
+            draft=draft,
+            block=deterministic_block,
+            deterministic_block=deterministic_block,
+        )
+
+    resolution = resolutions_by_case_id[draft.case.case_id]
+    if resolution.status == "local_fallback":
+        return _MaterializedRegion(
+            draft=draft,
+            block=deterministic_block,
+            deterministic_block=deterministic_block,
+            audit=_normalize_fallback_audit(resolution.audit),
+        )
+
+    choice = next(
+        choice for choice in draft.case.choices if choice.choice_id == resolution.choice_id
+    )
+    classification = BlockClassification(
+        kind=choice.kind,
+        confidence=choice.local_score,
+        reason_codes=[*choice.reason_codes, "model_selected_choice"],
+        features=draft.assessment.deterministic.features,
+    )
+    assert resolution.audit is not None
+    try:
+        block = _block_for_candidate(
+            snapshot_source,
+            draft.sheet,
+            draft.candidate,
+            classification,
+        )
+    except Exception as exc:
+        block = _unclassified_block(
+            snapshot_source,
+            draft.candidate,
+            confidence=0.0,
+            reason_codes=["semantic_block_fallback"],
+            extra_diagnostic={"error_type": type(exc).__name__},
+        )
+        audit = replace(
+            resolution.audit,
+            outcome="materialization_error",
+            validation_codes=_stable_codes(
+                *resolution.audit.validation_codes,
+                "materialization_error",
+            ),
+            reason_codes=("semantic_block_fallback",),
+            error_type=type(exc).__name__,
+        )
+        return _MaterializedRegion(
+            draft=draft,
+            block=block,
+            deterministic_block=deterministic_block,
+            audit=audit,
+            materialization_failed=True,
+        )
+    return _MaterializedRegion(
+        draft=draft,
+        block=block,
+        deterministic_block=deterministic_block,
+        audit=resolution.audit,
+        model_selected=True,
+    )
+
+
+def _materialize_deterministic(snapshot_source, draft: _RegionDraft) -> WorkbookBlock:
+    try:
+        return _block_for_candidate(
+            snapshot_source,
+            draft.sheet,
+            draft.candidate,
+            draft.assessment.deterministic,
+        )
+    except Exception as exc:
+        return _unclassified_block(
+            snapshot_source,
+            draft.candidate,
+            confidence=0.0,
+            reason_codes=["semantic_block_fallback"],
+            extra_diagnostic={"error_type": type(exc).__name__},
+        )
+
+
+def _normalize_fallback_audit(audit: ModelCallAudit | None) -> ModelCallAudit | None:
+    if audit is None:
+        return None
+    outcome = (
+        "provider_error"
+        if audit.outcome in {"adapter_error", "deadline_exceeded", "timeout"}
+        else audit.outcome
+    )
+    return replace(
+        audit,
+        outcome=outcome,
+        reason_codes=("deterministic_fallback",),
+    )
+
+
+def _workbook_from_materialized(
+    snapshot: WorkbookSnapshot,
+    materialized: list[_MaterializedRegion],
+    *,
+    rollback_selected: bool,
+) -> WorkbookIR:
+    workbook_ir, _ = assemble_baseline(snapshot)
+    blocks_by_sheet: dict[int, list[WorkbookBlock]] = {
+        index: [] for index in range(len(snapshot.sheets))
+    }
+    for region in materialized:
+        block = (
+            region.deterministic_block
+            if rollback_selected and region.model_selected
+            else region.block
+        )
+        blocks_by_sheet[region.draft.sheet_index].append(deepcopy(block))
+    for sheet_index, sheet_ir in enumerate(workbook_ir.sheets):
+        sheet_ir.blocks = blocks_by_sheet[sheet_index]
+    return workbook_ir
+
+
+def _finalize_workbook(
+    snapshot: WorkbookSnapshot,
+    workbook_ir: WorkbookIR,
+) -> tuple[ParseDiagnostics, tuple[str, ...]]:
+    _, diagnostics = assemble_baseline(snapshot)
+    block_counts: Counter[str] = Counter()
+    ambiguous_regions = []
+    for sheet_ir in workbook_ir.sheets:
+        for block in sheet_ir.blocks:
+            if block.kind == "unclassified":
+                reason_codes = [
+                    diagnostic["reason_code"]
+                    for diagnostic in block.diagnostics
+                    if "reason_code" in diagnostic
+                ]
+                ambiguous_regions.append(
+                    {
+                        "sheet_name": sheet_ir.name,
+                        "range": block.source_refs[0].range,
+                        "candidate_kind": "unclassified",
+                        "confidence": block.confidence,
+                        "reason_codes": reason_codes,
+                    }
+                )
+            block_counts[block.kind] += 1
+
+    diagnostics.block_count_by_kind = dict(sorted(block_counts.items()))
+    diagnostics.ambiguous_regions = ambiguous_regions
+    try:
+        groups, candidates = link_table_continuations(snapshot, workbook_ir)
+    except Exception as exc:
+        diagnostics.warnings.append(f"cross_sheet_continuation_fallback:{type(exc).__name__}")
+    else:
+        workbook_ir.table_continuations = groups
+        diagnostics.continuation_candidates = candidates
+        ambiguous_count = sum(item["status"] == "ambiguous" for item in candidates)
+        if ambiguous_count:
+            diagnostics.warnings.append(
+                f"Workbook contains {ambiguous_count} ambiguous continuation candidates"
+            )
+    _update_coverage(snapshot, workbook_ir, diagnostics)
+    row_conservation_passed = _row_conservation_passed(workbook_ir)
+    if not row_conservation_passed:
+        diagnostics.status = "partial"
+        diagnostics.warnings.append("Workbook IR failed logical row conservation")
+    validity_ratio, invalid_refs = validate_workbook_source_refs(snapshot, workbook_ir)
+    diagnostics.source_ref_validity_ratio = validity_ratio
+    if invalid_refs:
+        diagnostics.status = "partial"
+        diagnostics.warnings.append(
+            f"Workbook IR contains {len(invalid_refs)} invalid source refs: {invalid_refs[:10]}"
+        )
+    validation_codes = []
+    if diagnostics.coverage_ratio != 1.0:
+        validation_codes.append("invalid_coverage")
+    if not diagnostics.reconstruction_passed:
+        validation_codes.append("reconstruction_failed")
+    if not row_conservation_passed:
+        validation_codes.append("row_conservation_failed")
+    if diagnostics.source_ref_validity_ratio != 1.0 or invalid_refs:
+        validation_codes.append("invalid_source_refs")
+    return diagnostics, tuple(validation_codes)
+
+
+def _row_conservation_passed(workbook_ir: WorkbookIR) -> bool:
+    for sheet_ir in workbook_ir.sheets:
+        for block in sheet_ir.blocks:
+            if block.logical_table is None or not block.source_refs:
+                continue
+            min_col, min_row, max_col, max_row = range_boundaries(block.source_refs[0].range)
+            expected = [
+                (sheet_ir.name, min_col, row_number, max_col, row_number)
+                for row_number in range(min_row, max_row + 1)
+            ]
+            actual = []
+            for row in block.logical_table.rows:
+                row_min_col, row_min, row_max_col, row_max = range_boundaries(row.source_ref.range)
+                actual.append(
+                    (
+                        row.source_ref.sheet_name,
+                        row_min_col,
+                        row_min,
+                        row_max_col,
+                        row_max,
+                    )
+                )
+            if actual != expected:
+                return False
+    return True
+
+
+def _stable_codes(*codes: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(codes))
 
 
 def _block_for_candidate(snapshot_source, sheet, candidate, classification):

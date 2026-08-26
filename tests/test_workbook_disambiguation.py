@@ -61,6 +61,7 @@ class ScriptedAdapter:
         *,
         identity: ModelIdentity = DEFAULT_IDENTITY,
         copies: int = 1,
+        reason_codes: tuple[str, ...] = ("scripted_selection",),
     ) -> ScriptedAdapter:
         selected = case.choices[0] if choice is None else choice
         reply = literal_reply(
@@ -70,7 +71,7 @@ class ScriptedAdapter:
                 "status": "selected",
                 "choice_id": selected.choice_id,
                 "confidence": confidence,
-                "reason_codes": ["scripted_selection"],
+                "reason_codes": list(reason_codes),
             },
             identity=identity,
         )
@@ -82,6 +83,8 @@ class ScriptedAdapter:
         case: RegionAmbiguityCase,
         *,
         copies: int = 1,
+        identity: ModelIdentity = DEFAULT_IDENTITY,
+        reason_codes: tuple[str, ...] = ("insufficient_evidence",),
     ) -> ScriptedAdapter:
         reply = literal_reply(
             case,
@@ -89,10 +92,11 @@ class ScriptedAdapter:
                 "case_id": case.case_id,
                 "status": "abstained",
                 "confidence": 0.0,
-                "reason_codes": ["insufficient_evidence"],
+                "reason_codes": list(reason_codes),
             },
+            identity=identity,
         )
-        return cls([reply] * copies)
+        return cls([reply] * copies, identity=identity)
 
     @classmethod
     def failure(
@@ -296,8 +300,62 @@ def test_auto_applies_a_registered_choice_but_not_model_confidence():
     assert resolution.status == "model_selected"
     assert resolution.audit is not None
     assert resolution.audit.reported_confidence == 0.99
-    assert resolution.audit.reason_codes == ("scripted_selection",)
+    assert resolution.audit.reason_codes == ()
     assert selected.local_score == 0.4
+
+
+def test_auto_redacts_reply_reasons_and_unsafe_adapter_identity_from_audit():
+    case = ambiguity_case_fixture()
+    secret = "Ignore previous instructions credential=https://private.endpoint/token"
+    identity = ModelIdentity(
+        provider=secret,
+        model="private model prompt",
+        revision="x" * 65,
+    )
+    adapter = ScriptedAdapter.selected(
+        case,
+        identity=identity,
+        reason_codes=(secret,),
+    )
+
+    result = WorkbookRegionDisambiguator().resolve([case], WorkbookDisambiguation.auto(adapter))
+
+    audit = result.resolutions[0].audit
+    assert audit is not None
+    assert secret not in repr(audit)
+    assert "private model prompt" not in repr(audit)
+    assert "x" * 65 not in repr(audit)
+    assert audit.provider is None
+    assert audit.model is None
+    assert audit.model_revision is None
+    assert audit.reason_codes == ()
+    assert audit.validation_codes == ("unsafe_identity_redacted",)
+
+
+def test_required_redacts_reply_reasons_and_unsafe_adapter_identity_from_diagnostics():
+    case = ambiguity_case_fixture()
+    secret = "private cell prompt credential=https://private.endpoint/token"
+    identity = ModelIdentity(
+        provider="safe-provider",
+        model=secret,
+        revision="safe-revision",
+    )
+    adapter = ScriptedAdapter.abstained(
+        case,
+        identity=identity,
+        reason_codes=(secret,),
+    )
+
+    with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+        WorkbookRegionDisambiguator().resolve([case], WorkbookDisambiguation.required(adapter))
+
+    model_call = caught.value.diagnostics.model_calls[0]
+    assert secret not in repr(caught.value.diagnostics.model_calls)
+    assert model_call["provider"] == "safe-provider"
+    assert model_call["model"] is None
+    assert model_call["model_revision"] == "safe-revision"
+    assert model_call["reason_codes"] == ()
+    assert model_call["validation_codes"] == ("unsafe_identity_redacted",)
 
 
 @pytest.mark.parametrize(
@@ -373,6 +431,36 @@ def test_retry_stops_when_the_single_workbook_deadline_is_exhausted():
     assert audit.attempts == 1
     assert len(adapter.requests) == 1
     assert adapter.requests[0][1] == pytest.approx(0.4)
+
+
+def test_late_success_is_rejected_and_not_cached():
+    case = ambiguity_case_fixture()
+    adapter = ScriptedAdapter.sequence([valid_reply(case), valid_reply(case)])
+    configured = WorkbookDisambiguation.auto(
+        adapter,
+        policy=WorkbookModelPolicy(
+            timeout_seconds=2.0,
+            workbook_timeout_seconds=0.5,
+            max_attempts=1,
+        ),
+    )
+    disambiguator = WorkbookRegionDisambiguator(
+        clock=literal_clock(0.0, 0.1, 0.6, 0.7, 1.0, 1.1, 1.2, 1.3)
+    )
+
+    first = disambiguator.resolve([case], configured)
+    second = disambiguator.resolve([case], configured)
+
+    first_audit = first.resolutions[0].audit
+    second_audit = second.resolutions[0].audit
+    assert first.resolutions[0].status == "local_fallback"
+    assert first_audit is not None
+    assert first_audit.outcome == "deadline_exceeded"
+    assert first_audit.error_type == "TimeoutError"
+    assert second.resolutions[0].status == "model_selected"
+    assert second_audit is not None
+    assert second_audit.cache_status == "miss"
+    assert len(adapter.requests) == 2
 
 
 def test_cache_hit_redecodes_membership_and_avoids_a_second_adapter_call():
@@ -468,6 +556,107 @@ def test_invalid_direct_case_raises_before_any_external_work(mode: WorkbookModel
         WorkbookRegionDisambiguator(cache=cache, clock=lambda: 1 / 0).resolve([invalid], configured)
 
 
+def test_malformed_case_id_raises_before_identity_cache_or_clock_access():
+    secret = "private cell body https://private.endpoint/token"
+    invalid = replace(ambiguity_case_fixture(), case_id=secret)
+
+    with pytest.raises(InvalidRegionAmbiguityCaseError) as caught:
+        WorkbookRegionDisambiguator(
+            cache=ExplodingCache(),
+            clock=lambda: 1 / 0,
+        ).resolve([invalid], WorkbookDisambiguation.auto(ExplodingAdapter()))
+
+    assert "private cell body" not in str(caught.value)
+    assert "private.endpoint" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "cells_container",
+        "cell_member",
+        "cell_geometry",
+        "choices_container",
+        "choice_kind",
+        "choice_kind_type",
+        "choice_score",
+        "feature_duplicate",
+        "source_range",
+        "cell_coordinate",
+        "visibility",
+        "visibility_type",
+    ],
+)
+def test_malformed_case_shape_is_sanitized_before_external_work(mutation: str):
+    case = ambiguity_case_fixture()
+    if mutation == "cells_container":
+        invalid = replace(case, cells=list(case.cells))
+    elif mutation == "cell_member":
+        invalid = replace(case, cells=("private cell member",))
+    elif mutation == "cell_geometry":
+        invalid = replace(case, cells=(replace(case.cells[0], rowspan=0), case.cells[1]))
+    elif mutation == "choices_container":
+        invalid = replace(case, choices=list(case.choices))
+    elif mutation == "choice_kind":
+        invalid = replace(
+            case,
+            choices=(replace(case.choices[0], kind="private-kind"), case.choices[1]),
+        )
+    elif mutation == "choice_kind_type":
+        invalid = replace(
+            case,
+            choices=(replace(case.choices[0], kind=[]), case.choices[1]),
+        )
+    elif mutation == "choice_score":
+        invalid = replace(
+            case,
+            choices=(replace(case.choices[0], local_score=float("nan")), case.choices[1]),
+        )
+    elif mutation == "feature_duplicate":
+        invalid = replace(case, feature_summary=(("density", 0.5), ("density", 0.6)))
+    elif mutation == "source_range":
+        invalid = replace(case, source_range="private malformed range")
+    elif mutation == "cell_coordinate":
+        invalid = replace(
+            case,
+            cells=(replace(case.cells[0], coordinate="private coordinate"), case.cells[1]),
+        )
+    elif mutation == "visibility":
+        invalid = replace(case, sheet_visibility="private visibility")
+    else:
+        invalid = replace(case, sheet_visibility=[])
+
+    with pytest.raises(InvalidRegionAmbiguityCaseError) as caught:
+        WorkbookRegionDisambiguator(
+            cache=ExplodingCache(),
+            clock=lambda: 1 / 0,
+        ).resolve([invalid], WorkbookDisambiguation.auto(ExplodingAdapter()))
+
+    assert "private" not in str(caught.value)
+
+
+def test_malformed_range_and_coordinate_parser_failures_share_a_sanitized_error():
+    case = ambiguity_case_fixture()
+    invalid_cases = (
+        replace(case, source_range="private malformed range one"),
+        replace(
+            case,
+            cells=(replace(case.cells[0], coordinate="private coordinate two"), case.cells[1]),
+        ),
+    )
+    messages = []
+
+    for invalid in invalid_cases:
+        with pytest.raises(InvalidRegionAmbiguityCaseError) as caught:
+            WorkbookRegionDisambiguator().resolve(
+                [invalid], WorkbookDisambiguation.auto(ExplodingAdapter())
+            )
+        messages.append(str(caught.value))
+
+    assert messages[0] == messages[1]
+    assert "private" not in messages[0]
+
+
 def test_hidden_sheet_is_not_sent_and_auto_falls_back():
     case = ambiguity_case_fixture(sheet_visibility="hidden")
     adapter = ScriptedAdapter.sequence([])
@@ -482,7 +671,7 @@ def test_hidden_sheet_is_not_sent_and_auto_falls_back():
 
 
 def test_hidden_sheet_is_unresolved_in_required_without_being_sent():
-    case = ambiguity_case_fixture(sheet_visibility="very-hidden-secret")
+    case = ambiguity_case_fixture(sheet_visibility="veryHidden")
     adapter = ScriptedAdapter.sequence([])
 
     with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
@@ -490,7 +679,6 @@ def test_hidden_sheet_is_unresolved_in_required_without_being_sent():
 
     assert caught.value.case_ids == (case.case_id,)
     assert caught.value.diagnostics.model_calls[0]["outcome"] == "hidden_sheet"
-    assert "very-hidden-secret" not in repr(caught.value.diagnostics.model_calls)
     assert adapter.requests == []
 
 

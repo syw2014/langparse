@@ -313,30 +313,73 @@ def _choice_payload(choice: RegionChoice) -> dict[str, object]:
     }
 
 
-def _validate_case(case: RegionAmbiguityCase) -> None:
-    if case.sheet_visibility != "visible":
-        raise InvalidRegionAmbiguityCaseError("hidden sheet content cannot be sent")
+def _validate_case(
+    case: RegionAmbiguityCase,
+    *,
+    allow_hidden_sheet: bool = False,
+) -> None:
+    if not isinstance(case, RegionAmbiguityCase):
+        raise InvalidRegionAmbiguityCaseError("invalid case shape")
+    if not _is_identifier(case.case_id):
+        raise InvalidRegionAmbiguityCaseError("invalid case identifier")
+    if not _is_required_string(case.sheet_name, max_length=128):
+        raise InvalidRegionAmbiguityCaseError("invalid case shape")
+    if not isinstance(case.sheet_visibility, str) or case.sheet_visibility not in {
+        "visible",
+        "hidden",
+        "veryHidden",
+    }:
+        raise InvalidRegionAmbiguityCaseError("invalid sheet visibility")
+    if not _is_required_string(case.source_range, max_length=64):
+        raise InvalidRegionAmbiguityCaseError("invalid case coordinate or source range")
+    if not _is_required_string(case.fact_digest, max_length=256):
+        raise InvalidRegionAmbiguityCaseError("invalid case shape")
+    _validate_case_feature_summary(case)
     _validate_case_cells(case)
-    _validate_choices(case.choices, _fallback_kind(case))
-    if case.fallback_choice_id not in {choice.choice_id for choice in case.choices}:
-        raise InvalidRegionAmbiguityCaseError("fallback choice is not registered")
+    _validate_case_choices(case)
+    _validate_local_codes(case.ambiguity_codes, require_nonempty=True)
+    if not allow_hidden_sheet and case.sheet_visibility != "visible":
+        raise InvalidRegionAmbiguityCaseError("hidden sheet content cannot be sent")
 
 
-def _fallback_kind(case: RegionAmbiguityCase) -> str:
-    for choice in case.choices:
-        if choice.choice_id == case.fallback_choice_id:
-            return choice.kind
-    raise InvalidRegionAmbiguityCaseError("fallback choice is not registered")
+def _validate_case_feature_summary(case: RegionAmbiguityCase) -> None:
+    if not isinstance(case.feature_summary, tuple):
+        raise InvalidRegionAmbiguityCaseError("invalid feature summary")
+    keys: list[str] = []
+    for entry in case.feature_summary:
+        if not isinstance(entry, tuple) or len(entry) != 2:
+            raise InvalidRegionAmbiguityCaseError("invalid feature summary")
+        key, value = entry
+        if not _is_required_string(key, max_length=128) or not (
+            value is None or type(value) in (str, int, float, bool)
+        ):
+            raise InvalidRegionAmbiguityCaseError("invalid feature summary")
+        keys.append(key)
+    if len(set(keys)) != len(keys):
+        raise InvalidRegionAmbiguityCaseError("invalid feature summary")
 
 
 def _validate_case_cells(case: RegionAmbiguityCase) -> None:
-    min_column, min_row, max_column, max_row = range_boundaries(case.source_range)
+    if not isinstance(case.cells, tuple):
+        raise InvalidRegionAmbiguityCaseError("invalid case shape")
+    try:
+        min_column, min_row, max_column, max_row = range_boundaries(case.source_range)
+    except (TypeError, ValueError) as error:
+        raise InvalidRegionAmbiguityCaseError("invalid case coordinate or source range") from error
+    if not _valid_excel_boundaries(min_column, min_row, max_column, max_row):
+        raise InvalidRegionAmbiguityCaseError("invalid case coordinate or source range")
     coordinates: list[str] = []
     for cell in case.cells:
+        if not isinstance(cell, RegionCellCue):
+            raise InvalidRegionAmbiguityCaseError("invalid case shape")
+        if not _valid_case_cell_fields(cell):
+            raise InvalidRegionAmbiguityCaseError("invalid case cell")
         try:
             row, column = coordinate_to_tuple(cell.coordinate)
-        except ValueError as error:
-            raise InvalidRegionAmbiguityCaseError("invalid case cell coordinate") from error
+        except (TypeError, ValueError) as error:
+            raise InvalidRegionAmbiguityCaseError(
+                "invalid case coordinate or source range"
+            ) from error
         if not min_row <= row <= max_row or not min_column <= column <= max_column:
             raise InvalidRegionAmbiguityCaseError("case cell outside source range")
         if cell.merge_anchor is not None:
@@ -346,6 +389,92 @@ def _validate_case_cells(case: RegionAmbiguityCase) -> None:
         raise InvalidRegionAmbiguityCaseError("duplicate cell coordinate")
     if coordinates != sorted(coordinates, key=coordinate_to_tuple):
         raise InvalidRegionAmbiguityCaseError("case cells must use row/column order")
+
+
+def _validate_case_choices(case: RegionAmbiguityCase) -> None:
+    if not isinstance(case.choices, tuple):
+        raise InvalidRegionAmbiguityCaseError("invalid case shape")
+    choice_ids: list[str] = []
+    choice_kinds: set[str] = set()
+    for choice in case.choices:
+        if not isinstance(choice, RegionChoice):
+            raise InvalidRegionAmbiguityCaseError("invalid case shape")
+        if (
+            not _is_identifier(choice.choice_id)
+            or not isinstance(choice.kind, str)
+            or choice.kind not in {"logical_table", "form", "matrix", "text", "unclassified"}
+            or not isinstance(choice.local_score, (int, float))
+            or isinstance(choice.local_score, bool)
+            or not math.isfinite(choice.local_score)
+            or not 0 <= choice.local_score <= 1
+        ):
+            raise InvalidRegionAmbiguityCaseError("invalid case choice")
+        _validate_local_codes(choice.reason_codes)
+        choice_ids.append(choice.choice_id)
+        choice_kinds.add(choice.kind)
+    if len(set(choice_ids)) != len(choice_ids):
+        raise InvalidRegionAmbiguityCaseError("duplicate choice_id")
+    if len(choice_kinds) < 2:
+        raise InvalidRegionAmbiguityCaseError(
+            "ambiguous assessment requires at least two choice kinds"
+        )
+    if not _is_identifier(case.fallback_choice_id) or case.fallback_choice_id not in set(
+        choice_ids
+    ):
+        raise InvalidRegionAmbiguityCaseError("fallback choice is not registered")
+
+
+def _valid_case_cell_fields(cell: RegionCellCue) -> bool:
+    return (
+        _is_required_string(cell.coordinate, max_length=32)
+        and isinstance(cell.display_text, str)
+        and isinstance(cell.value_type, str)
+        and isinstance(cell.style_fingerprint, str)
+        and isinstance(cell.rowspan, int)
+        and not isinstance(cell.rowspan, bool)
+        and cell.rowspan > 0
+        and isinstance(cell.colspan, int)
+        and not isinstance(cell.colspan, bool)
+        and cell.colspan > 0
+    )
+
+
+def _valid_excel_boundaries(
+    min_column: int | None,
+    min_row: int | None,
+    max_column: int | None,
+    max_row: int | None,
+) -> bool:
+    return (
+        isinstance(min_column, int)
+        and isinstance(min_row, int)
+        and isinstance(max_column, int)
+        and isinstance(max_row, int)
+        and 1 <= min_column <= max_column <= 16_384
+        and 1 <= min_row <= max_row <= 1_048_576
+    )
+
+
+def _validate_local_codes(codes: object, *, require_nonempty: bool = False) -> None:
+    if (
+        not isinstance(codes, tuple)
+        or (require_nonempty and not codes)
+        or not all(_is_identifier(code) for code in codes)
+    ):
+        raise InvalidRegionAmbiguityCaseError("invalid local codes")
+
+
+def _is_identifier(value: object, *, max_length: int = 128) -> bool:
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= max_length
+        and value.isascii()
+        and all(character.isalnum() or character in "._-" for character in value)
+    )
+
+
+def _is_required_string(value: object, *, max_length: int) -> bool:
+    return isinstance(value, str) and 0 < len(value) <= max_length
 
 
 def _exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:

@@ -192,6 +192,52 @@ def test_direct_case_rejects_unsafe_cell_projection(cells, message: str):
         build_model_request(unsafe, ModelIdentity(provider="recording", model="fixture"))
 
 
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        lambda case: replace(case, case_id="private malformed case id"),
+        lambda case: replace(case, cells=list(case.cells)),
+        lambda case: replace(case, choices=list(case.choices)),
+        lambda case: replace(
+            case,
+            cells=(replace(case.cells[0], rowspan=True), *case.cells[1:]),
+        ),
+        lambda case: replace(
+            case,
+            choices=(replace(case.choices[0], local_score=float("inf")), *case.choices[1:]),
+        ),
+        lambda case: replace(case, ambiguity_codes=("private invalid code",)),
+    ],
+)
+def test_direct_case_rejects_malformed_structural_fields_without_disclosure(invalid):
+    case = invalid(request_fixture())
+
+    with pytest.raises(InvalidRegionAmbiguityCaseError) as caught:
+        build_model_request(case, ModelIdentity(provider="recording", model="fixture"))
+
+    assert "private" not in str(caught.value)
+
+
+def test_direct_case_normalizes_malformed_range_and_coordinate_errors():
+    base = request_fixture()
+    cases = (
+        replace(base, source_range="private malformed range"),
+        replace(
+            base,
+            cells=(replace(base.cells[0], coordinate="private coordinate"), *base.cells[1:]),
+        ),
+    )
+    messages = []
+
+    for case in cases:
+        with pytest.raises(InvalidRegionAmbiguityCaseError) as caught:
+            build_model_request(case, ModelIdentity(provider="recording", model="fixture"))
+        messages.append(str(caught.value))
+
+    assert messages[0] == messages[1]
+    assert "private" not in messages[0]
+
+
 def test_strict_reply_accepts_only_registered_choice_membership():
     request, choice = request_and_choice_fixture()
     reply = reply_for(

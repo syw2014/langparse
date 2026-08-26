@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterable
-from dataclasses import fields, replace
+from dataclasses import fields
 
 from langparse.types import ParseDiagnostics
 
@@ -138,10 +138,7 @@ class WorkbookRegionDisambiguator:
 
     def _validate_cases(self, cases: tuple[RegionAmbiguityCase, ...]) -> None:
         for case in cases:
-            if case.sheet_visibility == "visible":
-                _validate_case(case)
-            else:
-                _validate_case(replace(case, sheet_visibility="visible"))
+            _validate_case(case, allow_hidden_sheet=True)
 
     def _read_identity(
         self,
@@ -303,6 +300,19 @@ class WorkbookRegionDisambiguator:
                     request,
                     timeout_seconds=min(policy.timeout_seconds, remaining),
                 )
+                if self._clock() >= deadline:
+                    return self._local_failure(
+                        case,
+                        mode,
+                        identity=identity,
+                        request=request,
+                        request_bytes=len(request.body),
+                        cache_status="miss",
+                        attempts=attempts,
+                        outcome="deadline_exceeded",
+                        error=TimeoutError(),
+                        elapsed_ms=self._elapsed_ms(workbook_started),
+                    )
                 last_body = reply.body
                 decision = decode_model_reply(
                     reply,
@@ -383,7 +393,6 @@ class WorkbookRegionDisambiguator:
                 attempts=attempts,
                 outcome="abstained",
                 reported_confidence=decision.reported_confidence,
-                reason_codes=decision.reason_codes,
                 elapsed_ms=elapsed_ms,
             )
 
@@ -399,7 +408,6 @@ class WorkbookRegionDisambiguator:
             outcome="selected",
             selected_choice_id=decision.choice_id,
             reported_confidence=decision.reported_confidence,
-            reason_codes=decision.reason_codes,
             elapsed_ms=elapsed_ms,
             mode=mode,
         )
@@ -429,7 +437,6 @@ class WorkbookRegionDisambiguator:
         outcome: str,
         selected_choice_id: str | None = None,
         reported_confidence: float | None = None,
-        reason_codes: tuple[str, ...] = (),
         error: Exception | None = None,
     ) -> tuple[RegionResolution, ModelCallAudit]:
         audit = _audit(
@@ -444,7 +451,6 @@ class WorkbookRegionDisambiguator:
             outcome=outcome,
             selected_choice_id=selected_choice_id,
             reported_confidence=reported_confidence,
-            reason_codes=reason_codes,
             error=error,
             mode=mode,
         )
@@ -488,16 +494,32 @@ def _audit(
     outcome: str,
     selected_choice_id: str | None = None,
     reported_confidence: float | None = None,
-    reason_codes: tuple[str, ...] = (),
     error: Exception | None = None,
 ) -> ModelCallAudit:
+    provider, provider_redacted = _safe_identity_token(
+        identity.provider if identity is not None else None,
+        required=identity is not None,
+    )
+    model, model_redacted = _safe_identity_token(
+        identity.model if identity is not None else None,
+        required=identity is not None,
+    )
+    model_revision, revision_redacted = _safe_identity_token(
+        identity.revision if identity is not None else None,
+        required=False,
+    )
+    validation_codes = (
+        ("unsafe_identity_redacted",)
+        if provider_redacted or model_redacted or revision_redacted
+        else ()
+    )
     return ModelCallAudit(
         case_id=case.case_id,
         source_range=case.source_range,
         mode=mode.value,
-        provider=identity.provider if identity is not None else None,
-        model=identity.model if identity is not None else None,
-        model_revision=identity.revision if identity is not None else None,
+        provider=provider,
+        model=model,
+        model_revision=model_revision,
         request_checksum=request.request_checksum if request is not None else None,
         response_checksum=response_checksum(response_body) if response_body is not None else None,
         cache_status=cache_status,
@@ -508,7 +530,8 @@ def _audit(
         outcome=outcome,
         selected_choice_id=selected_choice_id,
         reported_confidence=reported_confidence,
-        reason_codes=reason_codes,
+        validation_codes=validation_codes,
+        reason_codes=(),
         error_type=type(error).__name__ if error is not None else None,
     )
 
@@ -519,3 +542,20 @@ def _audit_payload(audit: ModelCallAudit) -> dict[str, object]:
 
 def _is_response_error(error: Exception) -> bool:
     return isinstance(error, WorkbookModelResponseError)
+
+
+def _safe_identity_token(
+    value: object,
+    *,
+    required: bool,
+) -> tuple[str | None, bool]:
+    if value is None and not required:
+        return None, False
+    if (
+        isinstance(value, str)
+        and 0 < len(value) <= 64
+        and value.isascii()
+        and all(character.isalnum() or character in "._-" for character in value)
+    ):
+        return value, False
+    return None, True

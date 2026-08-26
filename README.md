@@ -309,8 +309,13 @@ values, comments, hyperlinks, images, other regions, credentials, and provider
 secrets. Cell text is treated as untrusted Prompt Injection data: the Adapter
 port exposes no tool channel, and exact response fields, request checksum,
 case/choice membership, size limits, and local validation prevent cell
-instructions from expanding the operation. Diagnostics and the in-memory cache
-do not retain prompts, cell text, raw responses, or provider exception messages.
+instructions from expanding the operation. Diagnostics do not retain prompts,
+cell text, raw replies, or provider exception messages. The process-local,
+non-persistent cache has a narrower but different contract: it retains only
+response envelope bytes that have already passed strict response decoding, and
+every hit is decoded and validated again. Nothing is written to disk, but
+provider-supplied strings inside that envelope may remain in process memory
+until the disambiguator and its cache are released.
 
 Phase 4A ships **no built-in production provider Adapter** and has no provider
 CLI or environment configuration. Its tests and read-only workbook acceptance

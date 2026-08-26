@@ -22,8 +22,8 @@
 - `RequiredWorkbookDisambiguationError` 必须穿透 `ExcelParser._parse_ooxml()` 和 `ParseService`，并只携带 case IDs 与净化后的 `ParseDiagnostics`。
 - 请求只包含当前 candidate envelope 内的 display text、value type、style fingerprint 和 merge geometry；Phase 4A 不发送隐藏 Sheet、公式、cached formula values、comments、hyperlinks、images 或 workbook 其他区域。
 - 单元格文本是不可信数据；Adapter 没有工具调用能力，响应使用严格字段集合、checksum、case/choice membership 和大小限制抵抗 Prompt Injection。
-- diagnostics/cache 不保存 prompt、cell text、formula、response body、credentials、endpoint secrets 或 provider 原始异常正文；只记录异常类型和稳定 reason code。
-- Phase 4A 只使用进程内 memory cache，不写磁盘；cache hit 必须重新执行响应和 membership 校验。
+- diagnostics 不保存 prompt、cell text、formula、response body、credentials、endpoint secrets 或 provider 原始异常正文；只记录异常类型和稳定 reason code。
+- Phase 4A 只使用进程内、非持久化 memory cache；它只保留已通过严格 response decode 的 response envelope bytes，每次 hit 必须重新 decode 并执行 checksum/membership 校验。cache 不写磁盘，但 envelope 内由 provider 提供的字符串可能保留在进程内存中，直到 disambiguator/cache 被释放。
 - `workbook_disambiguation` 必须是 ParseService/Batch 的显式参数，不能进入 PDF engine kwargs、通用 parser kwargs 或 chunk profile。
 - 不新增 OpenAI/Anthropic 等厂商 SDK 依赖，不修改 `langparse/engines/pdf/vision_llm.py`，不增加 CLI provider flags。
 - 所有 production behavior 遵循 TDD：先运行 focused test 看到预期 RED，再写最小 GREEN；测试必须断言真实 Module 行为，不断言 mock 自身。

@@ -253,8 +253,11 @@ conservation、continuation 和 source-reference 验证。
 choices；不会携带隐藏 Sheet、公式及其缓存值、批注、超链接、图片、其他区域、credential
 或 provider secret。单元格文本一律视为不可信的 Prompt Injection 数据：Adapter port 不
 提供工具调用通道，严格响应字段、request checksum、case/choice membership、大小限制和
-本地验证共同阻止单元格指令扩大操作范围。diagnostics 与进程内 memory cache 不保存
-prompt、cell text、原始响应或 provider 异常正文。
+本地验证共同阻止单元格指令扩大操作范围。diagnostics 不保存 prompt、cell text、原始
+reply 或 provider 异常正文。进程内、非持久化 cache 的契约不同且更窄：它只保留已经通过
+严格 response decode 的 response envelope bytes，每次命中仍重新 decode 和 validation。
+cache 不写磁盘，但 envelope 中由 provider 提供的字符串可能留在进程内存中，直到
+disambiguator 及其 cache 被释放。
 
 Phase 4A **没有内置 production provider Adapter**，也没有 provider CLI/env 配置。
 现有测试和只读工作簿验收证明的是显式 opt-in Seam 的安全性与兼容性，不证明真实模型

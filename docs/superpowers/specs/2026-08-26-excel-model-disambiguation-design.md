@@ -446,7 +446,10 @@ raw-grid `partial`。typed error 携带经过净化的 diagnostics，方便 requ
 
 - 只发送 ambiguity case envelope；
 - 默认排除隐藏 Sheet、公式、cached formula value、comments、hyperlinks 和 images；
-- diagnostics/cache 不保存 prompt、cell text、response body、credential 或原始异常正文；
+- diagnostics 不保存 prompt、cell text、response body、credential 或原始异常正文；
+- 进程内非持久化 cache 只保留已通过严格 response decode 的 response envelope bytes，
+  命中后仍重新 decode 并验证 checksum/membership；cache 不写磁盘，但 envelope 内由
+  provider 提供的字符串可能保留在进程内存中，直到 disambiguator/cache 被释放；
 - Phase 4B 引入 production Adapter 前必须加入请求捕获与敏感字段审计；
 - endpoint 和 provider 配置只能来自调用方，不得由 workbook 内容控制，防止 SSRF。
 

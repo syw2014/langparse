@@ -33,6 +33,7 @@ from langparse.types import (
     ParseDiagnostics,
     ParsedPageResult,
 )
+from langparse.workbooks.modeling import WorkbookDisambiguation
 from langparse.workbooks.types import WorkbookIR
 
 #: Engines a caller can actually select. Advertising an engine that raises
@@ -113,6 +114,7 @@ class ParseService:
         engine=None,
         chunk=False,
         chunk_profile: str | None = None,
+        workbook_disambiguation: WorkbookDisambiguation | None = None,
         **kwargs,
     ) -> str:
         parsed = self.parse_result(
@@ -121,6 +123,7 @@ class ParseService:
             engine=engine,
             chunk=chunk,
             chunk_profile=chunk_profile,
+            workbook_disambiguation=workbook_disambiguation,
             **kwargs,
         )
         return self.render_output(parsed, fmt, chunks=parsed.chunks if chunk else None)
@@ -133,6 +136,7 @@ class ParseService:
         engine=None,
         chunk=False,
         chunk_profile: str | None = None,
+        workbook_disambiguation: WorkbookDisambiguation | None = None,
         **kwargs,
     ) -> list[tuple[Path, str]]:
         # `chunk` is named explicitly rather than left in **kwargs: kwargs also
@@ -151,6 +155,7 @@ class ParseService:
                         engine=active_engine,
                         chunk=chunk,
                         chunk_profile=chunk_profile,
+                        workbook_disambiguation=workbook_disambiguation,
                         **kwargs,
                     ),
                 )
@@ -202,6 +207,7 @@ class ParseService:
         engine=None,
         chunk=False,
         chunk_profile: str | None = None,
+        workbook_disambiguation: WorkbookDisambiguation | None = None,
         **kwargs,
     ):
         """
@@ -228,7 +234,9 @@ class ParseService:
                 **kwargs,
             )
         else:
-            parsed = self._parser_for_kind(kind).parse_result(path, **kwargs)
+            parsed = self._parser_for_kind(kind, workbook_disambiguation).parse_result(
+                path, **kwargs
+            )
         if chunk:
             self._populate_chunks(parsed, chunk_profile)
         return parsed
@@ -261,7 +269,11 @@ class ParseService:
             )
             parsed.chunks = []
 
-    def _parser_for_kind(self, kind: str):
+    def _parser_for_kind(
+        self,
+        kind: str,
+        workbook_disambiguation: WorkbookDisambiguation | None = None,
+    ):
         if kind == "docx":
             from langparse.parsers.docx_parser import DocxParser
 
@@ -269,7 +281,7 @@ class ParseService:
         if kind == "excel":
             from langparse.parsers.excel_parser import ExcelParser
 
-            return ExcelParser()
+            return ExcelParser(disambiguation=workbook_disambiguation)
         if kind == "markdown":
             from langparse.parsers.markdown_parser import MarkdownParser
 
@@ -289,11 +301,18 @@ class ParseService:
         return self.parse_file(file_path, engine_name=engine_name, engine=engine, **kwargs)
 
     def parse_batch(self, inputs, engine_name="simple", engine=None, **kwargs):
+        workbook_disambiguation = kwargs.pop("workbook_disambiguation", None)
         documents = []
         active_engine = engine or self._create_engine(engine_name, **kwargs)
         for file_path in self.expand_inputs(inputs):
             documents.append(
-                self.parse_file(file_path, engine_name=engine_name, engine=active_engine, **kwargs)
+                self.parse_file(
+                    file_path,
+                    engine_name=engine_name,
+                    engine=active_engine,
+                    workbook_disambiguation=workbook_disambiguation,
+                    **kwargs,
+                )
             )
         return documents
 

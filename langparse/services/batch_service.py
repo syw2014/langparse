@@ -14,6 +14,7 @@ from langparse.metrics import BatchItemResult, BatchRunResult, collect_parse_met
 from langparse.parsers.registry import is_supported
 from langparse.services.output_paths import resolve_output_paths
 from langparse.services.parse_service import ParseService
+from langparse.workbooks.modeling import WorkbookDisambiguation
 
 
 class BatchParseService:
@@ -32,6 +33,7 @@ class BatchParseService:
         collect_metrics: bool = True,
         chunk: bool = False,
         chunk_profile: str | None = None,
+        workbook_disambiguation: WorkbookDisambiguation | None = None,
         **kwargs,
     ) -> BatchRunResult:
         # No output directory means render to memory and let the caller print;
@@ -64,6 +66,7 @@ class BatchParseService:
                 collect_metrics,
                 chunk,
                 chunk_profile,
+                workbook_disambiguation,
             )
             for path, output_path in zip(paths, output_paths, strict=True)
         ]
@@ -116,6 +119,7 @@ class BatchParseService:
         collect_metrics: bool,
         chunk: bool,
         chunk_profile: str | None,
+        workbook_disambiguation: WorkbookDisambiguation | None,
         **kwargs,
     ) -> tuple[BatchItemResult, str | None]:
         """Return the report item and, when nothing was written, the rendered text."""
@@ -141,6 +145,7 @@ class BatchParseService:
                 engine=engine,
                 chunk=chunk,
                 chunk_profile=chunk_profile,
+                workbook_disambiguation=workbook_disambiguation,
                 **kwargs,
             )
             chunks = parsed.chunks if chunk else None

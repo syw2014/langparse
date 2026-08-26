@@ -1,11 +1,90 @@
+import json
 from types import SimpleNamespace
 
 import pytest
+from openpyxl import Workbook
 
 from langparse.core.engine import PageResult
 from langparse.metrics import collect_parse_metrics
 from langparse.services.parse_service import ParseService
 from langparse.types import ParsedDocumentResult, ParsedPageResult, ParsedStructure
+from langparse.workbooks.modeling import (
+    ModelIdentity,
+    ProviderReply,
+    RequiredWorkbookDisambiguationError,
+    WorkbookDisambiguation,
+)
+
+
+class SelectingAdapter:
+    def __init__(self, *, kind: str) -> None:
+        self.identity = ModelIdentity(provider="scripted", model="fixture", revision="1")
+        self.kind = kind
+        self.requests = []
+
+    def complete(self, request, *, timeout_seconds: float) -> ProviderReply:
+        self.requests.append((request, timeout_seconds))
+        envelope = json.loads(request.body)
+        case = envelope["cases"][0]
+        selected = next(choice for choice in case["choices"] if choice["kind"] == self.kind)
+        return ProviderReply(
+            body=json.dumps(
+                {
+                    "schema_version": envelope["schema_version"],
+                    "request_checksum": request.request_checksum,
+                    "decisions": [
+                        {
+                            "case_id": case["case_id"],
+                            "status": "selected",
+                            "choice_id": selected["choice_id"],
+                            "confidence": 0.99,
+                            "reason_codes": ["scripted_selection"],
+                        }
+                    ],
+                },
+                separators=(",", ":"),
+            ).encode(),
+            provider_request_id="scripted-request",
+        )
+
+
+class AbstainingAdapter:
+    def __init__(self) -> None:
+        self.identity = ModelIdentity(provider="scripted", model="fixture", revision="1")
+
+    def complete(self, request, *, timeout_seconds: float) -> ProviderReply:
+        envelope = json.loads(request.body)
+        case = envelope["cases"][0]
+        return ProviderReply(
+            body=json.dumps(
+                {
+                    "schema_version": envelope["schema_version"],
+                    "request_checksum": request.request_checksum,
+                    "decisions": [
+                        {
+                            "case_id": case["case_id"],
+                            "status": "abstained",
+                            "choice_id": None,
+                            "confidence": 0.0,
+                            "reason_codes": ["scripted_abstention"],
+                        }
+                    ],
+                },
+                separators=(",", ":"),
+            ).encode(),
+            provider_request_id="scripted-request",
+        )
+
+
+def sparse_workbook(tmp_path):
+    path = tmp_path / "sparse.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Data"
+    sheet["A1"] = "左上"
+    sheet["B2"] = "右下"
+    workbook.save(path)
+    return path
 
 
 def test_parse_file_uses_process_document_fast_path(tmp_path):
@@ -135,6 +214,56 @@ def test_parse_result_chunk_flag_does_not_reach_pdf_engine(tmp_path):
 
     assert "chunk" not in seen
     assert parsed.chunks
+
+
+def test_parse_service_passes_workbook_disambiguation_only_to_excel(tmp_path):
+    source = sparse_workbook(tmp_path)
+    adapter = SelectingAdapter(kind="text")
+    configured = WorkbookDisambiguation.auto(adapter)
+
+    parsed = ParseService().parse_result(
+        source,
+        workbook_disambiguation=configured,
+    )
+
+    assert parsed.structure.sheets[0].blocks[0].kind == "text"
+    assert len(adapter.requests) == 1
+
+
+def test_workbook_disambiguation_does_not_reach_pdf_engine(tmp_path):
+    seen = {}
+    pdf = tmp_path / "sample.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+
+    class RecordingEngine:
+        def process_document(self, file_path, **kwargs):
+            seen.update(kwargs)
+            return ParsedDocumentResult(
+                source=str(file_path),
+                filename=file_path.name,
+                engine="recording",
+            )
+
+    ParseService().parse_result(
+        pdf,
+        engine=RecordingEngine(),
+        workbook_disambiguation=WorkbookDisambiguation.off(),
+    )
+
+    assert "workbook_disambiguation" not in seen
+
+
+def test_parse_service_propagates_required_workbook_disambiguation_error(tmp_path):
+    source = sparse_workbook(tmp_path)
+
+    with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+        ParseService().parse_result(
+            source,
+            workbook_disambiguation=WorkbookDisambiguation.required(AbstainingAdapter()),
+        )
+
+    assert caught.value.case_ids
+    assert caught.value.diagnostics.status == "failed"
 
 
 def test_collect_parse_metrics_counts_pages_tables_and_output_size():

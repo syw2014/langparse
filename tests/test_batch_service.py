@@ -1,10 +1,12 @@
 from pathlib import Path
 
 import pytest
+from openpyxl import Workbook
 
 from langparse.metrics import BatchRunResult
 from langparse.services.batch_service import BatchParseService
 from langparse.types import Chunk, ParsedDocumentResult, ParsedPageResult
+from langparse.workbooks.modeling import WorkbookDisambiguation
 
 
 class StubParseService:
@@ -12,11 +14,14 @@ class StubParseService:
         self.calls = []
         self.engines_seen = []
         self.profiles_seen = []
+        self.disambiguations_seen = []
         self.engine_kwargs_seen = []
+        self.engine_creation_kwargs = []
         self.created_engines = 0
 
     def create_engine(self, engine_name="simple", **kwargs):
         self.created_engines += 1
+        self.engine_creation_kwargs.append(kwargs)
         return f"engine-{self.created_engines}"
 
     def parse_result(
@@ -26,11 +31,13 @@ class StubParseService:
         engine=None,
         chunk=False,
         chunk_profile=None,
+        workbook_disambiguation=None,
         **kwargs,
     ):
         self.calls.append((Path(file_path), engine_name, kwargs))
         self.engines_seen.append(engine)
         self.profiles_seen.append((chunk, chunk_profile))
+        self.disambiguations_seen.append(workbook_disambiguation)
         self.engine_kwargs_seen.append(kwargs)
         result = ParsedDocumentResult(
             source=str(file_path),
@@ -181,6 +188,71 @@ def test_batch_service_passes_analysis_profile_to_parse_result_only(tmp_path):
     assert result.success_count == 1
     assert parse_service.profiles_seen == [(True, "analysis")]
     assert parse_service.engine_kwargs_seen == [{}]
+
+
+def test_batch_service_reuses_workbook_disambiguation_without_engine_kwargs(tmp_path):
+    sources = []
+    for name in ("first", "second"):
+        source = tmp_path / f"{name}.xlsx"
+        source.write_text("placeholder", encoding="utf-8")
+        sources.append(source)
+    parse_service = StubParseService()
+    configured = WorkbookDisambiguation.off()
+
+    result = BatchParseService(parse_service=parse_service).run(
+        sources,
+        output_dir=tmp_path / "out",
+        max_workers=1,
+        chunk=True,
+        chunk_profile="analysis",
+        workbook_disambiguation=configured,
+    )
+
+    assert result.success_count == 2
+    assert parse_service.disambiguations_seen == [configured, configured]
+    assert all(seen is configured for seen in parse_service.disambiguations_seen)
+    assert parse_service.profiles_seen == [(True, "analysis"), (True, "analysis")]
+    assert parse_service.engine_creation_kwargs == [{}]
+    assert parse_service.engine_kwargs_seen == [{}, {}]
+
+
+def test_batch_workbook_disambiguation_does_not_reach_pdf_engine(tmp_path, monkeypatch):
+    from langparse.services import parse_service as parse_service_module
+
+    workbook = Workbook()
+    workbook.active["A1"] = "value"
+    excel = tmp_path / "book.xlsx"
+    workbook.save(excel)
+    pdf = tmp_path / "sample.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+    construction_kwargs = {}
+    process_kwargs = {}
+
+    class RecordingEngine:
+        def __init__(self, **kwargs):
+            construction_kwargs.update(kwargs)
+
+        def process_document(self, file_path, **kwargs):
+            process_kwargs.update(kwargs)
+            return ParsedDocumentResult(
+                source=str(file_path),
+                filename=file_path.name,
+                engine="recording",
+            )
+
+    monkeypatch.setitem(parse_service_module.ENGINE_MAP, "recording", RecordingEngine)
+
+    result = BatchParseService().run(
+        [excel, pdf],
+        engine_name="recording",
+        output_dir=tmp_path / "out",
+        max_workers=1,
+        workbook_disambiguation=WorkbookDisambiguation.off(),
+    )
+
+    assert result.success_count == 2
+    assert "workbook_disambiguation" not in construction_kwargs
+    assert "workbook_disambiguation" not in process_kwargs
 
 
 def test_batch_service_records_failure_when_fail_fast_false(tmp_path):

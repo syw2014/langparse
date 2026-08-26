@@ -256,11 +256,9 @@ def test_source_range_validation_preserves_sheet_names_containing_an_exclamation
 
     assert chunks
     assert {chunk.metadata["sheet_name"] for chunk in chunks} == {"Budget!FY26"}
-    assert all(
-        source_range.startswith("Budget!FY26!")
-        for chunk in chunks
-        for source_range in chunk.metadata["source_ranges"]
-    )
+    assert [
+        source_range for chunk in chunks for source_range in chunk.metadata["source_ranges"]
+    ] == ["Budget!FY26!A2:B2"]
 
 
 def test_source_range_validation_requires_a_workbook_snapshot(tmp_path):

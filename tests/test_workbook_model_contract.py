@@ -17,7 +17,13 @@ from langparse.workbooks.modeling.ports import (
     InvalidRegionAmbiguityCaseError,
     WorkbookModelResponseError,
 )
-from langparse.workbooks.modeling.types import ModelIdentity, ProviderReply, RegionChoice
+from langparse.workbooks.modeling.types import (
+    ModelIdentity,
+    ProviderReply,
+    RegionAmbiguityCase,
+    RegionCellCue,
+    RegionChoice,
+)
 from langparse.workbooks.types import CandidateRegion, CellSnapshot, SheetSnapshot, SourceRef
 
 
@@ -78,28 +84,112 @@ def test_request_checksum_changes_with_facts_choices_and_model_identity():
     assert request_checksum(base) != request_checksum(base, model="fixture-2")
 
 
-def test_region_case_omits_hidden_cells_and_merged_children():
+def test_region_case_rejects_hidden_cell_without_disclosing_its_contents():
     sheet, candidate, assessment = ambiguous_region_with_sensitive_facts()
-    sheet.cells["A1"].colspan = 2
-    sheet.cells["B2"].merge_anchor = "A1"
     sheet.cells["A2"] = CellSnapshot(
         coordinate="A2",
         raw_value="hidden value",
-        display_value="hidden value",
+        display_value="hidden secret one",
         hidden=True,
     )
     candidate.cell_refs.append("A2")
+    assessment = assess_candidate_region(sheet, candidate)
 
-    case = build_region_case(sheet, candidate, assessment)
+    with pytest.raises(InvalidRegionAmbiguityCaseError) as first_error:
+        build_region_case(sheet, candidate, assessment)
+    sheet.cells["A2"].display_value = "hidden secret two"
+    with pytest.raises(InvalidRegionAmbiguityCaseError) as second_error:
+        build_region_case(sheet, candidate, assessment)
 
-    assert [cue.coordinate for cue in case.cells] == ["A1"]
-    assert case.cells[0].colspan == 2
-    assert (
-        "hidden value"
-        not in build_model_request(
-            case, ModelIdentity(provider="recording", model="fixture")
-        ).body.decode()
+    assert str(first_error.value) == str(second_error.value)
+    assert "hidden secret" not in str(first_error.value)
+
+
+@pytest.mark.parametrize("hidden_fact", ["row", "column"])
+def test_region_case_rejects_hidden_row_or_column(hidden_fact: str):
+    sheet, candidate, assessment = ambiguous_region_with_sensitive_facts()
+    if hidden_fact == "row":
+        sheet.hidden_rows.append(2)
+    else:
+        sheet.hidden_columns.append("B")
+    assessment = assess_candidate_region(sheet, candidate)
+
+    with pytest.raises(InvalidRegionAmbiguityCaseError, match="hidden candidate content"):
+        build_region_case(sheet, candidate, assessment)
+
+
+def test_region_case_rejects_hidden_merged_child_in_candidate_envelope():
+    sheet, candidate, _ = ambiguous_region_with_sensitive_facts()
+    sheet.cells["B1"] = CellSnapshot(
+        coordinate="B1",
+        merge_anchor="A1",
+        hidden=True,
     )
+    assessment = assess_candidate_region(sheet, candidate)
+
+    with pytest.raises(InvalidRegionAmbiguityCaseError, match="hidden candidate content"):
+        build_region_case(sheet, candidate, assessment)
+
+
+def test_region_case_rejects_snapshot_mapping_coordinate_mismatch_before_projection():
+    sheet, candidate, assessment = ambiguous_region_with_sensitive_facts()
+    sheet.cells["A1"] = CellSnapshot(
+        coordinate="C9",
+        raw_value="outside secret",
+        display_value="outside secret",
+    )
+
+    with pytest.raises(InvalidRegionAmbiguityCaseError, match="mapping coordinate mismatch"):
+        build_region_case(sheet, candidate, assessment)
+
+
+@pytest.mark.parametrize(
+    ("cells", "message"),
+    [
+        (
+            (
+                RegionCellCue("C9", "outside", "s", "", None, 1, 1),
+                RegionCellCue("A1", "inside", "s", "", None, 1, 1),
+            ),
+            "outside source range",
+        ),
+        (
+            (
+                RegionCellCue("A1", "first", "s", "", None, 1, 1),
+                RegionCellCue("A1", "second", "s", "", None, 1, 1),
+            ),
+            "duplicate cell coordinate",
+        ),
+        (
+            (
+                RegionCellCue("B2", "second", "s", "", None, 1, 1),
+                RegionCellCue("A1", "first", "s", "", None, 1, 1),
+            ),
+            "row/column order",
+        ),
+        (
+            (RegionCellCue("A1", "child", "s", "", "A1", 1, 1),),
+            "merge children",
+        ),
+    ],
+)
+def test_direct_case_rejects_unsafe_cell_projection(cells, message: str):
+    base = request_fixture()
+    unsafe = RegionAmbiguityCase(
+        case_id=base.case_id,
+        sheet_name=base.sheet_name,
+        sheet_visibility=base.sheet_visibility,
+        source_range=base.source_range,
+        fact_digest=base.fact_digest,
+        cells=cells,
+        feature_summary=base.feature_summary,
+        choices=base.choices,
+        fallback_choice_id=base.fallback_choice_id,
+        ambiguity_codes=base.ambiguity_codes,
+    )
+
+    with pytest.raises(InvalidRegionAmbiguityCaseError, match=message):
+        build_model_request(unsafe, ModelIdentity(provider="recording", model="fixture"))
 
 
 def test_strict_reply_accepts_only_registered_choice_membership():

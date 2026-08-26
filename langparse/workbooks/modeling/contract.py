@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import fields
 from typing import Any
 
-from openpyxl.utils import get_column_letter, range_boundaries
+from openpyxl.utils import column_index_from_string, get_column_letter, range_boundaries
 from openpyxl.utils.cell import coordinate_to_tuple
 
 from langparse.workbooks.classification import RegionAssessment
@@ -44,7 +44,8 @@ def build_region_case(
     if sheet.visibility != "visible":
         raise InvalidRegionAmbiguityCaseError("hidden sheet content cannot be sent")
 
-    _validate_candidate_coordinates(candidate)
+    _validate_candidate_coordinates(sheet, candidate)
+    _reject_hidden_candidate_content(sheet, candidate)
     _validate_choices(assessment.choices, assessment.deterministic.kind)
 
     cells = tuple(
@@ -198,7 +199,7 @@ def _digest_bytes(body: bytes) -> str:
     return f"sha256:{hashlib.sha256(body).hexdigest()}"
 
 
-def _validate_candidate_coordinates(candidate: CandidateRegion) -> None:
+def _validate_candidate_coordinates(sheet: SheetSnapshot, candidate: CandidateRegion) -> None:
     min_column, min_row, max_column, max_row = range_boundaries(candidate.source_ref.range)
     for coordinate in candidate.cell_refs:
         try:
@@ -209,6 +210,29 @@ def _validate_candidate_coordinates(candidate: CandidateRegion) -> None:
             ) from error
         if not min_row <= row <= max_row or not min_column <= column <= max_column:
             raise InvalidRegionAmbiguityCaseError("candidate contains cell outside source range")
+        cell = sheet.cells.get(coordinate)
+        if cell is not None and cell.coordinate != coordinate:
+            raise InvalidRegionAmbiguityCaseError("candidate cell mapping coordinate mismatch")
+
+
+def _reject_hidden_candidate_content(sheet: SheetSnapshot, candidate: CandidateRegion) -> None:
+    min_column, min_row, max_column, max_row = range_boundaries(candidate.source_ref.range)
+    if any(min_row <= row <= max_row for row in sheet.hidden_rows):
+        raise InvalidRegionAmbiguityCaseError("hidden candidate content cannot be sent")
+    if any(
+        min_column <= column_index_from_string(column) <= max_column
+        for column in sheet.hidden_columns
+    ):
+        raise InvalidRegionAmbiguityCaseError("hidden candidate content cannot be sent")
+    for coordinate, cell in sheet.cells.items():
+        try:
+            row, column = coordinate_to_tuple(coordinate)
+        except ValueError as error:
+            raise InvalidRegionAmbiguityCaseError(
+                "invalid candidate cell mapping coordinate"
+            ) from error
+        if min_row <= row <= max_row and min_column <= column <= max_column and cell.hidden:
+            raise InvalidRegionAmbiguityCaseError("hidden candidate content cannot be sent")
 
 
 def _validate_choices(choices: tuple[RegionChoice, ...], fallback_kind: str) -> None:
@@ -292,6 +316,7 @@ def _choice_payload(choice: RegionChoice) -> dict[str, object]:
 def _validate_case(case: RegionAmbiguityCase) -> None:
     if case.sheet_visibility != "visible":
         raise InvalidRegionAmbiguityCaseError("hidden sheet content cannot be sent")
+    _validate_case_cells(case)
     _validate_choices(case.choices, _fallback_kind(case))
     if case.fallback_choice_id not in {choice.choice_id for choice in case.choices}:
         raise InvalidRegionAmbiguityCaseError("fallback choice is not registered")
@@ -302,6 +327,25 @@ def _fallback_kind(case: RegionAmbiguityCase) -> str:
         if choice.choice_id == case.fallback_choice_id:
             return choice.kind
     raise InvalidRegionAmbiguityCaseError("fallback choice is not registered")
+
+
+def _validate_case_cells(case: RegionAmbiguityCase) -> None:
+    min_column, min_row, max_column, max_row = range_boundaries(case.source_range)
+    coordinates: list[str] = []
+    for cell in case.cells:
+        try:
+            row, column = coordinate_to_tuple(cell.coordinate)
+        except ValueError as error:
+            raise InvalidRegionAmbiguityCaseError("invalid case cell coordinate") from error
+        if not min_row <= row <= max_row or not min_column <= column <= max_column:
+            raise InvalidRegionAmbiguityCaseError("case cell outside source range")
+        if cell.merge_anchor is not None:
+            raise InvalidRegionAmbiguityCaseError("case cells must not contain merge children")
+        coordinates.append(cell.coordinate)
+    if len(set(coordinates)) != len(coordinates):
+        raise InvalidRegionAmbiguityCaseError("duplicate cell coordinate")
+    if coordinates != sorted(coordinates, key=coordinate_to_tuple):
+        raise InvalidRegionAmbiguityCaseError("case cells must use row/column order")
 
 
 def _exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:

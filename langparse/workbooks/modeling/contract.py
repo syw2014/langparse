@@ -350,9 +350,7 @@ def _validate_case_feature_summary(case: RegionAmbiguityCase) -> None:
         if not isinstance(entry, tuple) or len(entry) != 2:
             raise InvalidRegionAmbiguityCaseError("invalid feature summary")
         key, value = entry
-        if not _is_required_string(key, max_length=128) or not (
-            value is None or type(value) in (str, int, float, bool)
-        ):
+        if not _is_required_string(key, max_length=128) or not _is_valid_feature_scalar(value):
             raise InvalidRegionAmbiguityCaseError("invalid feature summary")
         keys.append(key)
     if len(set(keys)) != len(keys):
@@ -403,10 +401,7 @@ def _validate_case_choices(case: RegionAmbiguityCase) -> None:
             not _is_identifier(choice.choice_id)
             or not isinstance(choice.kind, str)
             or choice.kind not in {"logical_table", "form", "matrix", "text", "unclassified"}
-            or not isinstance(choice.local_score, (int, float))
-            or isinstance(choice.local_score, bool)
-            or not math.isfinite(choice.local_score)
-            or not 0 <= choice.local_score <= 1
+            or not _is_finite_unit_float(choice.local_score)
         ):
             raise InvalidRegionAmbiguityCaseError("invalid case choice")
         _validate_local_codes(choice.reason_codes)
@@ -477,6 +472,22 @@ def _is_required_string(value: object, *, max_length: int) -> bool:
     return isinstance(value, str) and 0 < len(value) <= max_length
 
 
+def _is_valid_feature_scalar(value: object) -> bool:
+    if value is None or type(value) in (str, int, bool):
+        return True
+    return type(value) is float and math.isfinite(value)
+
+
+def _is_finite_unit_float(value: object) -> bool:
+    return type(value) is float and math.isfinite(value) and 0 <= value <= 1
+
+
+def _is_valid_response_confidence(value: object) -> bool:
+    if type(value) is int:
+        return 0 <= value <= 1
+    return type(value) is float and math.isfinite(value) and 0 <= value <= 1
+
+
 def _exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:
     unknown = set(value) - expected
     if unknown:
@@ -516,12 +527,7 @@ def _decode_decision(
     if status not in {"selected", "abstained"}:
         raise WorkbookModelResponseError("unknown decision status")
     confidence = value["confidence"]
-    if (
-        not isinstance(confidence, (int, float))
-        or isinstance(confidence, bool)
-        or not math.isfinite(confidence)
-        or not 0 <= confidence <= 1
-    ):
+    if not _is_valid_response_confidence(confidence):
         raise WorkbookModelResponseError("confidence must be finite and between 0 and 1")
     reason_codes = value["reason_codes"]
     if not isinstance(reason_codes, list) or not all(

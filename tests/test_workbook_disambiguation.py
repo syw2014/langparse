@@ -571,6 +571,40 @@ def test_malformed_case_id_raises_before_identity_cache_or_clock_access():
 
 
 @pytest.mark.parametrize(
+    "score",
+    [
+        pytest.param(10**1000, id="huge_int"),
+        pytest.param(True, id="bool"),
+        pytest.param(1, id="int"),
+    ],
+)
+def test_non_exact_float_choice_score_is_rejected_before_external_work(score):
+    case = ambiguity_case_fixture()
+    invalid = replace(
+        case,
+        choices=(replace(case.choices[0], local_score=score), case.choices[1]),
+    )
+
+    with pytest.raises(InvalidRegionAmbiguityCaseError, match="invalid case choice"):
+        WorkbookRegionDisambiguator(
+            cache=ExplodingCache(),
+            clock=lambda: 1 / 0,
+        ).resolve([invalid], WorkbookDisambiguation.auto(ExplodingAdapter()))
+
+
+@pytest.mark.parametrize("feature_value", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_feature_float_is_rejected_before_external_work(feature_value: float):
+    case = ambiguity_case_fixture()
+    invalid = replace(case, feature_summary=(("density", feature_value),))
+
+    with pytest.raises(InvalidRegionAmbiguityCaseError, match="invalid feature summary"):
+        WorkbookRegionDisambiguator(
+            cache=ExplodingCache(),
+            clock=lambda: 1 / 0,
+        ).resolve([invalid], WorkbookDisambiguation.auto(ExplodingAdapter()))
+
+
+@pytest.mark.parametrize(
     "mutation",
     [
         "cells_container",

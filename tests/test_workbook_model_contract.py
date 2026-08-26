@@ -278,7 +278,17 @@ def test_strict_reply_rejects_invalid_envelopes(mutation: str, message: str):
         decode_model_reply(reply, request, max_response_bytes=128_000)
 
 
-@pytest.mark.parametrize("confidence", [True, float("nan"), float("inf"), -0.01, 1.01])
+@pytest.mark.parametrize(
+    "confidence",
+    [
+        pytest.param(True, id="bool"),
+        pytest.param(10**1000, id="huge_int"),
+        pytest.param(float("nan"), id="nan"),
+        pytest.param(float("inf"), id="inf"),
+        pytest.param(-0.01, id="below_zero"),
+        pytest.param(1.01, id="above_one"),
+    ],
+)
 def test_strict_reply_rejects_non_finite_or_out_of_range_confidence(confidence: float):
     request, choice = request_and_choice_fixture()
     reply = reply_for(

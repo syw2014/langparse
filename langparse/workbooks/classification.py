@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from openpyxl.utils import get_column_letter, range_boundaries
 
@@ -133,11 +134,17 @@ def assess_candidate_region(
     """Assess a region and register only locally compatible alternative kinds."""
 
     features = extract_region_features(sheet, candidate)
+    feature_digest = _structural_feature_digest(features)
     values, _ = _region_grid(sheet, candidate)
     deterministic = _classify_region(values, features)
     choices = [
         RegionChoice(
-            choice_id=_choice_id(candidate, deterministic.kind, deterministic.reason_codes[0]),
+            choice_id=_choice_id(
+                candidate,
+                feature_digest,
+                deterministic.kind,
+                deterministic.reason_codes[0],
+            ),
             kind=deterministic.kind,
             local_score=deterministic.confidence,
             reason_codes=tuple(deterministic.reason_codes),
@@ -157,7 +164,7 @@ def assess_candidate_region(
             continue
         choices.append(
             RegionChoice(
-                choice_id=_choice_id(candidate, kind, reason_code),
+                choice_id=_choice_id(candidate, feature_digest, kind, reason_code),
                 kind=kind,
                 local_score=score,
                 reason_codes=(reason_code,),
@@ -219,11 +226,27 @@ def _weak_choice_kinds(features: RegionFeatures) -> list[tuple[str, float, str]]
     return choices
 
 
-def _choice_id(candidate: CandidateRegion, kind: str, reason_code: str) -> str:
+def _structural_feature_digest(features: RegionFeatures) -> str:
+    payload = json.dumps(
+        asdict(features),
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return stable_id("region_features", payload)
+
+
+def _choice_id(
+    candidate: CandidateRegion,
+    feature_digest: str,
+    kind: str,
+    reason_code: str,
+) -> str:
     return stable_id(
         "region_choice",
         REGION_RULE_VERSION,
         candidate.source_ref.key,
+        feature_digest,
         kind,
         reason_code,
     )

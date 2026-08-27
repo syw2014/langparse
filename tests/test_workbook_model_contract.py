@@ -6,6 +6,7 @@ from dataclasses import replace
 import pytest
 
 from langparse.workbooks.classification import assess_candidate_region
+from langparse.workbooks.modeling import contract
 from langparse.workbooks.modeling.cache import MemoryDecisionCache
 from langparse.workbooks.modeling.contract import (
     build_model_request,
@@ -18,6 +19,7 @@ from langparse.workbooks.modeling.ports import (
     WorkbookModelResponseError,
 )
 from langparse.workbooks.modeling.types import (
+    REGION_PRIVACY_VERSION,
     ModelIdentity,
     ProviderReply,
     RegionAmbiguityCase,
@@ -39,6 +41,8 @@ def test_region_request_contains_only_candidate_local_safe_cues():
     payload = json.loads(request.body)
     assert payload["schema_version"] == 1
     assert payload["prompt_version"] == "region-choice-v1"
+    assert payload["privacy_version"] == REGION_PRIVACY_VERSION
+    assert request.privacy_version == REGION_PRIVACY_VERSION
     assert payload["request_checksum"] == request.request_checksum
     assert payload["cases"][0]["source_range"] == "A1:B2"
     assert [cell["coordinate"] for cell in payload["cases"][0]["cells"]] == ["A1", "B2"]
@@ -81,6 +85,25 @@ def test_request_checksum_changes_with_facts_choices_and_model_identity():
     assert request_checksum(base) != request_checksum(replace_cell_text(base, "changed"))
     assert request_checksum(base) != request_checksum(replace_choice_kind(base, "form"))
     assert request_checksum(base) != request_checksum(base, model="fixture-2")
+
+
+def test_privacy_version_partitions_fact_request_and_cache_material(monkeypatch):
+    sheet, candidate, assessment = ambiguous_region_with_sensitive_facts()
+    original_case = build_region_case(sheet, candidate, assessment)
+    identity = ModelIdentity(provider="recording", model="fixture", revision="1")
+    original_request = build_model_request(original_case, identity)
+    cache = MemoryDecisionCache()
+    cache.put(original_request.request_checksum, b"validated-response")
+
+    monkeypatch.setattr(contract, "REGION_PRIVACY_VERSION", "region-privacy-v2")
+    revised_case = build_region_case(sheet, candidate, assessment)
+    revised_request = build_model_request(revised_case, identity)
+
+    assert revised_case.fact_digest != original_case.fact_digest
+    assert revised_request.privacy_version == "region-privacy-v2"
+    assert json.loads(revised_request.body)["privacy_version"] == "region-privacy-v2"
+    assert revised_request.request_checksum != original_request.request_checksum
+    assert cache.get(revised_request.request_checksum) is None
 
 
 def test_region_case_rejects_hidden_cell_without_disclosing_its_contents():

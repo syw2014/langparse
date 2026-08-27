@@ -82,3 +82,19 @@ def test_choice_ids_are_stable_for_the_same_source_facts():
     assert [choice.choice_id for choice in first.choices] == [
         choice.choice_id for choice in second.choices
     ]
+
+
+def test_choice_ids_change_when_local_structural_features_change():
+    first_sheet, first_candidate = region({"A1": "left", "B2": "right"}, "A1:B2")
+    second_sheet, second_candidate = region({"A1": "left", "A2": "right"}, "A1:B2")
+
+    first = assess_candidate_region(first_sheet, first_candidate)
+    second = assess_candidate_region(second_sheet, second_candidate)
+
+    assert [(choice.kind, choice.local_score, choice.reason_codes) for choice in first.choices] == [
+        (choice.kind, choice.local_score, choice.reason_codes) for choice in second.choices
+    ]
+    assert first.deterministic.features != second.deterministic.features
+    assert [choice.choice_id for choice in first.choices] != [
+        choice.choice_id for choice in second.choices
+    ]

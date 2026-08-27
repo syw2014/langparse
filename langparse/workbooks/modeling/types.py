@@ -115,6 +115,7 @@ class RegionAmbiguityCase:
 class WorkbookModelRequest:
     schema_version: int
     prompt_version: str
+    privacy_version: str
     request_checksum: str
     body: bytes
     case_ids: tuple[str, ...]

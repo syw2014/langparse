@@ -15,6 +15,7 @@ from langparse.workbooks.types import CandidateRegion, CellSnapshot, SheetSnapsh
 
 from .ports import InvalidRegionAmbiguityCaseError, WorkbookModelResponseError
 from .types import (
+    REGION_PRIVACY_VERSION,
     REGION_PROMPT_VERSION,
     REGION_RULE_VERSION,
     REGION_SCHEMA_VERSION,
@@ -69,6 +70,7 @@ def build_region_case(
             "cells": [_cue_payload(cell) for cell in cells],
             "feature_summary": dict(feature_summary),
             "choices": [_choice_payload(choice) for choice in choices],
+            "region_privacy_version": REGION_PRIVACY_VERSION,
             "region_rule_version": REGION_RULE_VERSION,
             "region_validator_version": REGION_VALIDATOR_VERSION,
         }
@@ -107,6 +109,7 @@ def build_model_request(case: RegionAmbiguityCase, identity: ModelIdentity) -> W
     envelope: dict[str, object] = {
         "schema_version": REGION_SCHEMA_VERSION,
         "prompt_version": REGION_PROMPT_VERSION,
+        "privacy_version": REGION_PRIVACY_VERSION,
         "model_identity": {
             "provider": identity.provider,
             "model": identity.model,
@@ -119,6 +122,7 @@ def build_model_request(case: RegionAmbiguityCase, identity: ModelIdentity) -> W
     return WorkbookModelRequest(
         schema_version=REGION_SCHEMA_VERSION,
         prompt_version=REGION_PROMPT_VERSION,
+        privacy_version=REGION_PRIVACY_VERSION,
         request_checksum=request_checksum,
         body=body,
         case_ids=(case.case_id,),

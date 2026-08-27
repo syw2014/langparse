@@ -1063,8 +1063,8 @@ def test_model_identity_change_misses_the_cache():
     assert len(second_adapter.requests) == 1
 
 
-@pytest.mark.parametrize("version", ["schema", "prompt"])
-def test_schema_or_prompt_version_change_misses_the_cache(monkeypatch, version: str):
+@pytest.mark.parametrize("version", ["schema", "prompt", "privacy"])
+def test_request_contract_version_change_misses_the_cache(monkeypatch, version: str):
     case = ambiguity_case_fixture()
     first_adapter = ScriptedAdapter.selected(case)
     disambiguator = WorkbookRegionDisambiguator()
@@ -1072,8 +1072,10 @@ def test_schema_or_prompt_version_change_misses_the_cache(monkeypatch, version: 
 
     if version == "schema":
         monkeypatch.setattr(contract, "REGION_SCHEMA_VERSION", 2)
-    else:
+    elif version == "prompt":
         monkeypatch.setattr(contract, "REGION_PROMPT_VERSION", "region-choice-v2")
+    else:
+        monkeypatch.setattr(contract, "REGION_PRIVACY_VERSION", "region-privacy-v2")
     second_adapter = ScriptedAdapter.selected(case)
 
     second = disambiguator.resolve([case], WorkbookDisambiguation.auto(second_adapter))

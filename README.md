@@ -10,7 +10,7 @@
 
 ## 🚀 Project Status
 
-LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (512 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
+LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (575 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
 
 Still pre-1.0. Looking for early contributors and design partners, particularly to help wire up additional vertical engines (PaddleOCR-VL, vision-LLM backends) and pressure-test the engine-neutral routing design.
 
@@ -294,6 +294,12 @@ from the retained workbook snapshot and must still pass local materialization,
 coverage, reconstruction, row-conservation, continuation, and source-reference
 validation.
 
+Model application is workbook-atomic. If any attempted selection cannot be
+materialized, or the tentative workbook fails a continuation or structural
+validator, every attempted selection is restored to its retained deterministic
+block and all validators run again. `required` reports every reverted case as
+unresolved.
+
 `auto` keeps the deterministic local fallback and records sanitized diagnostics
 when the provider, cache, limits, response contract, materialization, or final
 validation fails, or when the provider abstains. `required` raises
@@ -301,21 +307,36 @@ validation fails, or when the provider abstains. `required` raises
 typed error passes through `ExcelParser` and `ParseService`; a workbook with no
 eligible ambiguity succeeds with zero calls in either mode.
 
+An enabled `WorkbookDisambiguation` value owns a private, thread-safe,
+process-local runtime/cache. Reusing that same value across `ExcelParser`,
+`ParseService`, or batch calls allows a validated response to become a
+re-decoded cache hit; `off` constructs no runtime or cache. `max_cases` limits
+cases considered, while `max_calls` is a workbook-wide hard budget of actual
+Adapter invocations, including retries; cache hits consume no calls. Policy
+timeouts must be finite positive non-boolean real values, and count/byte limits
+must be exact positive non-boolean integers.
+
 The candidate request is deliberately narrow. It can include the target Sheet
 name and source range, visible cell coordinates and display text, value type,
 style fingerprint, merge geometry, local scalar features, and the registered
 choices for that region. It omits hidden Sheets, formulas and cached formula
 values, comments, hyperlinks, images, other regions, credentials, and provider
-secrets. Cell text is treated as untrusted Prompt Injection data: the Adapter
+secrets. If any cell in the complete candidate envelope contains a formula—even
+an unlisted cell or merged child—the whole case is locally unavailable and no
+formula or cached result is projected. Cell text is treated as untrusted Prompt Injection data: the Adapter
 port exposes no tool channel, and exact response fields, request checksum,
 case/choice membership, size limits, and local validation prevent cell
-instructions from expanding the operation. Diagnostics do not retain prompts,
+instructions from expanding the operation. Duplicate JSON member names are
+rejected at every response-object depth. Diagnostics do not retain prompts,
 cell text, raw replies, or provider exception messages. The process-local,
 non-persistent cache has a narrower but different contract: it retains only
 response envelope bytes that have already passed strict response decoding, and
 every hit is decoded and validated again. Nothing is written to disk, but
 provider-supplied strings inside that envelope may remain in process memory
-until the disambiguator and its cache are released.
+until the owning disambiguation value and its private runtime are released.
+Each model-call audit records local schema, prompt, rule, validator, and privacy
+versions plus the deterministic fallback rule confidence; these values never
+come from the provider.
 
 Phase 4A ships **no built-in production provider Adapter** and has no provider
 CLI or environment configuration. Its tests and read-only workbook acceptance

@@ -17,8 +17,9 @@ version sections.
   cache.
 - Candidate-local region-kind assessment and model-call diagnostics with stable
   case/choice IDs, request/response checksums, cache/attempt/size/outcome fields,
-  local validation codes, and JSON-serializable deterministic output apart from
-  measured `elapsed_ms`.
+  complete local schema/prompt/rule/validator/privacy provenance, fallback rule
+  confidence, local validation codes, and JSON-serializable deterministic output
+  apart from measured `elapsed_ms`.
 - Explicit injection through both `ExcelParser(disambiguation=...)` and
   `ParseService`/batch `workbook_disambiguation=...`, including typed required
   failures that pass through service boundaries.
@@ -33,24 +34,34 @@ version sections.
   and coverage, reconstruction, row conservation, continuation, and source-ref
   validation remain mandatory. `auto` falls back locally; `required` raises for
   unresolved eligible ambiguity.
+- Formula-bearing candidate envelopes are locally unavailable, including
+  formula cells or merged children omitted from candidate refs. Model selections
+  apply atomically across a workbook: any attempted materialization failure or
+  tentative validation failure rolls every attempted selection back and reruns
+  the validators.
+- Enabled configurations reuse a private thread-safe process-local cache across
+  parser/service/batch calls; `off` creates none. Policy types are strict,
+  `max_calls` bounds actual Adapter calls including retries, cache hits use zero
+  calls, Adapter/reply boundaries are total and sanitized, and recursive
+  duplicate JSON members are rejected.
+- The privacy version partitions facts and request/cache keys; canonical
+  structural-feature digests partition choice IDs. Only the documented policy,
+  typed data, error, and Adapter-facing API remains exported; orchestration
+  helpers stay internal.
 
 ### Known limitations
 - Phase 4A contains no built-in production provider Adapter, provider CLI/env
   setup, image/VLM path, or second domain contract. It establishes an auditable
   safety and compatibility seam, not evidence that a real model improves
   parsing accuracy; production-provider effectiveness remains Phase 4B.
-- Strict JSON validation still uses Python's last-value-wins handling for
-  duplicate object member names, and direct forwarding regressions for a few
-  convenience service entry points remain deferred Minors. Neither limit is
-  presented as completed Phase 4A functionality.
 
 ### Verification
-- Focused Phase 4A/service gates pass 99 tests; the full project suite passes
-  512 tests. Project Ruff lint reports `All checks passed!`, format reports
+- Focused Phase 4A/service gates pass 232 tests; the full project suite passes
+  575 tests. Project Ruff lint reports `All checks passed!`, format reports
   `111 files already formatted`, and the diff whitespace check is clean.
 - The read-only private workbook retains 39 retrieval chunks, 20 analysis
   chunks, 228 logical data/total rows, zero accepted continuations, and quality
-  `(1.0, true, 1.0)`. `auto` makes zero Adapter requests and returns the same
+  `(1.0, True, 1.0)`. `auto` makes zero Adapter requests and returns the same
   structure and Markdown as `off`; the complete source stat is unchanged.
 
 ## [2026-08-25]

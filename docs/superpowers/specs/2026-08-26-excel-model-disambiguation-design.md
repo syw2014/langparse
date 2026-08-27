@@ -252,7 +252,8 @@ def assess_candidate_region(
 - 非 `unclassified` choice 只有通过该 kind 的本地形状兼容检查后才能登记；
 - case 至少有两个不同 kind 的合法 choices 才能标记为 ambiguous；
 - 高置信 deterministic winner 不触发模型；
-- choice ID 由规则版本、candidate source ref、kind 和本地结构摘要稳定生成；
+- choice ID 由规则版本、candidate source ref、kind 和完整 `RegionFeatures` 的 canonical
+  结构摘要稳定生成；相同结构保持稳定，任一结构特征变化都会使 ID 失效；
 - 模型不能组合两个 choice 的字段，也不能返回未登记 kind。
 
 Phase 4A 只裁决 region kind。header hierarchy、row roles 和 region boundary 继续完全由
@@ -288,7 +289,9 @@ class RegionAmbiguityCase:
 ```
 
 Case 只能包含 candidate envelope 内的 cells，不得引用整本工作簿或相邻无关 Sheet。
-`fact_digest` 覆盖所有发送和本地 materialization 依赖的事实。
+`fact_digest` 覆盖所有发送和本地 materialization 依赖的事实，并包含独立的
+`REGION_PRIVACY_VERSION`；privacy 规则变化必须同时使 fact、request checksum/cache key
+失效。
 
 ### 8.2 Provider port
 
@@ -320,6 +323,7 @@ Phase 4B 至少提供一个可真实运行的 production Adapter。
 {
   "schema_version": 1,
   "prompt_version": "region-choice-v1",
+  "privacy_version": "region-privacy-v1",
   "request_checksum": "sha256:...",
   "cases": [
     {
@@ -341,8 +345,10 @@ Phase 4B 至少提供一个可真实运行的 production Adapter。
 ```
 
 请求不包含 raw formula、cached formula value、comment、hyperlink、credential、其他候选
-区域或完整 workbook。隐藏 Sheet 默认不发送；只有 Phase 4B 的显式隐私策略允许后才可
-处理。Phase 4A 不发送图片。
+区域或完整 workbook。完整 candidate envelope 内只要存在公式单元格——即使该单元格或
+merged child 未列入 `candidate.cell_refs`——整个 case 就在本地标记 unavailable，`auto`
+零调用 fallback，`required` 使用 content-free ID/audit 报 unresolved。隐藏 Sheet 默认不发送；
+只有 Phase 4B 的显式隐私策略允许后才可处理。Phase 4A 不发送图片。
 
 ### 8.4 响应协议
 
@@ -364,7 +370,8 @@ Phase 4B 至少提供一个可真实运行的 production Adapter。
 
 `status` 只能是 `selected | abstained`。响应中不存在 range、coordinate、value、formula、
 header text、row value 或自由结构补丁字段。JSON Schema 使用
-`additionalProperties: false`；未知字段直接拒绝。
+`additionalProperties: false`；未知字段直接拒绝。JSON object 的重复 member name 在顶层和
+任意嵌套 decision 中都通过 `object_pairs_hook` 拒绝，不采用 last-value-wins。
 
 ## 9. 模式语义
 
@@ -386,16 +393,21 @@ failed；歧义仍留在 `ambiguous_regions`，调用结果记录在 `model_call
 
 1. 验证 `RegionAmbiguityCase`、choice 唯一性、fallback membership 和 fact digest；
 2. `off` 或无歧义立即返回本地结果；
-3. 应用大小、隐私、case/call 数和 workbook 总 deadline；
+3. 应用大小、隐私、case/call 数和 workbook 总 deadline；`max_cases` 限制被考虑的 case，
+   `max_calls` 是整个 workbook 内实际 `Adapter.complete()` 调用（包括 retries）的硬预算，
+   cache hit 不消耗调用；
 4. 构造包含 Schema、prompt、规则、事实、choices、隐私和模型 identity 的 cache key；
 5. cache hit 仍重新执行 Schema 和 membership 校验；
 6. cache miss 通过 Adapter 调用，限制 response bytes、timeout 和 bounded retry；
-7. 严格解析 JSON，验证 checksum、case、choice、重复 decision 和缺失 decision；
+7. 严格解析 JSON，递归拒绝重复 member，并验证 checksum、case、choice、重复 decision 和
+   缺失 decision；
 8. 将模型 confidence 仅作为审计信息；
 9. 对 selected choice 再执行 kind 本地兼容检查；
 10. materialization 只把 choice.kind 交给现有本地 interpreter，所有内容继续从 snapshot 读取；
-11. interpreter 异常或最终 coverage/reconstruction/source-ref 失败时拒绝该 choice；
-12. `auto` 回退，`required` 抛 typed error；
+11. interpreter 异常或 tentative coverage/reconstruction/row-conservation/continuation/
+    source-ref 失败时，回滚本工作簿所有尝试过的 selection 到预先保留的确定性 Block，并
+    重新运行 continuation 与全部 validators；不能保留早先成功选择造成部分提交；
+12. `auto` 对全部 reverted case 回退，`required` 把它们全部作为 unresolved 抛 typed error；
 13. 按原 candidate 顺序返回 resolution 与 diagnostics，不能因并发改变输出顺序。
 
 模型与规则一致不能自动提高业务置信度。分别保留：
@@ -446,6 +458,8 @@ raw-grid `partial`。typed error 携带经过净化的 diagnostics，方便 requ
 
 - 只发送 ambiguity case envelope；
 - 默认排除隐藏 Sheet、公式、cached formula value、comments、hyperlinks 和 images；
+- formula boundary 检查完整 candidate envelope，而不只检查 `candidate.cell_refs`；错误、审计
+  和 content-free ID 不包含公式或 cached result；
 - diagnostics 不保存 prompt、cell text、response body、credential 或原始异常正文；
 - 进程内非持久化 cache 只保留已通过严格 response decode 的 response envelope bytes，
   命中后仍重新 decode 并验证 checksum/membership；cache 不写磁盘，但 envelope 内由
@@ -470,12 +484,15 @@ class WorkbookModelPolicy:
     max_response_bytes: int = 128_000
 ```
 
-超过限制的 case 在 `auto` 中 fallback，在 `required` 中作为 unresolved。Phase 4A 不做
-无界并发；即使未来并发，输出和 diagnostics 仍按输入顺序稳定。
+timeout 字段只接受有限正数且 bool 无效；count/byte 字段只接受精确正整数且 bool、fraction、
+NaN/Inf 无效。超过限制的 case 在 `auto` 中 fallback，在 `required` 中作为 unresolved。
+Phase 4A 不做无界并发；即使未来并发，输出和 diagnostics 仍按输入顺序稳定。
 
 ## 13. Cache
 
-Phase 4A 使用 Module 内部的内存 cache，不公开 cache port，也不写磁盘。cache key 包含：
+Phase 4A 的 enabled `WorkbookDisambiguation` 持有一个不参与 repr/equality 的私有 runtime 和
+线程安全内存 cache；复用同一个配置对象即可跨 `ExcelParser`、ParseService 和 Batch item
+命中。`off` 不构造或访问 runtime/cache。cache port 不公开，也不写磁盘。cache key 包含：
 
 ```text
 事实 digest
@@ -494,19 +511,23 @@ Phase 4A 使用 Module 内部的内存 cache，不公开 cache port，也不写�
 
 ## 14. Diagnostics
 
-沿用已有 `ParseDiagnostics.model_calls`，不在 dataclass 中间插入字段，避免破坏位置参数
-兼容。每个远程 batch event 至少包含：
+沿用已有 `ParseDiagnostics.model_calls`。内部 `ModelCallAudit` 全部以 keyword 构造，并按
+dataclass 字段顺序确定性序列化；远程、fallback 和 unavailable case 都包含同一完整字段集：
 
 ```json
 {
   "mode": "auto",
+  "case_id": "region_case_...",
+  "source_range": "A1:C8",
+  "schema_version": 1,
+  "prompt_version": "region-choice-v1",
+  "rule_version": "region-rules-v1",
+  "validator_version": "region-validator-v1",
+  "privacy_version": "region-privacy-v1",
+  "rule_confidence": 0.5,
   "provider": "provider-id",
   "model": "model-id",
   "model_revision": "revision",
-  "schema_version": 1,
-  "prompt_version": "region-choice-v1",
-  "case_ids": [],
-  "source_ranges": [],
   "request_checksum": "sha256:...",
   "response_checksum": "sha256:...",
   "cache_status": "miss",
@@ -515,17 +536,21 @@ Phase 4A 使用 Module 内部的内存 cache，不公开 cache port，也不写�
   "request_bytes": 2048,
   "response_bytes": 256,
   "outcome": "accepted",
-  "selected_choice_ids": [],
+  "selected_choice_id": "region_choice_...",
+  "reported_confidence": 0.91,
   "validation_codes": [],
-  "reason_codes": []
+  "reason_codes": [],
+  "error_type": null
 }
 ```
 
 允许的 `outcome` 至少包括：
 
 ```text
-accepted | abstained | rejected | provider_error |
-schema_error | limit_exceeded | cache_hit | unresolved
+accepted | selected | abstained | adapter_error | invalid_response |
+request_error | request_too_large | cache_error | limit_exceeded |
+deadline_exceeded | cell_limit_exceeded | hidden_sheet | hidden_content |
+formula_content | case_unavailable | materialization_error | validation_error
 ```
 
 不得记录 API key、endpoint query secrets、prompt、cell values、公式、response body 或异常
@@ -540,18 +565,21 @@ schema_error | limit_exceeded | cache_hit | unresolved
 2. `off` 输出：Phase 3 fixture 的 IR、Markdown、chunks、diagnostics 与新增代码前等价。
 3. `auto` 无歧义：零 Adapter 调用。
 4. `auto` 有歧义：只发送目标 Sheet/范围和登记 choices。
-5. selected / abstained / timeout / provider error / invalid JSON / unknown field / unknown choice /
-   stale checksum / duplicate decision / missing decision / oversized response 全部分支。
+5. selected / abstained / timeout / provider error / invalid JSON / duplicate JSON member（顶层和
+   nested）/ unknown field / unknown choice / stale checksum / duplicate decision / missing
+   decision / oversized response 全部分支。
 6. `required` 无歧义成功且零调用；所有 unresolved 分支抛 typed error。
 7. required error 穿透 `ExcelParser._parse_ooxml()` 和 `ParseService`。
-8. 请求捕获证明不存在候选外 cells、隐藏 Sheet、公式、comments、hyperlinks 和 images。
+8. 请求捕获证明不存在候选外 cells、隐藏 Sheet、公式、cached result、comments、hyperlinks
+   和 images；candidate refs 缺失或 merged child 上的公式也使整个 envelope 零调用。
 9. Prompt Injection fixture 不能改变响应协议、扩大范围或引入自由结构。
 10. 模型调用前后 `WorkbookSnapshot` 及 source facts 的深拷贝 equality 不变。
 11. 非法/失败选择不改变 coverage、reconstruction、source-ref validity、row conservation
-    或 continuation groups。
+    或 continuation groups；任一物化失败会原子回滚所有 attempted selections 并重新验证。
 12. cache hit 避免二次调用；事实、choice、Schema、prompt、规则、privacy、model identity
     变化均导致 miss；cache hit 必须重新验证。
-13. diagnostics 不含 prompt、cell text、formula、response body、credential 或异常正文。
+13. diagnostics 不含 prompt、cell text、formula、response body、credential 或异常正文，且
+    每条 audit（包括 unavailable/required）都有本地五类版本和 fallback rule confidence。
 14. model reported confidence 的变化不能单独改变本地接受结果。
 15. Batch/ParseService 显式参数不进入 PDF engine kwargs、chunk profile 或通用 parser kwargs。
 

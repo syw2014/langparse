@@ -2,8 +2,8 @@
 
 **版本**: 0.0.1（`pyproject.toml`，未发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
-**最后更新**: 2026-08-26
-**测试**: 512 passed；Ruff lint `All checks passed!`，format `111 files already formatted`
+**最后更新**: 2026-08-27
+**测试**: 575 passed；Ruff lint `All checks passed!`，format `111 files already formatted`
 
 > 本文档在 2026-07-30 重写。此前版本声称 v0.1.0、测试覆盖 100%、解析器完成度 100%，三项均与实际不符，已按代码现状订正。2026-08-03 补充"项目定位"一节并重排"已知缺口"优先级，理由见下。
 
@@ -49,7 +49,7 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | Benchmark | 可用 | 结构阈值 + 保真度（文本编辑距离 / 表格 TEDS），需 manifest 提供参考输出 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-"512 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+"575 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
 
 ---
 
@@ -123,16 +123,20 @@ langparse/
    chunks 携带版本化 profile/visibility metadata，analysis 额外提供 source-linked
    normalized records。真实 15-Sheet 工作簿回归中 retrieval 保持 39 chunks，两套
    profile 均精确守恒 228 个 data/total `row_id`，analysis 的 `table_rows` chunk 数
-   不多于 retrieval；当前全量测试为 512 passed。
+   不多于 retrieval；当前全量测试为 575 passed。
 6. **Phase 4 可选模型 fallback（整体未完成）**：模型不能改写事实层，各子阶段独立过门：
    - ✅ **Phase 4A（2026-08-26）安全的 region-kind 消歧核心**：完成 typed
      `WorkbookDisambiguation`/Adapter port、默认 `off` 的零 provider/config/cache/network
-     路径、显式 `auto/required`、choice-only `selected | abstained` 严格协议、内存 cache、
-     required error passthrough、净化且确定性的 model-call diagnostics，以及所有既有本地
-     materialization/coverage/reconstruction/row-conservation/continuation/source-ref validators。
-     focused 为 99 passed，全量为 512 passed；Ruff lint/format 与 diff check 通过。只读
+     路径、显式 `auto/required`、choice-only `selected | abstained` 严格协议、递归重复 JSON
+     member 拒绝、公式 envelope 零投影、私有线程安全可复用内存 cache、hard call budget、
+     total Adapter boundary、required error passthrough、完整版本/rule-confidence 审计，以及
+     工作簿级原子 rollback 和全部既有本地 validators。privacy 版本使 fact/cache key 正确
+     失效，canonical 结构摘要使 choice ID 正确失效；所有 service convenience entry point
+     都有直接 forwarding/PDF isolation 回归。focused 为 232 passed，全量为 575 passed；
+     Ruff lint/format 与 diff
+     check 通过。只读
      私有工作簿验收保持 retrieval 39、analysis 20、logical rows 228、accepted continuation
-     0、quality `(1.0, true, 1.0)`，`auto` 零 Adapter 请求且 structure/Markdown 与 off
+     0、quality `(1.0, True, 1.0)`，`auto` 零 Adapter 请求且 structure/Markdown 与 off
      相等，源文件完整 stat 前后相同。Phase 4A 没有内置 production provider Adapter，
      因此这里只证明安全与兼容，不证明真实模型提高了解析准确率。
    - ⬜ **Phase 4B 真实 provider 与效果门**：至少一个 production Adapter、显式 CLI/config、
@@ -142,11 +146,9 @@ langparse/
      仍未实现。
    - ⬜ **Phase 4D 第二个领域契约**：continuation 或 header hierarchy 的第二个真实契约，
      以及是否抽取通用 adjudication Interface 的评估仍未完成。
-
-   Phase 4A 保留两个明确的 deferred Minor：严格 JSON decoder 对重复 object member name
-   仍沿用 Python 的 last-value-wins；`parse_output`、`parse_batch_outputs` 与 legacy
-   `parse_batch` 的 workbook-disambiguation forwarding 尚无直接回归（静态路由已核对）。
-   本阶段未静默扩大范围修复它们。
+   Final review 的 Critical、Important 与四个 localized Minor 已在同一 fix wave 中关闭；
+   Phase 4A 当前没有遗留的已知 review finding。真实 provider/效果、截图/VLM 与第二领域
+   契约仍分别受 Phase 4B/C/D 门约束。
 7. ⬜ **Phase 5 格式、语义 Block 与 bundle**：补齐 `.xls/.xlsb` rich adapters、
    图片/图表语义 Block，以及 `document.json`、raw/semantic Markdown、chunks、
    diagnostics 的标准输出包；完成生产加固后再进入发布门。

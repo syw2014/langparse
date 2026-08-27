@@ -10,7 +10,7 @@
 
 ## 🚀 项目状态
 
-LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（512 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
+LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（575 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
 
 项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（PaddleOCR-VL、vision-LLM 后端），以及帮忙压测"引擎中立路由"这个设计本身。
 
@@ -243,21 +243,37 @@ formula、coordinate、range、header、row role、continuation 或任意结构�
 snapshot 物化，并继续经过本地 materialization、coverage、reconstruction、row
 conservation、continuation 和 source-reference 验证。
 
+模型选择按整个工作簿原子应用：任何一次选择物化失败，或 tentative workbook 未通过
+continuation/结构 validator，都会把所有尝试过的选择恢复为保留的确定性 Block，并重新
+运行全部 validator；`required` 会把所有被恢复的 case 都报告为 unresolved。
+
 `auto` 遇到 provider、cache、limit、响应契约、物化或最终验证失败，以及 provider
 弃权时，保留确定性本地 fallback 并记录净化后的 diagnostics。`required` 对仍未解决的
 合法歧义抛出 `RequiredWorkbookDisambiguationError`，该 typed error 会穿透
 `ExcelParser` 与 `ParseService`；没有可调用歧义的工作簿在两种模式下都零调用并成功。
 
+启用的 `WorkbookDisambiguation` 值持有私有、线程安全、进程内 runtime/cache；在
+`ExcelParser`、`ParseService` 或 batch 调用间复用同一个值时，已验证 response 可成为
+重新 decode 的 cache hit。`off` 不构造 runtime/cache。`max_cases` 限制被考虑的 case，
+`max_calls` 则是整个工作簿内实际 Adapter 调用（包括 retry）的硬上限；cache hit 不消耗
+调用数。timeout 必须是有限、正数、非 bool 的 real，count/byte limit 必须是精确正整数且
+不能是 bool。
+
 候选请求有严格的数据最小化边界：它可以携带目标 Sheet 名和 source range、可见单元格
 坐标与 display text、value type、style fingerprint、merge geometry、本地标量特征和已登记
 choices；不会携带隐藏 Sheet、公式及其缓存值、批注、超链接、图片、其他区域、credential
-或 provider secret。单元格文本一律视为不可信的 Prompt Injection 数据：Adapter port 不
+或 provider secret。只要完整 candidate envelope 内任一单元格含公式——包括未列入
+`candidate.cell_refs` 的单元格或 merged child——整个 case 就在本地判定为 unavailable，
+不会投影公式或缓存结果。单元格文本一律视为不可信的 Prompt Injection 数据：Adapter port 不
 提供工具调用通道，严格响应字段、request checksum、case/choice membership、大小限制和
-本地验证共同阻止单元格指令扩大操作范围。diagnostics 不保存 prompt、cell text、原始
+本地验证共同阻止单元格指令扩大操作范围；response 任意对象层级的重复 JSON member name
+都会被拒绝。diagnostics 不保存 prompt、cell text、原始
 reply 或 provider 异常正文。进程内、非持久化 cache 的契约不同且更窄：它只保留已经通过
 严格 response decode 的 response envelope bytes，每次命中仍重新 decode 和 validation。
 cache 不写磁盘，但 envelope 中由 provider 提供的字符串可能留在进程内存中，直到
-disambiguator 及其 cache 被释放。
+持有它的 disambiguation 值及其私有 runtime 被释放。每条 model-call audit 都记录本地
+schema、prompt、rule、validator、privacy 版本和确定性 fallback 的 rule confidence；这些
+值不采信 provider 输入。
 
 Phase 4A **没有内置 production provider Adapter**，也没有 provider CLI/env 配置。
 现有测试和只读工作簿验收证明的是显式 opt-in Seam 的安全性与兼容性，不证明真实模型

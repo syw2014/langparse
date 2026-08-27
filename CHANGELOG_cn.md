@@ -14,8 +14,10 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
   `WorkbookStructureModelAdapter` provider port、有界 policy、typed errors、严格
   choice-only 请求/响应契约和进程内 memory cache。
 - 新增候选范围内的 region-kind assessment 与模型调用 diagnostics，包含稳定 case/choice
-  ID、request/response checksum、cache/attempt/size/outcome、本地 validation codes；除
-  实测 `elapsed_ms` 外，重复运行的 diagnostics 与真实 ParseService JSON 输出保持确定性。
+  ID、request/response checksum、cache/attempt/size/outcome，完整的本地
+  schema/prompt/rule/validator/privacy provenance、fallback rule confidence 与 validation
+  codes；除实测 `elapsed_ms` 外，重复运行的 diagnostics 与真实 ParseService JSON 输出
+  保持确定性。
 - 新增 `ExcelParser(disambiguation=...)` 和 ParseService/Batch
   `workbook_disambiguation=...` 两条显式注入路径，required typed failure 穿透 service
   边界。
@@ -28,21 +30,27 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
   provider confidence 不具备裁决权，coverage、reconstruction、row conservation、
   continuation 与 source-ref validation 仍是强制门。`auto` 本地回退，`required` 对未解决
   的合法歧义抛 typed error。
+- 任一 candidate envelope 只要包含公式——包括 candidate refs 未列出的公式单元格或 merged
+  child——就在本地判定 unavailable。模型选择按工作簿原子应用：任何选择物化或 tentative
+  validation 失败都会回滚所有尝试过的选择，并重新运行 validators。
+- 启用配置在 parser/service/batch 间复用私有、线程安全、进程内 cache；`off` 不构造 cache。
+  policy 类型严格校验，`max_calls` 约束包括 retry 在内的真实 Adapter 调用，cache hit 零
+  调用；Adapter/reply 边界保持 total、错误净化，并递归拒绝重复 JSON member。
+- privacy 版本参与 fact 和 request/cache key；canonical 结构特征摘要参与 choice ID。
+  package 只导出已文档化的 policy、typed data/error 和 Adapter-facing API，编排 helper
+  保持内部使用。
 
 ### 已知限制
 - Phase 4A 没有内置 production provider Adapter、provider CLI/env 配置、图片/VLM
   路径或第二个领域契约。它证明的是可审计 Seam 的安全性与兼容性，不证明真实模型提高
   了解析准确率；production provider 的效果验收仍属于 Phase 4B。
-- 严格 JSON 校验仍沿用 Python 对重复 object member name 的 last-value-wins 行为；少数
-  service convenience entry point 也尚无直接 forwarding 回归。这两项 deferred Minor
-  不会被表述为已完成的 Phase 4A 能力。
 
 ### 验证（Verification）
-- Phase 4A/service focused 门为 99 passed；项目全量为 512 passed。Ruff lint 为
+- Phase 4A/service focused 门为 232 passed；项目全量为 575 passed。Ruff lint 为
   `All checks passed!`，format 为 `111 files already formatted`，diff whitespace check
   无异常。
 - 只读私有工作簿保持 retrieval 39、analysis 20、logical data/total rows 228、accepted
-  continuation 0 与 quality `(1.0, true, 1.0)`；`auto` 零 Adapter 请求，structure 和
+  continuation 0 与 quality `(1.0, True, 1.0)`；`auto` 零 Adapter 请求，structure 和
   Markdown 与 `off` 相同，源文件完整 stat 前后不变。
 
 ## [2026-08-25]

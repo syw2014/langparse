@@ -259,6 +259,55 @@ def test_parse_service_reuses_configured_workbook_cache_across_calls(tmp_path):
     assert second.diagnostics.model_calls[0]["attempts"] == 0
 
 
+def test_parse_output_forwards_workbook_disambiguation(tmp_path):
+    source = sparse_workbook(tmp_path)
+    adapter = SelectingAdapter(kind="text")
+    configured = WorkbookDisambiguation.auto(adapter)
+
+    rendered = ParseService().parse_output(
+        source,
+        fmt="json",
+        workbook_disambiguation=configured,
+    )
+
+    payload = json.loads(rendered)
+    assert payload["structure"]["sheets"][0]["blocks"][0]["kind"] == "text"
+    assert len(adapter.requests) == 1
+
+
+def test_parse_batch_outputs_forwards_one_reusable_workbook_disambiguation(tmp_path):
+    source = sparse_workbook(tmp_path)
+    adapter = SelectingAdapter(kind="text")
+    configured = WorkbookDisambiguation.auto(adapter)
+
+    outputs = ParseService().parse_batch_outputs(
+        [source, source],
+        fmt="json",
+        workbook_disambiguation=configured,
+    )
+
+    payloads = [json.loads(content) for _, content in outputs]
+    assert len(adapter.requests) == 1
+    assert [payload["diagnostics"]["model_calls"][0]["cache_status"] for payload in payloads] == [
+        "miss",
+        "hit",
+    ]
+
+
+def test_legacy_parse_batch_forwards_one_reusable_workbook_disambiguation(tmp_path):
+    source = sparse_workbook(tmp_path)
+    adapter = SelectingAdapter(kind="text")
+    configured = WorkbookDisambiguation.auto(adapter)
+
+    documents = ParseService().parse_batch(
+        [source, source],
+        workbook_disambiguation=configured,
+    )
+
+    assert len(documents) == 2
+    assert len(adapter.requests) == 1
+
+
 def test_workbook_disambiguation_does_not_reach_pdf_engine(tmp_path):
     seen = {}
     pdf = tmp_path / "sample.pdf"
@@ -280,6 +329,46 @@ def test_workbook_disambiguation_does_not_reach_pdf_engine(tmp_path):
     )
 
     assert "workbook_disambiguation" not in seen
+
+
+@pytest.mark.parametrize("entrypoint", ["parse_output", "parse_batch_outputs", "parse_batch"])
+def test_workbook_disambiguation_is_isolated_from_pdf_engine_wrappers(tmp_path, entrypoint: str):
+    seen = []
+    pdf = tmp_path / "sample.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+
+    class RecordingEngine:
+        def process_document(self, file_path, **kwargs):
+            seen.append(dict(kwargs))
+            return ParsedDocumentResult(
+                source=str(file_path),
+                filename=file_path.name,
+                engine="recording",
+                markdown_content="PDF",
+            )
+
+    service = ParseService()
+    configured = WorkbookDisambiguation.off()
+    if entrypoint == "parse_output":
+        service.parse_output(
+            pdf,
+            engine=RecordingEngine(),
+            workbook_disambiguation=configured,
+        )
+    elif entrypoint == "parse_batch_outputs":
+        service.parse_batch_outputs(
+            [pdf],
+            engine=RecordingEngine(),
+            workbook_disambiguation=configured,
+        )
+    else:
+        service.parse_batch(
+            [pdf],
+            engine=RecordingEngine(),
+            workbook_disambiguation=configured,
+        )
+
+    assert seen == [{}]
 
 
 def test_parse_service_propagates_required_workbook_disambiguation_error(tmp_path):

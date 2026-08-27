@@ -71,7 +71,6 @@ def test_region_request_contains_only_candidate_local_safe_cues():
     assert "=SECRET()" not in serialized
     assert "private comment" not in serialized
     assert "https://secret.example" not in serialized
-    assert "=LOCAL_SECRET()" not in serialized
     assert "local comment" not in serialized
     assert "https://local-secret.example" not in serialized
 
@@ -129,6 +128,42 @@ def test_region_case_rejects_hidden_merged_child_in_candidate_envelope():
 
     with pytest.raises(InvalidRegionAmbiguityCaseError, match="hidden candidate content"):
         build_region_case(sheet, candidate, assessment)
+
+
+@pytest.mark.parametrize(
+    ("coordinate", "merge_anchor"),
+    [
+        pytest.param("A2", None, id="cell_absent_from_candidate_refs"),
+        pytest.param("B1", "A1", id="merged_child"),
+    ],
+)
+def test_region_case_rejects_formula_anywhere_in_candidate_envelope_without_disclosure(
+    coordinate: str,
+    merge_anchor: str | None,
+):
+    sheet, candidate, assessment = ambiguous_region_with_sensitive_facts()
+    sheet.cells[coordinate] = CellSnapshot(
+        coordinate=coordinate,
+        raw_value="=PRIVATE_FORMULA_ONE()",
+        display_value="private cached result one",
+        formula="=PRIVATE_FORMULA_ONE()",
+        cached_value="private cached result one",
+        merge_anchor=merge_anchor,
+    )
+
+    with pytest.raises(InvalidRegionAmbiguityCaseError) as first_error:
+        build_region_case(sheet, candidate, assessment)
+
+    sheet.cells[coordinate].raw_value = "=PRIVATE_FORMULA_TWO()"
+    sheet.cells[coordinate].display_value = "private cached result two"
+    sheet.cells[coordinate].formula = "=PRIVATE_FORMULA_TWO()"
+    sheet.cells[coordinate].cached_value = "private cached result two"
+    with pytest.raises(InvalidRegionAmbiguityCaseError) as second_error:
+        build_region_case(sheet, candidate, assessment)
+
+    assert str(first_error.value) == str(second_error.value)
+    assert "PRIVATE_FORMULA" not in str(first_error.value)
+    assert "private cached result" not in str(first_error.value)
 
 
 def test_region_case_rejects_snapshot_mapping_coordinate_mismatch_before_projection():
@@ -359,7 +394,6 @@ def ambiguous_region_with_sensitive_facts():
             display_value="Name",
             data_type="s",
             style_id="header-style",
-            formula="=LOCAL_SECRET()",
             comment="local comment",
             hyperlink="https://local-secret.example",
         ),

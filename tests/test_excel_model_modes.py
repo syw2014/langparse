@@ -74,6 +74,16 @@ class AbstainingAdapter:
         )
 
 
+class RecordingAdapter:
+    def __init__(self) -> None:
+        self.identity = ModelIdentity(provider="recording", model="fixture", revision="1")
+        self.requests = []
+
+    def complete(self, request, *, timeout_seconds: float) -> ProviderReply:
+        self.requests.append((request, timeout_seconds))
+        raise AssertionError("formula candidate must not reach Adapter.complete")
+
+
 def sparse_workbook(tmp_path):
     path = tmp_path / "sparse.xlsx"
     workbook = Workbook()
@@ -81,6 +91,17 @@ def sparse_workbook(tmp_path):
     sheet.title = "Data"
     sheet["A1"] = "左上"
     sheet["B2"] = "右下"
+    workbook.save(path)
+    return path
+
+
+def uncached_formula_workbook(tmp_path):
+    path = tmp_path / "uncached-formula.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Data"
+    sheet["A1"] = "左上"
+    sheet["B2"] = "=SECRET()"
     workbook.save(path)
     return path
 
@@ -119,6 +140,23 @@ def test_excel_parser_does_not_swallow_required_disambiguation_failure(tmp_path)
 
     with pytest.raises(RequiredWorkbookDisambiguationError):
         parser.parse_result(path)
+
+
+def test_excel_parser_never_sends_real_ooxml_uncached_formula_candidate(tmp_path):
+    path = uncached_formula_workbook(tmp_path)
+    adapter = RecordingAdapter()
+
+    parsed = ExcelParser(
+        disambiguation=WorkbookDisambiguation.auto(adapter),
+    ).parse_result(path)
+
+    formula_cell = parsed.structure.snapshot.sheets[0].cells["B2"]
+    assert formula_cell.formula == "=SECRET()"
+    assert formula_cell.cached_value is None
+    assert formula_cell.display_value == "=SECRET()"
+    assert adapter.requests == []
+    assert parsed.diagnostics.model_calls[0]["outcome"] == "formula_content"
+    assert "SECRET" not in repr(parsed.diagnostics.model_calls)
 
 
 def test_excel_parser_default_off_cannot_create_model_or_network_work(

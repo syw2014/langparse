@@ -46,6 +46,8 @@ def build_region_case(
 
     _validate_candidate_coordinates(sheet, candidate)
     _reject_hidden_candidate_content(sheet, candidate)
+    if _candidate_envelope_has_formula(sheet, candidate):
+        raise InvalidRegionAmbiguityCaseError("formula candidate content cannot be sent")
     _validate_choices(assessment.choices, assessment.deterministic.kind)
 
     cells = tuple(
@@ -233,6 +235,29 @@ def _reject_hidden_candidate_content(sheet: SheetSnapshot, candidate: CandidateR
             ) from error
         if min_row <= row <= max_row and min_column <= column <= max_column and cell.hidden:
             raise InvalidRegionAmbiguityCaseError("hidden candidate content cannot be sent")
+
+
+def _candidate_envelope_has_formula(
+    sheet: SheetSnapshot,
+    candidate: CandidateRegion,
+) -> bool:
+    min_column, min_row, max_column, max_row = range_boundaries(candidate.source_ref.range)
+    for coordinate, cell in sheet.cells.items():
+        try:
+            row, column = coordinate_to_tuple(coordinate)
+        except ValueError as error:
+            raise InvalidRegionAmbiguityCaseError(
+                "invalid candidate cell mapping coordinate"
+            ) from error
+        if not (min_row <= row <= max_row and min_column <= column <= max_column):
+            continue
+        if cell.formula is not None:
+            return True
+        if cell.merge_anchor is not None:
+            anchor = sheet.cells.get(cell.merge_anchor)
+            if anchor is not None and anchor.formula is not None:
+                return True
+    return False
 
 
 def _validate_choices(choices: tuple[RegionChoice, ...], fallback_kind: str) -> None:

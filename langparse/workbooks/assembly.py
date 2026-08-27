@@ -30,6 +30,7 @@ from langparse.workbooks.modeling import (
     WorkbookRegionDisambiguator,
     build_region_case,
 )
+from langparse.workbooks.modeling.contract import _candidate_envelope_has_formula
 from langparse.workbooks.modeling.disambiguation import _audit_payload
 from langparse.workbooks.modeling.types import REGION_RULE_VERSION
 from langparse.workbooks.regions import detect_candidate_regions
@@ -296,6 +297,8 @@ def _unavailable_case_outcome(
         row, column = coordinate_to_tuple(coordinate)
         if min_row <= row <= max_row and min_column <= column <= max_column and cell.hidden:
             return "hidden_content"
+    if _candidate_envelope_has_formula(sheet, candidate):
+        return "formula_content"
     return None
 
 

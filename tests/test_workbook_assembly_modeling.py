@@ -343,6 +343,27 @@ def test_auto_nonexportable_candidate_keeps_local_fallback_without_adapter_work(
     assert "右下" not in repr(diagnostics.model_calls)
 
 
+def test_required_cached_formula_candidate_is_local_unavailable_and_content_free():
+    snapshot = sparse_text_snapshot()
+    formula_cell = snapshot.sheets[0].cells["B2"]
+    formula_cell.raw_value = "=SECRET()"
+    formula_cell.display_value = "CACHED_SECRET"
+    formula_cell.formula = "=SECRET()"
+    formula_cell.cached_value = "CACHED_SECRET"
+
+    with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+        assemble_workbook(
+            snapshot,
+            disambiguation=WorkbookDisambiguation.required(ExplodingAdapter()),
+        )
+
+    assert caught.value.case_ids == (caught.value.diagnostics.model_calls[0]["case_id"],)
+    assert caught.value.diagnostics.model_calls[0]["outcome"] == "formula_content"
+    serialized = repr(caught.value)
+    assert "SECRET" not in serialized
+    assert "CACHED_SECRET" not in serialized
+
+
 @pytest.mark.parametrize("hidden_fact", ["row", "column", "cell"])
 def test_required_nonexportable_candidate_raises_without_adapter_work(hidden_fact):
     snapshot = nonexportable_sparse_snapshot(hidden_fact)

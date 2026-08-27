@@ -8,7 +8,9 @@ from langparse.types import ParseDiagnostics
 
 from .cache import MemoryDecisionCache
 from .contract import (
+    _copy_provider_reply,
     _validate_case,
+    _validate_model_identity,
     build_model_request,
     decode_model_reply,
     response_checksum,
@@ -60,7 +62,7 @@ class WorkbookRegionDisambiguator:
             )
 
         policy = configured.policy
-        visible_limit = min(policy.max_cases, policy.max_calls)
+        visible_limit = policy.max_cases
         eligible_visible_cases = tuple(
             case
             for index, case in enumerate(_visible_cases(ordered_cases))
@@ -78,6 +80,7 @@ class WorkbookRegionDisambiguator:
         resolutions: list[RegionResolution] = []
         audits: list[ModelCallAudit] = []
         unresolved_case_ids: list[str] = []
+        call_budget = [0]
         visible_index = 0
         for case in ordered_cases:
             if case.sheet_visibility != "visible":
@@ -115,6 +118,7 @@ class WorkbookRegionDisambiguator:
                     policy,
                     workbook_started,
                     deadline,
+                    call_budget,
                 )
                 visible_index += 1
 
@@ -149,7 +153,9 @@ class WorkbookRegionDisambiguator:
             return None, None
         assert configured.adapter is not None
         try:
-            return configured.adapter.identity, None
+            identity = configured.adapter.identity
+            _validate_model_identity(identity)
+            return identity, None
         except Exception as error:
             return None, error
 
@@ -162,6 +168,7 @@ class WorkbookRegionDisambiguator:
         policy: WorkbookModelPolicy,
         workbook_started: float | None,
         deadline: float,
+        call_budget: list[int],
     ) -> tuple[RegionResolution, ModelCallAudit]:
         if len(case.cells) > policy.max_cells_per_case:
             return self._local_failure(
@@ -172,7 +179,17 @@ class WorkbookRegionDisambiguator:
                 elapsed_ms=self._elapsed_ms(workbook_started),
             )
 
-        request = build_model_request(case, identity)
+        try:
+            request = build_model_request(case, identity)
+        except Exception as error:
+            return self._local_failure(
+                case,
+                mode,
+                identity=identity,
+                outcome="request_error",
+                error=error,
+                elapsed_ms=self._elapsed_ms(workbook_started),
+            )
         request_bytes = len(request.body)
         if request_bytes > policy.max_request_bytes:
             return self._local_failure(
@@ -218,6 +235,7 @@ class WorkbookRegionDisambiguator:
             policy,
             workbook_started,
             deadline,
+            call_budget,
         )
 
     def _resolve_cached(
@@ -230,21 +248,22 @@ class WorkbookRegionDisambiguator:
         policy: WorkbookModelPolicy,
         workbook_started: float | None,
     ) -> tuple[RegionResolution, ModelCallAudit]:
-        reply = ProviderReply(body=cached_body, provider_request_id=None)
         try:
+            reply = ProviderReply(body=cached_body, provider_request_id=None)
             decision = decode_model_reply(
                 reply,
                 request,
                 max_response_bytes=policy.max_response_bytes,
             )
         except Exception as error:
+            safe_cached_body = cached_body if type(cached_body) is bytes else None
             return self._local_failure(
                 case,
                 mode,
                 identity=identity,
                 request=request,
                 request_bytes=len(request.body),
-                response_body=cached_body,
+                response_body=safe_cached_body,
                 cache_status="corrupt",
                 outcome="invalid_response",
                 error=error,
@@ -272,6 +291,7 @@ class WorkbookRegionDisambiguator:
         policy: WorkbookModelPolicy,
         workbook_started: float | None,
         deadline: float,
+        call_budget: list[int],
     ) -> tuple[RegionResolution, ModelCallAudit]:
         attempts = 0
         last_error: Exception | None = None
@@ -294,11 +314,28 @@ class WorkbookRegionDisambiguator:
                     error=last_error,
                     elapsed_ms=self._elapsed_ms(workbook_started),
                 )
+            if call_budget[0] >= policy.max_calls:
+                return self._local_failure(
+                    case,
+                    mode,
+                    identity=identity,
+                    request=request,
+                    request_bytes=len(request.body),
+                    response_body=last_body,
+                    cache_status="miss",
+                    attempts=attempts,
+                    outcome="limit_exceeded",
+                    error=last_error,
+                    elapsed_ms=self._elapsed_ms(workbook_started),
+                )
             attempts += 1
+            call_budget[0] += 1
             try:
-                reply = adapter.complete(
-                    request,
-                    timeout_seconds=min(policy.timeout_seconds, remaining),
+                reply = _copy_provider_reply(
+                    adapter.complete(
+                        request,
+                        timeout_seconds=min(policy.timeout_seconds, remaining),
+                    )
                 )
                 if self._clock() >= deadline:
                     return self._local_failure(
@@ -323,6 +360,22 @@ class WorkbookRegionDisambiguator:
                 last_error = error
                 continue
 
+            try:
+                response_checksum(reply.body)
+            except Exception as error:
+                return self._local_failure(
+                    case,
+                    mode,
+                    identity=identity,
+                    request=request,
+                    request_bytes=len(request.body),
+                    response_body=reply.body,
+                    cache_status="miss",
+                    attempts=attempts,
+                    outcome="checksum_error",
+                    error=error,
+                    elapsed_ms=self._elapsed_ms(workbook_started),
+                )
             try:
                 self._cache.put(request.request_checksum, reply.body)
             except Exception as error:
@@ -381,6 +434,22 @@ class WorkbookRegionDisambiguator:
         attempts: int,
         elapsed_ms: int,
     ) -> tuple[RegionResolution, ModelCallAudit]:
+        try:
+            response_checksum(response_body)
+        except Exception as error:
+            return self._local_failure(
+                case,
+                mode,
+                identity=identity,
+                request=request,
+                request_bytes=len(request.body),
+                response_body=response_body,
+                cache_status=cache_status,
+                attempts=attempts,
+                outcome="checksum_error",
+                error=error,
+                elapsed_ms=elapsed_ms,
+            )
         if decision.status == "abstained":
             return self._local_failure(
                 case,
@@ -508,11 +577,18 @@ def _audit(
         identity.revision if identity is not None else None,
         required=False,
     )
-    validation_codes = (
-        ("unsafe_identity_redacted",)
-        if provider_redacted or model_redacted or revision_redacted
-        else ()
-    )
+    validation_codes = []
+    if provider_redacted or model_redacted or revision_redacted:
+        validation_codes.append("unsafe_identity_redacted")
+    checksum = None
+    checksum_error = None
+    if response_body is not None:
+        try:
+            checksum = response_checksum(response_body)
+        except Exception as caught:
+            checksum_error = caught
+            validation_codes.append("response_checksum_error")
+    effective_error = error if error is not None else checksum_error
     return ModelCallAudit(
         case_id=case.case_id,
         source_range=case.source_range,
@@ -521,7 +597,7 @@ def _audit(
         model=model,
         model_revision=model_revision,
         request_checksum=request.request_checksum if request is not None else None,
-        response_checksum=response_checksum(response_body) if response_body is not None else None,
+        response_checksum=checksum,
         cache_status=cache_status,
         attempts=attempts,
         elapsed_ms=elapsed_ms,
@@ -530,9 +606,9 @@ def _audit(
         outcome=outcome,
         selected_choice_id=selected_choice_id,
         reported_confidence=reported_confidence,
-        validation_codes=validation_codes,
+        validation_codes=tuple(validation_codes),
         reason_codes=(),
-        error_type=type(error).__name__ if error is not None else None,
+        error_type=_safe_error_type(effective_error),
     )
 
 
@@ -559,3 +635,20 @@ def _safe_identity_token(
     ):
         return value, False
     return None, True
+
+
+def _safe_error_type(error: Exception | None) -> str | None:
+    if error is None:
+        return None
+    try:
+        name = type(error).__name__
+    except Exception:
+        return "ExternalError"
+    if (
+        type(name) is str
+        and 0 < len(name) <= 64
+        and name.isascii()
+        and all(character.isalnum() or character in "._-" for character in name)
+    ):
+        return name
+    return "ExternalError"

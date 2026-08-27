@@ -91,6 +91,7 @@ def build_model_request(case: RegionAmbiguityCase, identity: ModelIdentity) -> W
     """Build the one-case Phase 4A request with a canonical checksum."""
 
     _validate_case(case)
+    _validate_model_identity(identity)
     request_case = {
         "case_id": case.case_id,
         "sheet_name": case.sheet_name,
@@ -133,6 +134,9 @@ def decode_model_reply(
 ) -> RegionModelDecision:
     """Decode a provider reply only when it exactly matches the local contract."""
 
+    reply = _copy_provider_reply(reply)
+    if type(max_response_bytes) is not int or max_response_bytes <= 0:
+        raise WorkbookModelResponseError("invalid local response byte limit")
     if len(reply.body) > max_response_bytes:
         raise WorkbookModelResponseError(f"response exceeds {max_response_bytes} bytes")
     try:
@@ -182,6 +186,31 @@ def decode_model_reply(
 
 def response_checksum(body: bytes) -> str:
     return _digest_bytes(body)
+
+
+def _copy_provider_reply(reply: object) -> ProviderReply:
+    if not isinstance(reply, ProviderReply):
+        raise WorkbookModelResponseError("adapter returned an invalid reply")
+    try:
+        return ProviderReply(
+            body=reply.body,
+            provider_request_id=reply.provider_request_id,
+            usage=reply.usage,
+        )
+    except Exception as error:
+        raise WorkbookModelResponseError("adapter returned an invalid reply") from error
+
+
+def _validate_model_identity(identity: object) -> None:
+    if (
+        not isinstance(identity, ModelIdentity)
+        or type(identity.provider) is not str
+        or not identity.provider
+        or type(identity.model) is not str
+        or not identity.model
+        or (identity.revision is not None and type(identity.revision) is not str)
+    ):
+        raise WorkbookModelResponseError("adapter returned an invalid model identity")
 
 
 def _canonical_json(payload: dict[str, object]) -> bytes:

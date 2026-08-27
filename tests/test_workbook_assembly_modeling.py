@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from types import SimpleNamespace
 
 import pytest
 
@@ -94,6 +95,20 @@ class ExplodingAdapter:
         raise AssertionError("adapter complete must not be reached")
 
 
+class MalformedAdapter:
+    def __init__(self, shape: str) -> None:
+        self.identity = (
+            object()
+            if shape == "identity"
+            else ModelIdentity(provider="scripted", model="fixture", revision="1")
+        )
+        self.shape = shape
+
+    def complete(self, request, *, timeout_seconds: float):
+        assert self.shape == "reply"
+        return SimpleNamespace(body="private malformed reply")
+
+
 def sparse_text_snapshot(*, two_regions: bool = False) -> WorkbookSnapshot:
     cells = {
         "A1": _cell("A1", "左上"),
@@ -179,6 +194,29 @@ def test_auto_provider_failure_preserves_the_current_unclassified_fallback():
     assert diagnostics.model_calls[0]["outcome"] == "provider_error"
     assert "private provider body" not in repr(diagnostics)
     assert adapter.calls == 2
+
+
+@pytest.mark.parametrize("shape", ["identity", "reply"])
+@pytest.mark.parametrize("mode", ["auto", "required"])
+def test_assembly_contains_malformed_adapter_boundaries(shape: str, mode: str):
+    configured = getattr(WorkbookDisambiguation, mode)(MalformedAdapter(shape))
+
+    if mode == "auto":
+        ir, diagnostics = assemble_workbook(
+            sparse_text_snapshot(),
+            disambiguation=configured,
+        )
+        assert ir.sheets[0].blocks[0].kind == "unclassified"
+    else:
+        with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+            assemble_workbook(
+                sparse_text_snapshot(),
+                disambiguation=configured,
+            )
+        diagnostics = caught.value.diagnostics
+
+    assert diagnostics.model_calls
+    assert "private malformed reply" not in repr(diagnostics.model_calls)
 
 
 def test_model_reported_confidence_does_not_replace_local_choice_score():

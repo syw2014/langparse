@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -174,6 +175,17 @@ class CorruptCache(MemoryDecisionCache):
     def __init__(self, key: str, body: bytes) -> None:
         super().__init__()
         self.put(key, body)
+
+
+class MalformedBoundaryAdapter:
+    def __init__(self, *, identity=DEFAULT_IDENTITY, reply=None) -> None:
+        self.identity = identity
+        self.reply = reply
+        self.calls = 0
+
+    def complete(self, request, *, timeout_seconds: float):
+        self.calls += 1
+        return self.reply
 
 
 def literal_reply(
@@ -396,6 +408,103 @@ def test_required_diagnostics_exclude_request_response_exception_and_endpoint_se
     assert caught.value.diagnostics.model_calls[0]["error_type"] == "TimeoutError"
 
 
+@pytest.mark.parametrize("mode", [WorkbookModelMode.AUTO, WorkbookModelMode.REQUIRED])
+@pytest.mark.parametrize(
+    "adapter",
+    [
+        pytest.param(
+            MalformedBoundaryAdapter(identity=object()),
+            id="wrong_identity_object",
+        ),
+        pytest.param(
+            MalformedBoundaryAdapter(
+                identity=ModelIdentity(provider=[], model="fixture", revision="1")
+            ),
+            id="wrong_identity_field",
+        ),
+        pytest.param(
+            MalformedBoundaryAdapter(reply=object()),
+            id="wrong_adapter_return",
+        ),
+        pytest.param(
+            MalformedBoundaryAdapter(reply=SimpleNamespace(body="private malformed reply")),
+            id="wrong_reply_body",
+        ),
+    ],
+)
+def test_adapter_identity_and_reply_shapes_are_total_and_sanitized(
+    mode: WorkbookModelMode,
+    adapter: MalformedBoundaryAdapter,
+):
+    case = ambiguity_case_fixture(display_text="private request cell")
+    configured = (
+        WorkbookDisambiguation.auto(adapter)
+        if mode is WorkbookModelMode.AUTO
+        else WorkbookDisambiguation.required(adapter)
+    )
+
+    if mode is WorkbookModelMode.AUTO:
+        result = WorkbookRegionDisambiguator().resolve([case], configured)
+        audit = result.resolutions[0].audit
+        assert result.resolutions[0].status == "local_fallback"
+        assert audit is not None
+    else:
+        with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+            WorkbookRegionDisambiguator().resolve([case], configured)
+        audit = caught.value.diagnostics.model_calls[0]
+
+    serialized = repr(audit)
+    assert "private request cell" not in serialized
+    assert "private malformed reply" not in serialized
+
+
+@pytest.mark.parametrize("mode", [WorkbookModelMode.AUTO, WorkbookModelMode.REQUIRED])
+def test_response_hashing_error_is_contained_by_mode(monkeypatch, mode: WorkbookModelMode):
+    case = ambiguity_case_fixture(display_text="private request cell")
+    adapter = ScriptedAdapter.selected(case)
+    unsafe_error = type("PRIVATE checksum/error " + "x" * 100, (RuntimeError,), {})
+    monkeypatch.setattr(
+        "langparse.workbooks.modeling.disambiguation.response_checksum",
+        lambda _body: (_ for _ in ()).throw(unsafe_error("private hash body")),
+    )
+    configured = (
+        WorkbookDisambiguation.auto(adapter)
+        if mode is WorkbookModelMode.AUTO
+        else WorkbookDisambiguation.required(adapter)
+    )
+
+    if mode is WorkbookModelMode.AUTO:
+        result = WorkbookRegionDisambiguator().resolve([case], configured)
+        audit = result.resolutions[0].audit
+        assert result.resolutions[0].status == "local_fallback"
+        assert audit is not None
+    else:
+        with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+            WorkbookRegionDisambiguator().resolve([case], configured)
+        audit = caught.value.diagnostics.model_calls[0]
+
+    error_type = audit["error_type"] if isinstance(audit, dict) else audit.error_type
+    assert error_type == "ExternalError"
+    assert "PRIVATE" not in repr(audit)
+    assert "private" not in repr(audit)
+
+
+def test_unsafe_dynamic_adapter_exception_name_is_bounded_and_sanitized():
+    case = ambiguity_case_fixture()
+    unsafe_error = type("PRIVATE adapter/error " + "x" * 100, (RuntimeError,), {})
+    adapter = ScriptedAdapter.sequence([unsafe_error("private body")] * 2)
+
+    result = WorkbookRegionDisambiguator().resolve(
+        [case],
+        WorkbookDisambiguation.auto(adapter),
+    )
+
+    audit = result.resolutions[0].audit
+    assert audit is not None
+    assert audit.error_type == "ExternalError"
+    assert "PRIVATE" not in repr(audit)
+
+
 def test_retry_is_bounded_and_uses_one_workbook_deadline():
     case = ambiguity_case_fixture()
     adapter = ScriptedAdapter.sequence([TimeoutError(), valid_reply(case)])
@@ -431,6 +540,48 @@ def test_retry_stops_when_the_single_workbook_deadline_is_exhausted():
     assert audit.attempts == 1
     assert len(adapter.requests) == 1
     assert adapter.requests[0][1] == pytest.approx(0.4)
+
+
+def test_max_calls_is_one_workbook_wide_budget_of_actual_retry_invocations():
+    cases = [ambiguity_case_fixture(case_id=f"case-{index}") for index in range(3)]
+    adapter = ScriptedAdapter.sequence([TimeoutError(), TimeoutError()])
+    policy = WorkbookModelPolicy(max_attempts=3, max_cases=3, max_calls=2)
+
+    result = WorkbookRegionDisambiguator().resolve(
+        cases,
+        WorkbookDisambiguation.auto(adapter, policy=policy),
+    )
+
+    assert len(adapter.requests) == 2
+    assert result.resolutions[0].audit.attempts == 2
+    assert [resolution.audit.outcome for resolution in result.resolutions[1:]] == [
+        "limit_exceeded",
+        "limit_exceeded",
+    ]
+
+
+def test_cache_hits_remain_eligible_after_the_actual_call_budget_is_spent():
+    first = ambiguity_case_fixture(case_id="first")
+    miss = ambiguity_case_fixture(case_id="miss")
+    cached = ambiguity_case_fixture(case_id="cached")
+    adapter = ScriptedAdapter.sequence([valid_reply(first)])
+    cache = MemoryDecisionCache()
+    cached_request = build_model_request(cached, adapter.identity)
+    cache.put(cached_request.request_checksum, valid_reply(cached).body)
+
+    result = WorkbookRegionDisambiguator(cache=cache).resolve(
+        [first, miss, cached],
+        WorkbookDisambiguation.auto(
+            adapter,
+            policy=WorkbookModelPolicy(max_cases=3, max_calls=1),
+        ),
+    )
+
+    assert len(adapter.requests) == 1
+    assert result.resolutions[0].status == "model_selected"
+    assert result.resolutions[1].audit.outcome == "limit_exceeded"
+    assert result.resolutions[2].status == "cache_selected"
+    assert result.resolutions[2].audit.cache_status == "hit"
 
 
 def test_late_success_is_rejected_and_not_cached():

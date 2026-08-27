@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import socket
+from types import SimpleNamespace
 
 import pytest
 from openpyxl import Workbook
@@ -84,6 +85,20 @@ class RecordingAdapter:
         raise AssertionError("formula candidate must not reach Adapter.complete")
 
 
+class MalformedAdapter:
+    def __init__(self, shape: str) -> None:
+        self.identity = (
+            object()
+            if shape == "identity"
+            else ModelIdentity(provider="recording", model="fixture", revision="1")
+        )
+        self.shape = shape
+
+    def complete(self, request, *, timeout_seconds: float):
+        assert self.shape == "reply"
+        return SimpleNamespace(body="private malformed reply")
+
+
 def sparse_workbook(tmp_path):
     path = tmp_path / "sparse.xlsx"
     workbook = Workbook()
@@ -140,6 +155,24 @@ def test_excel_parser_does_not_swallow_required_disambiguation_failure(tmp_path)
 
     with pytest.raises(RequiredWorkbookDisambiguationError):
         parser.parse_result(path)
+
+
+@pytest.mark.parametrize("shape", ["identity", "reply"])
+@pytest.mark.parametrize("mode", ["auto", "required"])
+def test_excel_parser_contains_malformed_adapter_boundaries(tmp_path, shape: str, mode: str):
+    path = sparse_workbook(tmp_path)
+    configured = getattr(WorkbookDisambiguation, mode)(MalformedAdapter(shape))
+
+    if mode == "auto":
+        parsed = ExcelParser(disambiguation=configured).parse_result(path)
+        assert parsed.structure.sheets[0].blocks[0].kind == "unclassified"
+        assert parsed.diagnostics.model_calls
+    else:
+        with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+            ExcelParser(disambiguation=configured).parse_result(path)
+        parsed = caught.value
+
+    assert "private malformed reply" not in repr(parsed)
 
 
 def test_excel_parser_never_sends_real_ooxml_uncached_formula_candidate(tmp_path):

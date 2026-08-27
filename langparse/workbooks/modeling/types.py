@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from numbers import Real
 from types import MappingProxyType
 from typing import Literal, TypeAlias
 
@@ -36,9 +38,26 @@ class WorkbookModelPolicy:
     max_response_bytes: int = 128_000
 
     def __post_init__(self) -> None:
-        for name, value in vars(self).items():
-            if value <= 0:
-                raise ValueError(f"{name} must be positive")
+        for name in ("timeout_seconds", "workbook_timeout_seconds"):
+            value = getattr(self, name)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(f"{name} must be a finite positive real")
+        for name in (
+            "max_attempts",
+            "max_cases",
+            "max_calls",
+            "max_cells_per_case",
+            "max_request_bytes",
+            "max_response_bytes",
+        ):
+            value = getattr(self, name)
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{name} must be an exact positive integer")
 
 
 @dataclass(frozen=True)
@@ -108,6 +127,11 @@ class ProviderReply:
     usage: Mapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.body, (bytes, bytearray, memoryview)):
+            raise TypeError("body must be bytes-like")
+        object.__setattr__(self, "body", bytes(self.body))
+        if self.provider_request_id is not None and type(self.provider_request_id) is not str:
+            raise TypeError("provider_request_id must be a string or None")
         if not isinstance(self.usage, Mapping):
             raise TypeError("usage must be a mapping of string keys to integer values")
         copied_usage: dict[str, int] = {}

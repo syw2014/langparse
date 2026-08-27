@@ -1,4 +1,5 @@
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
+from fractions import Fraction
 
 import pytest
 
@@ -61,10 +62,51 @@ def test_off_rejects_an_adapter_to_keep_the_no_network_contract_explicit():
 
 
 def test_policy_rejects_non_positive_limits():
-    with pytest.raises(ValueError, match="timeout_seconds must be positive"):
+    with pytest.raises(ValueError, match="timeout_seconds"):
         WorkbookModelPolicy(timeout_seconds=0)
-    with pytest.raises(ValueError, match="max_response_bytes must be positive"):
+    with pytest.raises(ValueError, match="max_response_bytes"):
         WorkbookModelPolicy(max_response_bytes=0)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        pytest.param("timeout_seconds", True, id="timeout_bool"),
+        pytest.param("timeout_seconds", float("nan"), id="timeout_nan"),
+        pytest.param("timeout_seconds", float("inf"), id="timeout_inf"),
+        pytest.param("workbook_timeout_seconds", float("-inf"), id="workbook_timeout_inf"),
+        pytest.param("workbook_timeout_seconds", "20", id="workbook_timeout_string"),
+    ],
+)
+def test_policy_rejects_non_finite_or_non_real_timeouts(field: str, value):
+    with pytest.raises(ValueError, match=field):
+        replace(WorkbookModelPolicy(), **{field: value})
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        pytest.param("max_attempts", True, id="attempts_bool"),
+        pytest.param("max_cases", 1.0, id="cases_float"),
+        pytest.param("max_calls", Fraction(3, 2), id="calls_fraction"),
+        pytest.param("max_cells_per_case", float("nan"), id="cells_nan"),
+        pytest.param("max_request_bytes", float("inf"), id="request_bytes_inf"),
+        pytest.param("max_response_bytes", "128000", id="response_bytes_string"),
+    ],
+)
+def test_policy_requires_exact_positive_non_bool_integer_counts(field: str, value):
+    with pytest.raises(ValueError, match=field):
+        replace(WorkbookModelPolicy(), **{field: value})
+
+
+def test_policy_accepts_finite_positive_real_timeouts():
+    policy = WorkbookModelPolicy(
+        timeout_seconds=Fraction(1, 2),
+        workbook_timeout_seconds=3,
+    )
+
+    assert policy.timeout_seconds == Fraction(1, 2)
+    assert policy.workbook_timeout_seconds == 3
 
 
 def test_policy_and_configuration_are_immutable():
@@ -95,6 +137,19 @@ def test_provider_reply_usage_is_deeply_immutable_and_shape_checked():
         ProviderReply(body=b"{}", provider_request_id=None, usage={"input_tokens": True})
     with pytest.raises(TypeError, match="usage values"):
         ProviderReply(body=b"{}", provider_request_id=None, usage={"input_tokens": "4"})
+
+
+def test_provider_reply_body_is_validated_and_defensively_copied():
+    source = bytearray(b"decision")
+    reply = ProviderReply(body=source, provider_request_id=None)
+
+    source[:] = b"mutated!"
+    assert reply.body == b"decision"
+    assert type(reply.body) is bytes
+
+    for invalid in ("private reply", [123], object()):
+        with pytest.raises(TypeError, match="body must be bytes-like"):
+            ProviderReply(body=invalid, provider_request_id=None)
 
 
 def _region_case(

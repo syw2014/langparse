@@ -76,6 +76,20 @@ class AbstainingAdapter:
         )
 
 
+class MalformedAdapter:
+    def __init__(self, shape: str) -> None:
+        self.identity = (
+            object()
+            if shape == "identity"
+            else ModelIdentity(provider="scripted", model="fixture", revision="1")
+        )
+        self.shape = shape
+
+    def complete(self, request, *, timeout_seconds: float):
+        assert self.shape == "reply"
+        return SimpleNamespace(body="private malformed reply")
+
+
 def sparse_workbook(tmp_path):
     path = tmp_path / "sparse.xlsx"
     workbook = Workbook()
@@ -264,6 +278,34 @@ def test_parse_service_propagates_required_workbook_disambiguation_error(tmp_pat
 
     assert caught.value.case_ids
     assert caught.value.diagnostics.status == "failed"
+
+
+@pytest.mark.parametrize("shape", ["identity", "reply"])
+@pytest.mark.parametrize("mode", ["auto", "required"])
+def test_parse_service_contains_malformed_workbook_adapter_boundaries(
+    tmp_path,
+    shape: str,
+    mode: str,
+):
+    source = sparse_workbook(tmp_path)
+    configured = getattr(WorkbookDisambiguation, mode)(MalformedAdapter(shape))
+
+    if mode == "auto":
+        parsed = ParseService().parse_result(
+            source,
+            workbook_disambiguation=configured,
+        )
+        assert parsed.structure.sheets[0].blocks[0].kind == "unclassified"
+        assert parsed.diagnostics.model_calls
+    else:
+        with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+            ParseService().parse_result(
+                source,
+                workbook_disambiguation=configured,
+            )
+        parsed = caught.value
+
+    assert "private malformed reply" not in repr(parsed)
 
 
 def test_collect_parse_metrics_counts_pages_tables_and_output_size():

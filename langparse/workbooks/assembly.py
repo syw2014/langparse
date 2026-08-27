@@ -27,7 +27,6 @@ from langparse.workbooks.modeling import (
     RequiredWorkbookDisambiguationError,
     WorkbookDisambiguation,
     WorkbookModelMode,
-    WorkbookRegionDisambiguator,
     build_region_case,
 )
 from langparse.workbooks.modeling.contract import _candidate_envelope_has_formula
@@ -66,6 +65,7 @@ class _MaterializedRegion:
     block: WorkbookBlock
     deterministic_block: WorkbookBlock
     audit: ModelCallAudit | None = None
+    selection_attempted: bool = False
     model_selected: bool = False
     materialization_failed: bool = False
 
@@ -92,9 +92,21 @@ def assemble_workbook(
     workbook_ir = _workbook_from_materialized(snapshot, materialized, rollback_selected=False)
     diagnostics, tentative_validation_codes = _finalize_workbook(snapshot, workbook_ir)
 
-    selected_regions = [region for region in materialized if region.model_selected]
+    attempted_regions = [region for region in materialized if region.selection_attempted]
+    selected_regions = [region for region in attempted_regions if region.model_selected]
     reverted_case_ids: set[str] = set()
-    if tentative_validation_codes and selected_regions:
+    materialization_rollback = any(region.materialization_failed for region in attempted_regions)
+    if materialization_rollback:
+        reverted_case_ids = {
+            region.draft.case.case_id
+            for region in attempted_regions
+            if region.draft.case is not None
+        }
+        workbook_ir = _workbook_from_materialized(snapshot, materialized, rollback_selected=True)
+        diagnostics, rollback_validation_codes = _finalize_workbook(snapshot, workbook_ir)
+        if set(rollback_validation_codes) - {"continuation_error"}:
+            raise RuntimeError("deterministic workbook rollback failed validation")
+    elif tentative_validation_codes and selected_regions:
         reverted_case_ids = {
             region.draft.case.case_id
             for region in selected_regions
@@ -115,20 +127,30 @@ def assemble_workbook(
         if region.draft.case is None:
             if configured.mode is WorkbookModelMode.REQUIRED:
                 unresolved_case_ids.append(case_id)
-        elif region.materialization_failed:
-            if configured.mode is WorkbookModelMode.REQUIRED:
-                unresolved_case_ids.append(case_id)
         elif case_id in reverted_case_ids:
-            audit = replace(
-                audit,
-                outcome="validation_error",
-                validation_codes=_stable_codes(
-                    *audit.validation_codes,
-                    *tentative_validation_codes,
-                ),
-                reason_codes=("deterministic_fallback",),
-                error_type=None,
-            )
+            if materialization_rollback:
+                audit = replace(
+                    audit,
+                    outcome="materialization_error",
+                    validation_codes=_stable_codes(
+                        *audit.validation_codes,
+                        "materialization_error",
+                        *tentative_validation_codes,
+                    ),
+                    reason_codes=("deterministic_fallback",),
+                    error_type=audit.error_type if region.materialization_failed else None,
+                )
+            else:
+                audit = replace(
+                    audit,
+                    outcome="validation_error",
+                    validation_codes=_stable_codes(
+                        *audit.validation_codes,
+                        *tentative_validation_codes,
+                    ),
+                    reason_codes=("deterministic_fallback",),
+                    error_type=None,
+                )
             if configured.mode is WorkbookModelMode.REQUIRED:
                 unresolved_case_ids.append(case_id)
         elif region.model_selected:
@@ -340,7 +362,10 @@ def _resolve_region_cases(
     cases = [draft.case for draft in drafts if draft.case is not None]
     if not cases:
         return {}
-    resolutions = WorkbookRegionDisambiguator().resolve(cases, configured)
+    runtime = configured._runtime
+    if runtime is None:
+        raise RuntimeError("enabled workbook disambiguation runtime is unavailable")
+    resolutions = runtime.resolve(cases, configured)
     return {resolution.case_id: resolution for resolution in resolutions.resolutions}
 
 
@@ -447,13 +472,6 @@ def _materialize_region(snapshot_source, draft: _RegionDraft, resolutions_by_cas
             classification,
         )
     except Exception as exc:
-        block = _unclassified_block(
-            snapshot_source,
-            draft.candidate,
-            confidence=0.0,
-            reason_codes=["semantic_block_fallback"],
-            extra_diagnostic={"error_type": type(exc).__name__},
-        )
         audit = replace(
             resolution.audit,
             outcome="materialization_error",
@@ -466,9 +484,10 @@ def _materialize_region(snapshot_source, draft: _RegionDraft, resolutions_by_cas
         )
         return _MaterializedRegion(
             draft=draft,
-            block=block,
+            block=deterministic_block,
             deterministic_block=deterministic_block,
             audit=audit,
+            selection_attempted=True,
             materialization_failed=True,
         )
     return _MaterializedRegion(
@@ -476,6 +495,7 @@ def _materialize_region(snapshot_source, draft: _RegionDraft, resolutions_by_cas
         block=block,
         deterministic_block=deterministic_block,
         audit=resolution.audit,
+        selection_attempted=True,
         model_selected=True,
     )
 
@@ -526,7 +546,7 @@ def _workbook_from_materialized(
     for region in materialized:
         block = (
             region.deterministic_block
-            if rollback_selected and region.model_selected
+            if rollback_selected and region.selection_attempted
             else region.block
         )
         blocks_by_sheet[region.draft.sheet_index].append(deepcopy(block))

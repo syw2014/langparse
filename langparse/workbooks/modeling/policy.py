@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from .ports import WorkbookModelConfigurationError, WorkbookStructureModelAdapter
 from .types import WorkbookModelMode, WorkbookModelPolicy
+
+if TYPE_CHECKING:
+    from .disambiguation import WorkbookRegionDisambiguator
 
 
 @dataclass(frozen=True)
@@ -11,6 +15,12 @@ class WorkbookDisambiguation:
     mode: WorkbookModelMode = WorkbookModelMode.OFF
     adapter: WorkbookStructureModelAdapter | None = None
     policy: WorkbookModelPolicy = WorkbookModelPolicy()
+    _runtime: WorkbookRegionDisambiguator | None = field(
+        init=False,
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         mode = WorkbookModelMode(self.mode)
@@ -33,6 +43,10 @@ class WorkbookDisambiguation:
             raise WorkbookModelConfigurationError(
                 "required workbook disambiguation requires an adapter"
             )
+        if mode is not WorkbookModelMode.OFF:
+            from .disambiguation import WorkbookRegionDisambiguator
+
+            object.__setattr__(self, "_runtime", WorkbookRegionDisambiguator())
 
     @classmethod
     def off(cls) -> WorkbookDisambiguation:

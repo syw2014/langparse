@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import fields
+from threading import RLock
 
 from langparse.types import ParseDiagnostics
 
@@ -45,8 +46,17 @@ class WorkbookRegionDisambiguator:
     ) -> None:
         self._cache = MemoryDecisionCache() if cache is None else cache
         self._clock = clock
+        self._resolve_lock = RLock()
 
     def resolve(
+        self,
+        cases: Iterable[RegionAmbiguityCase],
+        configured: WorkbookDisambiguation,
+    ) -> RegionResolutionBatch:
+        with self._resolve_lock:
+            return self._resolve(cases, configured)
+
+    def _resolve(
         self,
         cases: Iterable[RegionAmbiguityCase],
         configured: WorkbookDisambiguation,

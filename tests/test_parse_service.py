@@ -244,6 +244,21 @@ def test_parse_service_passes_workbook_disambiguation_only_to_excel(tmp_path):
     assert len(adapter.requests) == 1
 
 
+def test_parse_service_reuses_configured_workbook_cache_across_calls(tmp_path):
+    source = sparse_workbook(tmp_path)
+    adapter = SelectingAdapter(kind="text")
+    configured = WorkbookDisambiguation.auto(adapter)
+    service = ParseService()
+
+    first = service.parse_result(source, workbook_disambiguation=configured)
+    second = service.parse_result(source, workbook_disambiguation=configured)
+
+    assert len(adapter.requests) == 1
+    assert first.diagnostics.model_calls[0]["cache_status"] == "miss"
+    assert second.diagnostics.model_calls[0]["cache_status"] == "hit"
+    assert second.diagnostics.model_calls[0]["attempts"] == 0
+
+
 def test_workbook_disambiguation_does_not_reach_pdf_engine(tmp_path):
     seen = {}
     pdf = tmp_path / "sample.pdf"

@@ -21,8 +21,10 @@ class SelectingAdapter:
     def __init__(self, *, kind: str) -> None:
         self.identity = ModelIdentity(provider="scripted", model="fixture", revision="1")
         self.kind = kind
+        self.requests = []
 
     def complete(self, request, *, timeout_seconds: float) -> ProviderReply:
+        self.requests.append((request, timeout_seconds))
         envelope = json.loads(request.body)
         case = envelope["cases"][0]
         selected = next(choice for choice in case["choices"] if choice["kind"] == self.kind)
@@ -149,6 +151,26 @@ def test_model_diagnostics_are_deterministic_and_json_serializable(tmp_path):
     )
 
 
+@pytest.mark.parametrize("mode", ["auto", "required"])
+def test_enabled_configuration_reuses_cache_across_repeated_excel_parser_parses(
+    tmp_path,
+    mode: str,
+):
+    path = sparse_workbook(tmp_path)
+    adapter = SelectingAdapter(kind="text")
+    configured = getattr(WorkbookDisambiguation, mode)(adapter)
+    parser = ExcelParser(disambiguation=configured)
+
+    first = parser.parse_result(path)
+    second = parser.parse_result(path)
+
+    assert len(adapter.requests) == 1
+    assert first.diagnostics.model_calls[0]["cache_status"] == "miss"
+    assert second.diagnostics.model_calls[0]["cache_status"] == "hit"
+    assert second.diagnostics.model_calls[0]["attempts"] == 0
+    assert first.structure == second.structure
+
+
 def test_excel_parser_does_not_swallow_required_disambiguation_failure(tmp_path):
     path = sparse_workbook(tmp_path)
     parser = ExcelParser(disambiguation=WorkbookDisambiguation.required(AbstainingAdapter()))
@@ -200,7 +222,7 @@ def test_excel_parser_default_off_cannot_create_model_or_network_work(
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-be-read")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "must-not-be-read")
     monkeypatch.setattr(
-        "langparse.workbooks.assembly.WorkbookRegionDisambiguator",
+        "langparse.workbooks.modeling.disambiguation.MemoryDecisionCache",
         lambda: (_ for _ in ()).throw(AssertionError("model runtime must not be constructed")),
     )
 

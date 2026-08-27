@@ -265,11 +265,55 @@ def test_auto_materialization_failure_returns_the_deterministic_unclassified_blo
 
     block = ir.sheets[0].blocks[0]
     assert block.kind == "unclassified"
-    assert block.diagnostics == [
-        {"reason_code": "semantic_block_fallback", "error_type": "RuntimeError"}
-    ]
+    assert block.diagnostics == [{"reason_code": "insufficient_semantic_evidence"}]
     assert diagnostics.model_calls[0]["outcome"] == "materialization_error"
     assert "secret body" not in repr(diagnostics)
+
+
+@pytest.mark.parametrize("mode", ["auto", "required"])
+def test_second_materialization_failure_atomically_reverts_every_attempted_selection(
+    monkeypatch,
+    mode: str,
+):
+    from langparse.workbooks import assembly as assembly_module
+
+    snapshot = sparse_text_snapshot(two_regions=True)
+    original = assembly_module.interpret_text_block
+    calls = 0
+
+    def fail_second(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("private second materialization")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(assembly_module, "interpret_text_block", fail_second)
+    configured = getattr(WorkbookDisambiguation, mode)(SelectingAdapter(kind="text"))
+
+    if mode == "auto":
+        ir, diagnostics = assemble_workbook(snapshot, disambiguation=configured)
+    else:
+        with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+            assemble_workbook(snapshot, disambiguation=configured)
+        diagnostics = caught.value.diagnostics
+        ir = None
+        assert caught.value.case_ids == tuple(audit["case_id"] for audit in diagnostics.model_calls)
+
+    if ir is not None:
+        assert [block.kind for block in ir.sheets[0].blocks] == [
+            "unclassified",
+            "unclassified",
+        ]
+    assert [audit["outcome"] for audit in diagnostics.model_calls] == [
+        "materialization_error",
+        "materialization_error",
+    ]
+    assert [audit["validation_codes"] for audit in diagnostics.model_calls] == [
+        ("materialization_error",),
+        ("materialization_error",),
+    ]
+    assert "private second materialization" not in repr(diagnostics)
 
 
 def test_default_and_off_are_deep_equal_and_do_not_construct_model_runtime(monkeypatch):
@@ -277,7 +321,7 @@ def test_default_and_off_are_deep_equal_and_do_not_construct_model_runtime(monke
     expected_ir, expected_diagnostics = assemble_workbook(snapshot)
 
     monkeypatch.setattr(
-        "langparse.workbooks.assembly.WorkbookRegionDisambiguator",
+        "langparse.workbooks.modeling.disambiguation.MemoryDecisionCache",
         lambda: (_ for _ in ()).throw(AssertionError("model runtime must not be constructed")),
     )
 

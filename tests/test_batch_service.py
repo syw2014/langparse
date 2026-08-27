@@ -1,12 +1,19 @@
+import json
 from pathlib import Path
+from threading import Lock
 
 import pytest
 from openpyxl import Workbook
 
 from langparse.metrics import BatchRunResult
 from langparse.services.batch_service import BatchParseService
+from langparse.services.parse_service import ParseService
 from langparse.types import Chunk, ParsedDocumentResult, ParsedPageResult
-from langparse.workbooks.modeling import WorkbookDisambiguation
+from langparse.workbooks.modeling import (
+    ModelIdentity,
+    ProviderReply,
+    WorkbookDisambiguation,
+)
 
 
 class StubParseService:
@@ -64,6 +71,50 @@ class StubParseService:
 
     def render_output(self, parsed, fmt, chunks=None):
         return parsed.markdown_content if fmt == "markdown" else "{}"
+
+
+class SelectingAdapter:
+    identity = ModelIdentity(provider="scripted", model="fixture", revision="1")
+
+    def __init__(self) -> None:
+        self.requests = []
+
+    def complete(self, request, *, timeout_seconds: float) -> ProviderReply:
+        self.requests.append((request, timeout_seconds))
+        envelope = json.loads(request.body)
+        case = envelope["cases"][0]
+        selected = next(choice for choice in case["choices"] if choice["kind"] == "text")
+        return ProviderReply(
+            body=json.dumps(
+                {
+                    "schema_version": envelope["schema_version"],
+                    "request_checksum": request.request_checksum,
+                    "decisions": [
+                        {
+                            "case_id": case["case_id"],
+                            "status": "selected",
+                            "choice_id": selected["choice_id"],
+                            "confidence": 0.99,
+                            "reason_codes": ["scripted_selection"],
+                        }
+                    ],
+                },
+                separators=(",", ":"),
+            ).encode(),
+            provider_request_id="scripted-request",
+        )
+
+
+class CapturingParseService(ParseService):
+    def __init__(self) -> None:
+        self.results = []
+        self._results_lock = Lock()
+
+    def parse_result(self, *args, **kwargs):
+        result = super().parse_result(*args, **kwargs)
+        with self._results_lock:
+            self.results.append(result)
+        return result
 
 
 def test_batch_service_writes_outputs_and_summary(tmp_path):
@@ -214,6 +265,34 @@ def test_batch_service_reuses_workbook_disambiguation_without_engine_kwargs(tmp_
     assert parse_service.profiles_seen == [(True, "analysis"), (True, "analysis")]
     assert parse_service.engine_creation_kwargs == [{}]
     assert parse_service.engine_kwargs_seen == [{}, {}]
+
+
+def test_concurrent_batch_items_share_thread_safe_workbook_cache(tmp_path):
+    sources = []
+    for name in ("first", "second"):
+        source = tmp_path / f"{name}.xlsx"
+        workbook = Workbook()
+        workbook.active.title = "Data"
+        workbook.active["A1"] = "左上"
+        workbook.active["B2"] = "右下"
+        workbook.save(source)
+        sources.append(source)
+    adapter = SelectingAdapter()
+    configured = WorkbookDisambiguation.auto(adapter)
+    parse_service = CapturingParseService()
+
+    result = BatchParseService(parse_service=parse_service).run(
+        sources,
+        output_dir=None,
+        max_workers=2,
+        workbook_disambiguation=configured,
+    )
+
+    assert result.success_count == 2
+    assert len(adapter.requests) == 1
+    assert sorted(
+        parsed.diagnostics.model_calls[0]["cache_status"] for parsed in parse_service.results
+    ) == ["hit", "miss"]
 
 
 def test_batch_workbook_disambiguation_does_not_reach_pdf_engine(tmp_path, monkeypatch):

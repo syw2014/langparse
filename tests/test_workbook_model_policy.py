@@ -116,6 +116,16 @@ def test_policy_and_configuration_are_immutable():
         configured.policy.max_calls = 99
 
 
+def test_private_runtime_is_excluded_from_configuration_repr_and_equality():
+    adapter = RecordingAdapter()
+    first = WorkbookDisambiguation.auto(adapter)
+    second = WorkbookDisambiguation.auto(adapter)
+
+    assert first == second
+    assert "_runtime" not in repr(first)
+    assert "MemoryDecisionCache" not in repr(first)
+
+
 def test_provider_reply_usage_is_deeply_immutable_and_shape_checked():
     source_usage = {"input_tokens": 4}
     reply = ProviderReply(

@@ -144,7 +144,10 @@ def decode_model_reply(
     if len(reply.body) > max_response_bytes:
         raise WorkbookModelResponseError(f"response exceeds {max_response_bytes} bytes")
     try:
-        payload = json.loads(reply.body.decode("utf-8"))
+        payload = json.loads(
+            reply.body.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_json_members,
+        )
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise WorkbookModelResponseError("response is not valid JSON") from error
     if not isinstance(payload, dict):
@@ -224,6 +227,15 @@ def _canonical_json(payload: dict[str, object]) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+def _reject_duplicate_json_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in payload:
+            raise WorkbookModelResponseError("response contains duplicate JSON member")
+        payload[key] = value
+    return payload
 
 
 def _digest(payload: dict[str, object]) -> str:

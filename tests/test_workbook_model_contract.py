@@ -316,6 +316,31 @@ def test_strict_reply_accepts_only_registered_choice_membership():
     assert decision.reported_confidence == 0.91
 
 
+@pytest.mark.parametrize("duplicate_location", ["response", "decision"])
+def test_strict_reply_rejects_duplicate_json_members_recursively(duplicate_location: str):
+    request, choice = request_and_choice_fixture()
+    checksum = json.dumps(request.request_checksum)
+    case_id = json.dumps(request.case_ids[0])
+    choice_id = json.dumps(choice.choice_id)
+    choice_members = f'"choice_id":{choice_id}'
+    if duplicate_location == "decision":
+        choice_members = f'{choice_members},"choice_id":{choice_id}'
+    decision = (
+        f'{{"case_id":{case_id},"status":"selected",{choice_members},'
+        '"confidence":0.91,"reason_codes":[]}'
+    )
+    checksum_members = f'"request_checksum":{checksum}'
+    if duplicate_location == "response":
+        checksum_members = f'{checksum_members},"request_checksum":{checksum}'
+    reply = ProviderReply(
+        body=(f'{{"schema_version":1,{checksum_members},"decisions":[{decision}]}}').encode(),
+        provider_request_id=None,
+    )
+
+    with pytest.raises(WorkbookModelResponseError, match="duplicate JSON member"):
+        decode_model_reply(reply, request, max_response_bytes=128_000)
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [

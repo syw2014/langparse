@@ -23,6 +23,11 @@ from .ports import (
     WorkbookStructureModelAdapter,
 )
 from .types import (
+    REGION_PRIVACY_VERSION,
+    REGION_PROMPT_VERSION,
+    REGION_RULE_VERSION,
+    REGION_SCHEMA_VERSION,
+    REGION_VALIDATOR_VERSION,
     ModelCallAudit,
     ModelIdentity,
     ProviderReply,
@@ -575,6 +580,9 @@ def _audit(
     reported_confidence: float | None = None,
     error: Exception | None = None,
 ) -> ModelCallAudit:
+    fallback_choice = next(
+        choice for choice in case.choices if choice.choice_id == case.fallback_choice_id
+    )
     provider, provider_redacted = _safe_identity_token(
         identity.provider if identity is not None else None,
         required=identity is not None,
@@ -603,6 +611,12 @@ def _audit(
         case_id=case.case_id,
         source_range=case.source_range,
         mode=mode.value,
+        schema_version=REGION_SCHEMA_VERSION,
+        prompt_version=REGION_PROMPT_VERSION,
+        rule_version=REGION_RULE_VERSION,
+        validator_version=REGION_VALIDATOR_VERSION,
+        privacy_version=REGION_PRIVACY_VERSION,
+        rule_confidence=fallback_choice.local_score,
         provider=provider,
         model=model,
         model_revision=model_revision,

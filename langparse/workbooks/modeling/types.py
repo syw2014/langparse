@@ -12,6 +12,7 @@ REGION_SCHEMA_VERSION = 1
 REGION_PROMPT_VERSION = "region-choice-v1"
 REGION_RULE_VERSION = "region-rules-v1"
 REGION_VALIDATOR_VERSION = "region-validator-v1"
+REGION_PRIVACY_VERSION = "region-privacy-v1"
 
 RegionFeatureScalar: TypeAlias = str | int | float | bool | None
 
@@ -158,6 +159,12 @@ class ModelCallAudit:
     case_id: str
     source_range: str
     mode: str
+    schema_version: int
+    prompt_version: str
+    rule_version: str
+    validator_version: str
+    privacy_version: str
+    rule_confidence: float
     provider: str | None
     model: str | None
     model_revision: str | None

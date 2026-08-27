@@ -13,6 +13,13 @@ from langparse.workbooks.modeling import (
     RequiredWorkbookDisambiguationError,
     WorkbookDisambiguation,
 )
+from langparse.workbooks.modeling.types import (
+    REGION_PRIVACY_VERSION,
+    REGION_PROMPT_VERSION,
+    REGION_RULE_VERSION,
+    REGION_SCHEMA_VERSION,
+    REGION_VALIDATOR_VERSION,
+)
 from langparse.workbooks.types import CellSnapshot, SheetSnapshot, WorkbookSnapshot
 
 
@@ -409,6 +416,24 @@ def test_required_hidden_sheet_uses_a_content_free_local_case_id_without_adapter
     assert first_error.diagnostics.model_calls[0]["case_id"] == first_error.case_ids[0]
     assert first_error.diagnostics.model_calls[0]["outcome"] == "hidden_content"
     assert "hidden body" not in repr(first_error.diagnostics)
+    assert {
+        key: first_error.diagnostics.model_calls[0][key]
+        for key in (
+            "schema_version",
+            "prompt_version",
+            "rule_version",
+            "validator_version",
+            "privacy_version",
+            "rule_confidence",
+        )
+    } == {
+        "schema_version": REGION_SCHEMA_VERSION,
+        "prompt_version": REGION_PROMPT_VERSION,
+        "rule_version": REGION_RULE_VERSION,
+        "validator_version": REGION_VALIDATOR_VERSION,
+        "privacy_version": REGION_PRIVACY_VERSION,
+        "rule_confidence": 0.5,
+    }
 
 
 @pytest.mark.parametrize("hidden_fact", ["row", "column", "cell"])

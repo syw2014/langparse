@@ -30,8 +30,14 @@ from langparse.workbooks.modeling import (
     build_region_case,
 )
 from langparse.workbooks.modeling.contract import _candidate_envelope_has_formula
-from langparse.workbooks.modeling.disambiguation import _audit_payload
-from langparse.workbooks.modeling.types import REGION_RULE_VERSION
+from langparse.workbooks.modeling.disambiguation import _audit_payload, _safe_error_type
+from langparse.workbooks.modeling.types import (
+    REGION_PRIVACY_VERSION,
+    REGION_PROMPT_VERSION,
+    REGION_RULE_VERSION,
+    REGION_SCHEMA_VERSION,
+    REGION_VALIDATOR_VERSION,
+)
 from langparse.workbooks.regions import detect_candidate_regions
 from langparse.workbooks.tables import interpret_logical_table
 from langparse.workbooks.types import (
@@ -262,6 +268,7 @@ def _region_drafts(
                         case_id,
                         candidate,
                         configured,
+                        rule_confidence=assessment.deterministic.confidence,
                         outcome=unavailable_outcome,
                     )
                 else:
@@ -272,8 +279,9 @@ def _region_drafts(
                             case_id,
                             candidate,
                             configured,
+                            rule_confidence=assessment.deterministic.confidence,
                             outcome="case_unavailable",
-                            error_type=type(error).__name__,
+                            error=error,
                         )
                     else:
                         case_id = case.case_id
@@ -329,13 +337,20 @@ def _local_unavailable_audit(
     candidate: CandidateRegion,
     configured: WorkbookDisambiguation,
     *,
+    rule_confidence: float,
     outcome: str,
-    error_type: str | None = None,
+    error: Exception | None = None,
 ) -> ModelCallAudit:
     return ModelCallAudit(
         case_id=case_id,
         source_range=candidate.source_ref.range,
         mode=configured.mode.value,
+        schema_version=REGION_SCHEMA_VERSION,
+        prompt_version=REGION_PROMPT_VERSION,
+        rule_version=REGION_RULE_VERSION,
+        validator_version=REGION_VALIDATOR_VERSION,
+        privacy_version=REGION_PRIVACY_VERSION,
+        rule_confidence=rule_confidence,
         provider=None,
         model=None,
         model_revision=None,
@@ -351,7 +366,7 @@ def _local_unavailable_audit(
         reported_confidence=None,
         validation_codes=(outcome,),
         reason_codes=("deterministic_fallback",),
-        error_type=error_type,
+        error_type=_safe_error_type(error),
     )
 
 
@@ -480,7 +495,7 @@ def _materialize_region(snapshot_source, draft: _RegionDraft, resolutions_by_cas
                 "materialization_error",
             ),
             reason_codes=("semantic_block_fallback",),
-            error_type=type(exc).__name__,
+            error_type=_safe_error_type(exc),
         )
         return _MaterializedRegion(
             draft=draft,

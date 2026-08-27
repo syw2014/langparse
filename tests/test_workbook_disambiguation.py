@@ -16,6 +16,11 @@ from langparse.workbooks.modeling.ports import (
     RequiredWorkbookDisambiguationError,
 )
 from langparse.workbooks.modeling.types import (
+    REGION_PRIVACY_VERSION,
+    REGION_PROMPT_VERSION,
+    REGION_RULE_VERSION,
+    REGION_SCHEMA_VERSION,
+    REGION_VALIDATOR_VERSION,
     ModelIdentity,
     ProviderReply,
     RegionAmbiguityCase,
@@ -314,6 +319,61 @@ def test_auto_applies_a_registered_choice_but_not_model_confidence():
     assert resolution.audit.reported_confidence == 0.99
     assert resolution.audit.reason_codes == ()
     assert selected.local_score == 0.4
+
+
+def test_model_call_audits_include_complete_local_provenance_and_rule_confidence():
+    case = ambiguity_case_fixture()
+    adapter = ScriptedAdapter.selected(case)
+
+    result = WorkbookRegionDisambiguator().resolve(
+        [case],
+        WorkbookDisambiguation.auto(adapter),
+    )
+
+    audit = result.resolutions[0].audit
+    assert audit is not None
+    assert (
+        audit.schema_version,
+        audit.prompt_version,
+        audit.rule_version,
+        audit.validator_version,
+        audit.privacy_version,
+        audit.rule_confidence,
+    ) == (
+        REGION_SCHEMA_VERSION,
+        REGION_PROMPT_VERSION,
+        REGION_RULE_VERSION,
+        REGION_VALIDATOR_VERSION,
+        REGION_PRIVACY_VERSION,
+        0.6,
+    )
+
+
+def test_required_error_serializes_complete_local_audit_provenance():
+    case = ambiguity_case_fixture()
+
+    with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+        WorkbookRegionDisambiguator().resolve(
+            [case],
+            WorkbookDisambiguation.required(ScriptedAdapter.abstained(case)),
+        )
+
+    audit = caught.value.diagnostics.model_calls[0]
+    assert {
+        "schema_version": audit["schema_version"],
+        "prompt_version": audit["prompt_version"],
+        "rule_version": audit["rule_version"],
+        "validator_version": audit["validator_version"],
+        "privacy_version": audit["privacy_version"],
+        "rule_confidence": audit["rule_confidence"],
+    } == {
+        "schema_version": REGION_SCHEMA_VERSION,
+        "prompt_version": REGION_PROMPT_VERSION,
+        "rule_version": REGION_RULE_VERSION,
+        "validator_version": REGION_VALIDATOR_VERSION,
+        "privacy_version": REGION_PRIVACY_VERSION,
+        "rule_confidence": 0.6,
+    }
 
 
 def test_auto_redacts_reply_reasons_and_unsafe_adapter_identity_from_audit():

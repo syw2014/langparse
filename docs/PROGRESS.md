@@ -3,7 +3,7 @@
 **版本**: 0.0.1（`pyproject.toml`，未发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
 **最后更新**: 2026-08-27
-**测试**: 575 passed；Ruff lint `All checks passed!`，format `111 files already formatted`
+**测试**: 579 passed；Ruff lint `All checks passed!`，format `111 files already formatted`
 
 > 本文档在 2026-07-30 重写。此前版本声称 v0.1.0、测试覆盖 100%、解析器完成度 100%，三项均与实际不符，已按代码现状订正。2026-08-03 补充"项目定位"一节并重排"已知缺口"优先级，理由见下。
 
@@ -49,7 +49,7 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | Benchmark | 可用 | 结构阈值 + 保真度（文本编辑距离 / 表格 TEDS），需 manifest 提供参考输出 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-"575 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+"579 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
 
 ---
 
@@ -123,7 +123,7 @@ langparse/
    chunks 携带版本化 profile/visibility metadata，analysis 额外提供 source-linked
    normalized records。真实 15-Sheet 工作簿回归中 retrieval 保持 39 chunks，两套
    profile 均精确守恒 228 个 data/total `row_id`，analysis 的 `table_rows` chunk 数
-   不多于 retrieval；当前全量测试为 575 passed。
+   不多于 retrieval；当前全量测试为 579 passed。
 6. **Phase 4 可选模型 fallback（整体未完成）**：模型不能改写事实层，各子阶段独立过门：
    - ✅ **Phase 4A（2026-08-26）安全的 region-kind 消歧核心**：完成 typed
      `WorkbookDisambiguation`/Adapter port、默认 `off` 的零 provider/config/cache/network
@@ -132,7 +132,7 @@ langparse/
      total Adapter boundary、required error passthrough、完整版本/rule-confidence 审计，以及
      工作簿级原子 rollback 和全部既有本地 validators。privacy 版本使 fact/cache key 正确
      失效，canonical 结构摘要使 choice ID 正确失效；所有 service convenience entry point
-     都有直接 forwarding/PDF isolation 回归。focused 为 232 passed，全量为 575 passed；
+     都有直接 forwarding/PDF isolation 回归。focused 为 236 passed，全量为 579 passed；
      Ruff lint/format 与 diff
      check 通过。只读
      私有工作簿验收保持 retrieval 39、analysis 20、logical rows 228、accepted continuation

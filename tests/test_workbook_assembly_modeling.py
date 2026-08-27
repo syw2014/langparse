@@ -165,6 +165,19 @@ def nonexportable_sparse_snapshot(hidden_fact: str) -> WorkbookSnapshot:
     return snapshot
 
 
+def _force_tentative_and_rollback_validator_failures(monkeypatch):
+    source_ref_results = iter(((0.5, ["Data!Z99"]), (1.0, [])))
+    row_conservation_results = iter((True, False))
+    monkeypatch.setattr(
+        "langparse.workbooks.assembly.validate_workbook_source_refs",
+        lambda *_args, **_kwargs: next(source_ref_results),
+    )
+    monkeypatch.setattr(
+        "langparse.workbooks.assembly._row_conservation_passed",
+        lambda *_args, **_kwargs: next(row_conservation_results),
+    )
+
+
 def test_auto_materializes_a_selected_choice_from_snapshot_facts():
     snapshot = sparse_text_snapshot()
     adapter = SelectingAdapter(kind="text")
@@ -647,3 +660,79 @@ def test_required_validation_failure_raises_all_reverted_case_ids(monkeypatch):
         "validation_error",
     ]
     assert "Data!Z99" not in repr(caught.value.diagnostics)
+
+
+def test_auto_rollback_validator_failure_keeps_partial_deterministic_ir(monkeypatch):
+    snapshot = sparse_text_snapshot(two_regions=True)
+    _force_tentative_and_rollback_validator_failures(monkeypatch)
+
+    ir, diagnostics = assemble_workbook(
+        snapshot,
+        disambiguation=WorkbookDisambiguation.auto(SelectingAdapter(kind="text")),
+    )
+
+    assert [block.kind for block in ir.sheets[0].blocks] == [
+        "unclassified",
+        "unclassified",
+    ]
+    assert diagnostics.status == "partial"
+    assert diagnostics.ambiguous_regions == [
+        {
+            "sheet_name": "Data",
+            "range": "A1:B2",
+            "candidate_kind": "unclassified",
+            "confidence": 0.5,
+            "reason_codes": ["insufficient_semantic_evidence"],
+        },
+        {
+            "sheet_name": "Data",
+            "range": "A5:B6",
+            "candidate_kind": "unclassified",
+            "confidence": 0.5,
+            "reason_codes": ["insufficient_semantic_evidence"],
+        },
+    ]
+    assert [audit["outcome"] for audit in diagnostics.model_calls] == [
+        "validation_error",
+        "validation_error",
+    ]
+    assert [audit["validation_codes"] for audit in diagnostics.model_calls] == [
+        ("invalid_source_refs", "row_conservation_failed"),
+        ("invalid_source_refs", "row_conservation_failed"),
+    ]
+
+
+def test_required_rollback_validator_failure_raises_complete_typed_error(monkeypatch):
+    snapshot = sparse_text_snapshot(two_regions=True)
+    _force_tentative_and_rollback_validator_failures(monkeypatch)
+
+    with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+        assemble_workbook(
+            snapshot,
+            disambiguation=WorkbookDisambiguation.required(SelectingAdapter(kind="text")),
+        )
+
+    diagnostics = caught.value.diagnostics
+    assert caught.value.case_ids == tuple(audit["case_id"] for audit in diagnostics.model_calls)
+    assert len(caught.value.case_ids) == 2
+    assert diagnostics.status == "failed"
+    assert [item["candidate_kind"] for item in diagnostics.ambiguous_regions] == [
+        "unclassified",
+        "unclassified",
+    ]
+    assert [audit["validation_codes"] for audit in diagnostics.model_calls] == [
+        ("invalid_source_refs", "row_conservation_failed"),
+        ("invalid_source_refs", "row_conservation_failed"),
+    ]
+    assert all(
+        {
+            "schema_version",
+            "prompt_version",
+            "rule_version",
+            "validator_version",
+            "privacy_version",
+            "rule_confidence",
+        }.issubset(audit)
+        for audit in diagnostics.model_calls
+    )
+    assert "Data!Z99" not in repr(diagnostics.model_calls)

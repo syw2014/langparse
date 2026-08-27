@@ -101,6 +101,19 @@ def sparse_workbook(tmp_path):
     return path
 
 
+def _force_tentative_and_rollback_validator_failures(monkeypatch):
+    source_ref_results = iter(((0.5, ["Data!Z99"]), (1.0, [])))
+    row_conservation_results = iter((True, False))
+    monkeypatch.setattr(
+        "langparse.workbooks.assembly.validate_workbook_source_refs",
+        lambda *_args, **_kwargs: next(source_ref_results),
+    )
+    monkeypatch.setattr(
+        "langparse.workbooks.assembly._row_conservation_passed",
+        lambda *_args, **_kwargs: next(row_conservation_results),
+    )
+
+
 def test_parse_file_uses_process_document_fast_path(tmp_path):
     class FastPathEngine:
         def __init__(self):
@@ -382,6 +395,23 @@ def test_parse_service_propagates_required_workbook_disambiguation_error(tmp_pat
 
     assert caught.value.case_ids
     assert caught.value.diagnostics.status == "failed"
+
+
+def test_parse_service_propagates_required_rollback_validator_failure(tmp_path, monkeypatch):
+    source = sparse_workbook(tmp_path)
+    _force_tentative_and_rollback_validator_failures(monkeypatch)
+
+    with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+        ParseService().parse_result(
+            source,
+            workbook_disambiguation=WorkbookDisambiguation.required(SelectingAdapter(kind="text")),
+        )
+
+    assert caught.value.case_ids == tuple(
+        audit["case_id"] for audit in caught.value.diagnostics.model_calls
+    )
+    assert caught.value.diagnostics.status == "failed"
+    assert caught.value.diagnostics.ambiguous_regions[0]["candidate_kind"] == "unclassified"
 
 
 @pytest.mark.parametrize("shape", ["identity", "reply"])

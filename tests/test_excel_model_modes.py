@@ -112,6 +112,19 @@ def sparse_workbook(tmp_path):
     return path
 
 
+def _force_tentative_and_rollback_validator_failures(monkeypatch):
+    source_ref_results = iter(((0.5, ["Data!Z99"]), (1.0, [])))
+    row_conservation_results = iter((True, False))
+    monkeypatch.setattr(
+        "langparse.workbooks.assembly.validate_workbook_source_refs",
+        lambda *_args, **_kwargs: next(source_ref_results),
+    )
+    monkeypatch.setattr(
+        "langparse.workbooks.assembly._row_conservation_passed",
+        lambda *_args, **_kwargs: next(row_conservation_results),
+    )
+
+
 def uncached_formula_workbook(tmp_path):
     path = tmp_path / "uncached-formula.xlsx"
     workbook = Workbook()
@@ -177,6 +190,22 @@ def test_excel_parser_does_not_swallow_required_disambiguation_failure(tmp_path)
 
     with pytest.raises(RequiredWorkbookDisambiguationError):
         parser.parse_result(path)
+
+
+def test_excel_parser_propagates_required_rollback_validator_failure(tmp_path, monkeypatch):
+    path = sparse_workbook(tmp_path)
+    _force_tentative_and_rollback_validator_failures(monkeypatch)
+
+    with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
+        ExcelParser(
+            disambiguation=WorkbookDisambiguation.required(SelectingAdapter(kind="text"))
+        ).parse_result(path)
+
+    assert caught.value.case_ids == tuple(
+        audit["case_id"] for audit in caught.value.diagnostics.model_calls
+    )
+    assert caught.value.diagnostics.status == "failed"
+    assert caught.value.diagnostics.ambiguous_regions[0]["candidate_kind"] == "unclassified"
 
 
 @pytest.mark.parametrize("shape", ["identity", "reply"])

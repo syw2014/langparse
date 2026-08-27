@@ -103,6 +103,7 @@ def assemble_workbook(
     attempted_regions = [region for region in materialized if region.selection_attempted]
     selected_regions = [region for region in attempted_regions if region.model_selected]
     reverted_case_ids: set[str] = set()
+    rollback_validation_codes: tuple[str, ...] = ()
     materialization_rollback = any(region.materialization_failed for region in attempted_regions)
     if materialization_rollback:
         reverted_case_ids = {
@@ -112,8 +113,6 @@ def assemble_workbook(
         }
         workbook_ir = _workbook_from_materialized(snapshot, materialized, rollback_selected=True)
         diagnostics, rollback_validation_codes = _finalize_workbook(snapshot, workbook_ir)
-        if set(rollback_validation_codes) - {"continuation_error"}:
-            raise RuntimeError("deterministic workbook rollback failed validation")
     elif tentative_validation_codes and selected_regions:
         reverted_case_ids = {
             region.draft.case.case_id
@@ -122,8 +121,6 @@ def assemble_workbook(
         }
         workbook_ir = _workbook_from_materialized(snapshot, materialized, rollback_selected=True)
         diagnostics, rollback_validation_codes = _finalize_workbook(snapshot, workbook_ir)
-        if set(rollback_validation_codes) - {"continuation_error"}:
-            raise RuntimeError("deterministic workbook rollback failed validation")
 
     unresolved_case_ids: list[str] = []
     finalized_audits: list[ModelCallAudit] = []
@@ -144,6 +141,7 @@ def assemble_workbook(
                         *audit.validation_codes,
                         "materialization_error",
                         *tentative_validation_codes,
+                        *rollback_validation_codes,
                     ),
                     reason_codes=("deterministic_fallback",),
                     error_type=audit.error_type if region.materialization_failed else None,
@@ -155,6 +153,7 @@ def assemble_workbook(
                     validation_codes=_stable_codes(
                         *audit.validation_codes,
                         *tentative_validation_codes,
+                        *rollback_validation_codes,
                     ),
                     reason_codes=("deterministic_fallback",),
                     error_type=None,

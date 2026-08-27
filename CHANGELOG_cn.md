@@ -46,7 +46,7 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
   了解析准确率；production provider 的效果验收仍属于 Phase 4B。
 
 ### 验证（Verification）
-- Phase 4A/service focused 门为 232 passed；项目全量为 575 passed。Ruff lint 为
+- Phase 4A/service focused 门为 236 passed；项目全量为 579 passed。Ruff lint 为
   `All checks passed!`，format 为 `111 files already formatted`，diff whitespace check
   无异常。
 - 只读私有工作簿保持 retrieval 39、analysis 20、logical data/total rows 228、accepted

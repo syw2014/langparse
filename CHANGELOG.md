@@ -56,8 +56,8 @@ version sections.
   parsing accuracy; production-provider effectiveness remains Phase 4B.
 
 ### Verification
-- Focused Phase 4A/service gates pass 232 tests; the full project suite passes
-  575 tests. Project Ruff lint reports `All checks passed!`, format reports
+- Focused Phase 4A/service gates pass 236 tests; the full project suite passes
+  579 tests. Project Ruff lint reports `All checks passed!`, format reports
   `111 files already formatted`, and the diff whitespace check is clean.
 - The read-only private workbook retains 39 retrieval chunks, 20 analysis
   chunks, 228 logical data/total rows, zero accepted continuations, and quality

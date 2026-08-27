@@ -3,6 +3,7 @@ from fractions import Fraction
 
 import pytest
 
+import langparse.workbooks.modeling as workbook_modeling
 from langparse.workbooks.modeling import (
     ModelIdentity,
     ProviderReply,
@@ -26,6 +27,13 @@ class RecordingAdapter:
     def complete(self, request: WorkbookModelRequest, *, timeout_seconds: float):
         self.requests.append((request, timeout_seconds))
         return ProviderReply(body=b"{}", provider_request_id=None, usage={})
+
+
+def test_modeling_package_does_not_export_internal_orchestration_helpers():
+    assert "WorkbookRegionDisambiguator" not in workbook_modeling.__all__
+    assert "build_region_case" not in workbook_modeling.__all__
+    assert not hasattr(workbook_modeling, "WorkbookRegionDisambiguator")
+    assert not hasattr(workbook_modeling, "build_region_case")
 
 
 def test_workbook_disambiguation_defaults_to_off_without_an_adapter():

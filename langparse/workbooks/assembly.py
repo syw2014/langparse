@@ -27,9 +27,11 @@ from langparse.workbooks.modeling import (
     RequiredWorkbookDisambiguationError,
     WorkbookDisambiguation,
     WorkbookModelMode,
+)
+from langparse.workbooks.modeling.contract import (
+    _candidate_envelope_has_formula,
     build_region_case,
 )
-from langparse.workbooks.modeling.contract import _candidate_envelope_has_formula
 from langparse.workbooks.modeling.disambiguation import _audit_payload, _safe_error_type
 from langparse.workbooks.modeling.types import (
     REGION_PRIVACY_VERSION,

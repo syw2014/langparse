@@ -39,7 +39,6 @@ __all__ = [
     "RegionResolutionBatch",
     "RequiredWorkbookDisambiguationError",
     "WorkbookDisambiguation",
-    "WorkbookRegionDisambiguator",
     "WorkbookModelConfigurationError",
     "WorkbookModelError",
     "WorkbookModelMode",
@@ -47,19 +46,4 @@ __all__ = [
     "WorkbookModelRequest",
     "WorkbookModelResponseError",
     "WorkbookStructureModelAdapter",
-    "build_region_case",
 ]
-
-
-def __getattr__(name: str):
-    """Load assessment-dependent exports after classification has initialized."""
-
-    if name == "build_region_case":
-        from .contract import build_region_case
-
-        return build_region_case
-    if name == "WorkbookRegionDisambiguator":
-        from .disambiguation import WorkbookRegionDisambiguator
-
-        return WorkbookRegionDisambiguator
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

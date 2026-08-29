@@ -10,7 +10,12 @@ from langparse.services.parse_service import ParseService
 from langparse.workbooks.assembly import assemble_workbook
 from langparse.workbooks.types import CellSnapshot, SheetSnapshot, WorkbookSnapshot
 
-PRIVATE_BUDGET_WORKBOOK = Path("/Users/jerryshi/Desktop/download/预算清单-gXF6T6B.xlsx")
+_DEFAULT_PRIVATE_BUDGET = Path("samples/private/预算清单-gXF6T6B.xlsx")
+PRIVATE_BUDGET_WORKBOOK = (
+    _DEFAULT_PRIVATE_BUDGET
+    if _DEFAULT_PRIVATE_BUDGET.exists()
+    else Path("/Users/jerryshi/Desktop/download/预算清单-gXF6T6B.xlsx")
+)
 
 
 def _snapshot(values: dict[str, object]) -> WorkbookSnapshot:

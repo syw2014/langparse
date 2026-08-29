@@ -33,7 +33,10 @@ class BatchParseService:
         collect_metrics: bool = True,
         chunk: bool = False,
         chunk_profile: str | None = None,
-        workbook_disambiguation: WorkbookDisambiguation | None = None,
+        workbook_disambiguation: str | WorkbookDisambiguation | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
         **kwargs,
     ) -> BatchRunResult:
         # No output directory means render to memory and let the caller print;
@@ -52,7 +55,19 @@ class BatchParseService:
             for relative in resolve_output_paths(paths, fmt)
         ]
 
-        engine = self.parse_service.create_engine(engine_name, **kwargs)
+        engine_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k
+            not in (
+                "model",
+                "api_key",
+                "base_url",
+                "workbook_disambiguation",
+                "disambiguation",
+            )
+        }
+        engine = self.parse_service.create_engine(engine_name, **engine_kwargs)
 
         job_args = [
             (
@@ -67,6 +82,9 @@ class BatchParseService:
                 chunk,
                 chunk_profile,
                 workbook_disambiguation,
+                model,
+                api_key,
+                base_url,
             )
             for path, output_path in zip(paths, output_paths, strict=True)
         ]
@@ -119,7 +137,10 @@ class BatchParseService:
         collect_metrics: bool,
         chunk: bool,
         chunk_profile: str | None,
-        workbook_disambiguation: WorkbookDisambiguation | None,
+        workbook_disambiguation: str | WorkbookDisambiguation | None,
+        model: str | None,
+        api_key: str | None,
+        base_url: str | None,
         **kwargs,
     ) -> tuple[BatchItemResult, str | None]:
         """Return the report item and, when nothing was written, the rendered text."""
@@ -139,6 +160,15 @@ class BatchParseService:
 
         start = time.perf_counter()
         try:
+            workbook_model_kwargs = {
+                key: value
+                for key, value in {
+                    "model": model,
+                    "api_key": api_key,
+                    "base_url": base_url,
+                }.items()
+                if value is not None
+            }
             parsed = self.parse_service.parse_result(
                 path,
                 engine_name=engine_name,
@@ -146,6 +176,7 @@ class BatchParseService:
                 chunk=chunk,
                 chunk_profile=chunk_profile,
                 workbook_disambiguation=workbook_disambiguation,
+                **workbook_model_kwargs,
                 **kwargs,
             )
             chunks = parsed.chunks if chunk else None

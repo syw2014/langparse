@@ -27,11 +27,11 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Install package with dev extras
-        run: uv pip install --system -e ".[dev]"
+      - name: Sync package with dev extras
+        run: uv sync --python ${{ matrix.python-version }} --extra dev --locked
 
       - name: Run tests
-        run: pytest -q --cov=langparse --cov-report=term-missing --cov-report=xml
+        run: uv run pytest -q --cov=langparse --cov-report=term-missing --cov-report=xml
 
       - name: Upload coverage
         if: matrix.python-version == '3.12'
@@ -50,11 +50,11 @@ jobs:
         with:
           version: latest
 
-      - name: Install ruff
-        run: uv pip install --system ruff
+      - name: Sync lint environment
+        run: uv sync --extra dev --locked
 
       - name: Lint
-        run: ruff check langparse tests
+        run: uv run ruff check langparse tests
 
       - name: Check formatting
-        run: ruff format --check langparse tests
+        run: uv run ruff format --check langparse tests

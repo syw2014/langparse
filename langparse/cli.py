@@ -12,10 +12,16 @@ from langparse.services.parse_service import ParseService
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(prog="langparse")
+    parser = argparse.ArgumentParser(
+        prog="langparse",
+        description="Parse documents and evaluate parsing quality.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    parse_cmd = subparsers.add_parser("parse")
+    parse_cmd = subparsers.add_parser(
+        "parse",
+        help="parse one document or a batch of documents",
+    )
     parse_cmd.add_argument("inputs", nargs="+")
     parse_cmd.add_argument("--engine", default=None)
     parse_cmd.add_argument("--device", default=None)
@@ -50,8 +56,25 @@ def build_parser():
         default="retrieval",
         help="choose retrieval-oriented or analysis-oriented chunks",
     )
+    parse_cmd.add_argument(
+        "--model",
+        nargs="?",
+        const="",
+        default=None,
+        help="enable model-assisted parsing (reads OPENAI_MODEL from env if model name omitted)",
+    )
+    parse_cmd.add_argument("--base-url", default=None, help="override OPENAI_BASE_URL")
+    parse_cmd.add_argument(
+        "--disambiguation",
+        choices=["off", "auto", "required"],
+        default=None,
+        help="workbook ambiguity resolution mode",
+    )
 
-    benchmark_cmd = subparsers.add_parser("benchmark")
+    benchmark_cmd = subparsers.add_parser(
+        "benchmark",
+        help="run the general parsing benchmark",
+    )
     benchmark_cmd.add_argument("manifest")
     benchmark_cmd.add_argument("--engine", default=None)
     benchmark_cmd.add_argument("--output-dir", default="reports")
@@ -63,6 +86,29 @@ def build_parser():
     benchmark_cmd.add_argument("--download-dir", default=None)
     benchmark_cmd.add_argument("--auto-install-runtime", action="store_true")
     benchmark_cmd.add_argument("--runtime-package", default=None)
+
+    eval_cmd = subparsers.add_parser(
+        "benchmark-workbook-ambiguity",
+        aliases=["eval", "eval-excel"],
+        help="evaluate workbook ambiguity handling from a manifest",
+        description=(
+            "Evaluate deterministic and optional live-model workbook ambiguity handling. "
+            "API keys are read from OPENAI_API_KEY, never command-line arguments."
+        ),
+    )
+    eval_cmd.add_argument("manifest")
+    eval_cmd.add_argument("--output-dir", default="reports/workbook-ambiguity")
+    eval_cmd.add_argument(
+        "--no-markdown", action="store_true", help="disable markdown summary output"
+    )
+    eval_cmd.add_argument(
+        "--model",
+        nargs="?",
+        const="",
+        default=None,
+        help="enable live model evaluation (reads OPENAI_MODEL from env if name omitted)",
+    )
+    eval_cmd.add_argument("--base-url", default=None, help="override OPENAI_BASE_URL")
     return parser
 
 
@@ -79,6 +125,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _run(args, parser) -> int:
+    if args.command in ("benchmark-workbook-ambiguity", "eval", "eval-excel"):
+        from langparse.services.workbook_ambiguity_benchmark import (
+            WorkbookAmbiguityBenchmarkService,
+        )
+
+        report = WorkbookAmbiguityBenchmarkService().run(
+            args.manifest,
+            output_dir=args.output_dir,
+            markdown=not args.no_markdown,
+            model=args.model,
+            base_url=args.base_url,
+        )
+        print(f"langparse: workbook ambiguity benchmark completed ({report.run_digest})")
+        return 0
+
     if args.command == "benchmark":
         benchmark_kwargs = {
             key: value
@@ -107,6 +168,17 @@ def _run(args, parser) -> int:
 
     service = ParseService()
     engine_name = args.engine or "simple"
+    disambiguation_mode = args.disambiguation or ("auto" if args.model is not None else None)
+    model_kwargs = {
+        key: value
+        for key, value in {
+            "workbook_disambiguation": disambiguation_mode,
+            "model": args.model,
+            "base_url": args.base_url,
+        }.items()
+        if value is not None
+    }
+
     parse_kwargs = {
         key: value
         for key, value in {
@@ -122,6 +194,7 @@ def _run(args, parser) -> int:
             "model_source": args.model_source,
             "auto_install_runtime": args.auto_install_runtime,
             "runtime_package": args.runtime_package,
+            **model_kwargs,
         }.items()
         if value is not None and value is not False
     }

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "dataset_id": "workbook-region-seed",
+  "dataset_version": "1",
+  "split": "tuning",
+  "source_root": "fixtures",
+  "samples": [
+    {
+      "sample_id": "sparse-region-fixable",
+      "path": "sparse_region.xlsx",
+      "sha256": "sha256:bed324028fcf734b93fd1d5bc438fdbe99e5b65c16beef199b10f60cf41a1e00",
+      "cohort": "ambiguous",
+      "cases": [
+        {
+          "label_id": "case-sparse-text",
+          "sheet_name": "Data",
+          "source_range": "A1:B2",
+          "expected": "text",
+          "fact_digest": "sha256:83d3fe57d2355fda103c3c81216fe3c9bc1136b845c2e576aa79296f1f1a7567",
+          "choices_digest": "sha256:680f412f87c6da20c5c72a11c604a696ffa4e325b01676f47b97b47a9d21e228"
+        }
+      ]
+    },
+    {
+      "sample_id": "sparse-region-risk",
+      "path": "risk_region.xlsx",
+      "sha256": "sha256:43e3372795e0a5b43548ed4762d243143fa83265e75524b88d343cad4891131a",
+      "cohort": "ambiguous",
+      "cases": [
+        {
+          "label_id": "case-sparse-unclassified",
+          "sheet_name": "Data",
+          "source_range": "A1:B2",
+          "expected": "unclassified",
+          "fact_digest": "sha256:762f7f0a8ffbafa38c8de2676e68a56a99f746b6a6dd92e18ebe6b3595a516a4",
+          "choices_digest": "sha256:680f412f87c6da20c5c72a11c604a696ffa4e325b01676f47b97b47a9d21e228"
+        }
+      ]
+    },
+    {
+      "sample_id": "clear-logical-table",
+      "path": "clear_table.xlsx",
+      "sha256": "sha256:608e513a05a6d589286ca927f06a9df25d0c8b6b6c74605594e4b15288efd7a4",
+      "cohort": "clear_no_call",
+      "cases": []
+    }
+  ]
+}

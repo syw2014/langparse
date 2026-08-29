@@ -2,8 +2,8 @@
 
 **版本**: 0.0.1（`pyproject.toml`，未发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
-**最后更新**: 2026-08-27
-**测试**: 579 passed；Ruff lint `All checks passed!`，format `111 files already formatted`
+**最后更新**: 2026-08-29
+**测试**: 649 passed；Ruff lint `All checks passed!`，format `130 files already formatted`
 
 > 本文档在 2026-07-30 重写。此前版本声称 v0.1.0、测试覆盖 100%、解析器完成度 100%，三项均与实际不符，已按代码现状订正。2026-08-03 补充"项目定位"一节并重排"已知缺口"优先级，理由见下。
 
@@ -39,17 +39,17 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | Excel 确定性逻辑表（Phase 2A） | 可用 | Sheet 内空白带多表区域、重复打印片段、多级表头、板块/数据/合计角色、语义 Markdown 与 source-aware `table_rows` chunks |
 | Excel Block 分类（Phase 2B1） | 可用 | 确定性区分 LogicalTable/Form/Matrix/Text/Unclassified，携带 confidence/reason codes/source-ref validity；mixed Sheet 全 Block 渲染和 chunk |
 | Excel 跨 Sheet 续接（Phase 2B2） | 可用 | 相邻逻辑表的高置信关联与聚合视图、模糊/拒绝候选诊断、源 Sheet Markdown/chunks 及 `continuation_id` 重组 metadata；continuation 模型契约仍属于 Phase 4D |
-| Excel 模型消歧安全核心（Phase 4A） | 安全核心可用（显式注入） | 默认 `off` 且零隐式模型网络；显式 `auto/required`、choice-only region-kind、严格响应/membership、本地 fallback/validators 与净化 diagnostics 已完成。没有内置 production provider Adapter；真实模型效果仍属于 Phase 4B |
+| Excel 模型消歧（Phase 4A/4B） | 可用（显式 opt-in） | 默认 `off` 且零隐式模型网络；显式 `auto/required`、choice-only region-kind、OpenAI SDK Adapter、env 配置、严格响应/membership、本地 fallback/validators、预算/熔断、净化 diagnostics 与不可变效果评测均已完成。公开 tuning seed 为 2/2 正确、0 错误接受；生产效果认证仍需代表性私有 holdout 与 operational evidence |
 | PDF 解析（simple） | 可用 | pdfplumber，含表格提取与扫描件 OCR 兜底 |
 | PDF 解析（MinerU） | 可用 | 经 `mineru-api`，含服务生命周期管理、表格/图片/caption 抽取 |
 | PDF 解析（DeepDoc） | 可用 | 移植自 RAGFlow：OCR + 版面分析 + 表格结构识别，ONNX/CPU 推理，模型按需从 HuggingFace `InfiniFlow/deepdoc` 下载到 `~/.langparse/models/deepdoc`；已知局限：复杂/多行竖排标签版式下表格结构识别仍可能出现行拆分或印章文字碎片误判为单元格 |
 | PDF 解析（vision_llm / paddle） | 未实现 | 已移出 `ENGINE_MAP`，选用时立即报错而非解析时才失败 |
 | 语义分块 | 可用 | 块扫描器 + 尺寸装箱，见 `chunkers/blocks.py` |
 | 批处理 / 指标 / 质检 | 可用 | 全格式生效 |
-| Benchmark | 可用 | 结构阈值 + 保真度（文本编辑距离 / 表格 TEDS），需 manifest 提供参考输出 |
+| Benchmark | 可用 | 通用解析 benchmark 提供结构阈值 + 保真度（文本编辑距离 / 表格 TEDS）；工作簿歧义 benchmark 提供严格 Golden Set、不可变报告与生产效果门 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-"579 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+"649 passed" 指用例全部通过，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
 
 ---
 
@@ -76,13 +76,16 @@ langparse/
 ├── workbooks/
 │   ├── types.py          # WorkbookSnapshot / WorkbookIR / source refs
 │   ├── adapters.py       # OOXML 事实提取
-│   ├── assembly.py       # 基线 IR + coverage/reconstruction diagnostics
+│   ├── assembly.py       # 结构装配 + coverage/reconstruction diagnostics
+│   ├── modeling/         # 可选模型消歧契约、OpenAI Adapter、预算与审计
+│   ├── evaluation/       # Golden Set schema、效果指标与生产放行判定
 │   └── rendering.py      # 坐标保真 Markdown / 兼容 Sheet 视图
 ├── engines/pdf/          # simple / mineru(+client, service) / deepdoc / 未实现的两个（vision_llm、paddle）
 └── services/
     ├── parse_service.py      # 单文件解析、渲染、扩展名路由
     ├── batch_service.py      # 并发批处理、JSONL/汇总
     ├── benchmark_service.py  # manifest 驱动的基准
+    ├── workbook_ambiguity_benchmark.py # 工作簿消歧评测与不可变报告
     ├── quality.py            # 质检阈值
     └── output_paths.py       # 输出路径去冲突
 ```
@@ -123,8 +126,9 @@ langparse/
    chunks 携带版本化 profile/visibility metadata，analysis 额外提供 source-linked
    normalized records。真实 15-Sheet 工作簿回归中 retrieval 保持 39 chunks，两套
    profile 均精确守恒 228 个 data/total `row_id`，analysis 的 `table_rows` chunk 数
-   不多于 retrieval；当前全量测试为 579 passed。
-6. **Phase 4 可选模型 fallback（整体未完成）**：模型不能改写事实层，各子阶段独立过门：
+   不多于 retrieval；当前全量测试为 649 passed。
+6. ✅ **Phase 4 可选模型 fallback 的可交付范围（2026-08-29）**：模型不能改写事实层；
+   默认离线路径和显式模型路径均已完成：
    - ✅ **Phase 4A（2026-08-26）安全的 region-kind 消歧核心**：完成 typed
      `WorkbookDisambiguation`/Adapter port、默认 `off` 的零 provider/config/cache/network
      路径、显式 `auto/required`、choice-only `selected | abstained` 严格协议、递归重复 JSON
@@ -132,26 +136,19 @@ langparse/
      total Adapter boundary、required error passthrough、完整版本/rule-confidence 审计，以及
      工作簿级原子 rollback 和全部既有本地 validators。privacy 版本使 fact/cache key 正确
      失效，canonical 结构摘要使 choice ID 正确失效；所有 service convenience entry point
-     都有直接 forwarding/PDF isolation 回归。focused 为 236 passed，全量为 579 passed；
-     Ruff lint/format 与 diff
-     check 通过。只读
-     私有工作簿验收保持 retrieval 39、analysis 20、logical rows 228、accepted continuation
-     0、quality `(1.0, True, 1.0)`，`auto` 零 Adapter 请求且 structure/Markdown 与 off
-     相等，源文件完整 stat 前后相同。Phase 4A 没有内置 production provider Adapter，
-     因此这里只证明安全与兼容，不证明真实模型提高了解析准确率。
-   - ⬜ **Phase 4B 真实 provider 与效果门**：至少一个 production Adapter、显式 CLI/config、
-     Golden Set/staging 的准确率与错误接受率、延迟/成本/失败率、隐私与 Prompt Injection
-     请求审计、kill switch/rollback 证据仍未完成。
-   - ⬜ **Phase 4C 局部截图/VLM**：显式开启的候选区域截图、图像隐私边界和 VLM 验证
-     仍未实现。
-   - ⬜ **Phase 4D 第二个领域契约**：continuation 或 header hierarchy 的第二个真实契约，
-     以及是否抽取通用 adjudication Interface 的评估仍未完成。
-   Final review 的 Critical、Important 与四个 localized Minor 已在同一 fix wave 中关闭；
-   Phase 4A 当前没有遗留的已知 review finding。真实 provider/效果、截图/VLM 与第二领域
-   契约仍分别受 Phase 4B/C/D 门约束。
-7. ⬜ **Phase 5 格式、语义 Block 与 bundle**：补齐 `.xls/.xlsb` rich adapters、
-   图片/图表语义 Block，以及 `document.json`、raw/semantic Markdown、chunks、
-   diagnostics 的标准输出包；完成生产加固后再进入发布门。
+     都有直接 forwarding/PDF isolation 回归。
+   - ✅ **Phase 4B（2026-08-28）真实 provider 与效果门基础设施**：已提供显式启用的
+     OpenAI SDK Adapter、`OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` 环境配置、
+     CLI/Library/Batch 路径、严格 JSON Schema、provider identity、token/cost 熔断、retry、
+     fallback、kill switch、凭证隔离、Prompt Injection 数据边界、Golden Set schema、
+     不可变评测产物与 `production_ready` 判定。公开 tuning seed 的真实 provider 结果为
+     2/2 正确、错误接受 0、修复基线错误 1、引入错误 0、clear sample 误调用 0。
+   - **效果放行边界**：上述结果证明 provider 路径可用，但不把 2 个 tuning case 冒充生产
+     统计证据。生产效果认证仍要求代表性私有 holdout（至少 30 个 ambiguous cases）以及
+     latency/cost/failure/privacy/rollback 的 operational evidence；这是部署验收门，不是
+     当前复杂 Excel 功能缺失。
+   - **可选未来扩展（不阻塞当前功能完成）**：局部截图/VLM、continuation/header hierarchy
+     的第二模型契约、富信息 `.xls/.xlsb` adapter、图片/图表语义 Block 和标准 bundle 输出。
 
 **P0 —— 直接验证"通用引擎与垂直引擎平权"这条核心主张**
 1. ✅ **已完成（2026-08-05）——把 DeepDoc 从占位实现补成真实可用**：[langparse/engines/pdf/deepdoc_engine.py](../langparse/engines/pdf/deepdoc_engine.py) 现在是移植自 RAGFlow 的完整 OCR + 版面分析 + 表格结构识别流水线（ONNX/CPU 推理，见 `langparse/engines/pdf/deepdoc/`），已注册进 `ENGINE_MAP`，`--engine deepdoc` 端到端可用，CLI 无需新增任何 flag（`--device` `--model-dir` `--download-dir` `--model-policy` 本就是通用转发的 kwargs）。用真实扫描件 PDF 做过一次人工冒烟验证（非 CI 用例，模型从 HuggingFace `InfiniFlow/deepdoc` 首次运行时下载到 `~/.langparse/models/deepdoc`）：产出的 `markdown_content` 是可读的中文文本和结构化表格，整体非乱码非空。对照源图像逐项核对后，发现两类已知局限而非"完美识别"：字符级 OCR 误差（"竣工"识别成"峻工"、两处日期字段缺字/错位，属扫描件 OCR 正常范围）之外，表格结构重建在复杂版式下有真实缺陷——源文档一段竖排多字标签被表格结构识别器拆成 5 行乱序字符，另有 2 行在源图像里找不到对应内容，疑似红色签章文字碎片被误判为单元格；后者是表格结构还原本身的局限，不是简单的字符识别误差（见上方完成度表 DeepDoc 行的注记）。跑起来的垂直引擎从 MinerU 一个变成两个，"平权"主张不再只有单一样本支撑，但表格结构还原在复杂版式上的鲁棒性仍是待改进项，不宜过度宣称"识别干净"。

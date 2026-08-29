@@ -6,6 +6,55 @@ PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
 [语义化版本](https://semver.org/lang/zh-CN/) 的版本分区格式。
 
+## [2026-08-29]
+
+### 修复（Fixed）
+- 零依赖核心安装执行 `import langparse` 和 `langparse --help` 时，不再经由工作簿导出或
+  歧义评测命令提前导入 `openpyxl`；Excel 和 provider 依赖只在显式选择对应能力时加载。
+- GitHub 测试任务改用 uv 项目虚拟环境，不再写入受外部管理的系统 Python；PyPI 工作流
+  在发布前强制执行全量测试、lint、format 与构建门。
+
+### 验证（Verification）
+- 全量测试 649 passed；130 个 Python 文件的 Ruff lint/format、workflow YAML 与 diff
+  whitespace 检查全部通过，锁定依赖的 CI 安装命令成功。
+- 全新 wheel 分别通过零依赖 import/CLI 冒烟，以及安装 `excel,model` extras 后对 15-Sheet
+  预算工作簿的真实解析。该工作簿重建成功、warning/error 均为 0，并生成 39 个 retrieval
+  chunks 与 20 个 analysis chunks，全部保留完整来源引用。
+
+## [2026-08-28]
+
+### 新增（Added）
+- 新增显式启用的 Phase 4B OpenAI SDK 工作簿 Adapter、基于环境变量的配置、严格 JSON
+  Schema 响应契约、进入 benchmark digest 的 provider identity，以及
+  `benchmark-workbook-ambiguity` 评估命令。
+- 新增 fail-closed token/cost 熔断器，以及校验完整 artifact 集的、按内容寻址的不可变
+  benchmark 报告。
+
+### 变更（Changed）
+- Batch 解析不再把模型 credential 混入 engine options，只在工作簿消歧边界传递；CLI
+  进程参数不再接受 API Key，secret 统一从环境配置读取。
+- 真实模型评估改为对生产严格 decode 后的最终 audit outcome 计分，不再宽松解析原始
+  reply。checksum 错误、缺失 usage、缺少显式版本化成本费率、负 usage 和付费无效 retry
+  均 fail closed。
+- `production_ready` 额外要求 holdout split、至少 30 个 ambiguous cases 和独立的
+  operational staging evidence；仓库内置 tuning seed 永远不能完成生产认证。
+- 报告重放会比较全部 regular artifacts，`source_root` 必须是相对路径，报告目录名兼容
+  跨平台，模型 identity 参与 run digest。
+- OpenAI-compatible provider 现在会收到明确的 choice 语义与精确 status 指令，并使用
+  零 temperature 和固定 seed。prompt contract 升级为 `region-choice-v2`；包含 `/` 的
+  路由模型名仍可审计，全部模型契约版本都参与 benchmark digest。
+
+### 已知限制
+- usage 预算是响应后的熔断器，不是账单硬保证：第一次 provider 调用仍可能超过配置预算。
+  真实生产放行仍需私有 holdout、staging、隐私、延迟、成本和回滚证据。
+
+### 验证（Verification）
+- 全量测试 648 passed；129 个 Python 文件的 Ruff lint 与 format 检查通过，lockfile 与
+  whitespace 检查干净，默认离线 CLI 的模型调用数为 0，sdist 与 wheel 均构建成功。
+- 使用 OpenAI-compatible 真实服务运行公开 tuning seed：所有响应均 1 次尝试通过严格
+  契约，2/2 case 正确，修复 1 个基线错误，引入错误 0，clear sample 误调用 0。由于仍
+  缺少 holdout、最低样本数和 operational evidence，系统按预期保持非 production-ready。
+
 ## [2026-08-26]
 
 ### 新增（Added）

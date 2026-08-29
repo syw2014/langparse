@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import fields
 from threading import RLock
+from typing import Any
 
 from langparse.types import ParseDiagnostics
 
@@ -83,7 +85,19 @@ class WorkbookRegionDisambiguator:
             for index, case in enumerate(_visible_cases(ordered_cases))
             if index < visible_limit
         )
-        identity, identity_error = self._read_identity(configured, eligible_visible_cases)
+
+        kill_switch_active = policy.kill_switch or os.environ.get("LANGPARSE_DISABLE_MODEL") in (
+            "1",
+            "true",
+            "TRUE",
+            "yes",
+        )
+
+        identity, identity_error = (
+            (None, None)
+            if kill_switch_active
+            else self._read_identity(configured, eligible_visible_cases)
+        )
         adapter = configured.adapter
         workbook_started = self._clock() if eligible_visible_cases else None
         deadline = (
@@ -96,6 +110,7 @@ class WorkbookRegionDisambiguator:
         audits: list[ModelCallAudit] = []
         unresolved_case_ids: list[str] = []
         call_budget = [0]
+        quota_tracker = {"tokens": 0, "cost_usd": 0.0}
         visible_index = 0
         for case in ordered_cases:
             if case.sheet_visibility != "visible":
@@ -104,6 +119,13 @@ class WorkbookRegionDisambiguator:
                     configured.mode,
                     outcome="hidden_sheet",
                 )
+            elif kill_switch_active:
+                resolution, audit = self._local_failure(
+                    case,
+                    configured.mode,
+                    outcome="kill_switch_activated",
+                )
+                visible_index += 1
             elif visible_index >= visible_limit:
                 resolution, audit = self._local_failure(
                     case,
@@ -134,6 +156,7 @@ class WorkbookRegionDisambiguator:
                     workbook_started,
                     deadline,
                     call_budget,
+                    quota_tracker,
                 )
                 visible_index += 1
 
@@ -184,7 +207,31 @@ class WorkbookRegionDisambiguator:
         workbook_started: float | None,
         deadline: float,
         call_budget: list[int],
+        quota_tracker: dict[str, Any],
     ) -> tuple[RegionResolution, ModelCallAudit]:
+        if (
+            policy.max_tokens_per_workbook is not None
+            and quota_tracker["tokens"] >= policy.max_tokens_per_workbook
+        ):
+            return self._local_failure(
+                case,
+                mode,
+                identity=identity,
+                outcome="quota_exceeded",
+                elapsed_ms=self._elapsed_ms(workbook_started),
+            )
+        if (
+            policy.max_cost_usd_per_workbook is not None
+            and quota_tracker["cost_usd"] >= policy.max_cost_usd_per_workbook
+        ):
+            return self._local_failure(
+                case,
+                mode,
+                identity=identity,
+                outcome="quota_exceeded",
+                elapsed_ms=self._elapsed_ms(workbook_started),
+            )
+
         if len(case.cells) > policy.max_cells_per_case:
             return self._local_failure(
                 case,
@@ -251,6 +298,7 @@ class WorkbookRegionDisambiguator:
             workbook_started,
             deadline,
             call_budget,
+            quota_tracker,
         )
 
     def _resolve_cached(
@@ -280,7 +328,7 @@ class WorkbookRegionDisambiguator:
                 request_bytes=len(request.body),
                 response_body=safe_cached_body,
                 cache_status="corrupt",
-                outcome="invalid_response",
+                outcome="corrupt_cache",
                 error=error,
                 elapsed_ms=self._elapsed_ms(workbook_started),
             )
@@ -307,6 +355,7 @@ class WorkbookRegionDisambiguator:
         workbook_started: float | None,
         deadline: float,
         call_budget: list[int],
+        quota_tracker: dict[str, Any],
     ) -> tuple[RegionResolution, ModelCallAudit]:
         attempts = 0
         last_error: Exception | None = None
@@ -314,6 +363,20 @@ class WorkbookRegionDisambiguator:
         assert mode is not WorkbookModelMode.OFF
 
         while attempts < policy.max_attempts:
+            if _quota_limit_reached(policy, quota_tracker):
+                return self._local_failure(
+                    case,
+                    mode,
+                    identity=identity,
+                    request=request,
+                    request_bytes=len(request.body),
+                    response_body=last_body,
+                    cache_status="miss",
+                    attempts=attempts,
+                    outcome="quota_exceeded",
+                    error=last_error,
+                    elapsed_ms=self._elapsed_ms(workbook_started),
+                )
             remaining = deadline - self._clock()
             if remaining <= 0:
                 return self._local_failure(
@@ -366,6 +429,35 @@ class WorkbookRegionDisambiguator:
                         elapsed_ms=self._elapsed_ms(workbook_started),
                     )
                 last_body = reply.body
+                from .pricing import calculate_cost_usd
+
+                usage = reply.usage
+                if _quota_usage_unavailable(policy, usage):
+                    return self._local_failure(
+                        case,
+                        mode,
+                        identity=identity,
+                        request=request,
+                        request_bytes=len(request.body),
+                        response_body=reply.body,
+                        cache_status="miss",
+                        attempts=attempts,
+                        outcome="quota_unavailable",
+                        elapsed_ms=self._elapsed_ms(workbook_started),
+                    )
+                p_tok = usage.get("prompt_tokens", 0)
+                c_tok = usage.get("completion_tokens", 0)
+                t_tok = max(usage.get("total_tokens", 0), p_tok + c_tok)
+                quota_tracker["tokens"] += t_tok
+                if policy.max_cost_usd_per_workbook is not None:
+                    assert policy.input_cost_usd_per_million is not None
+                    assert policy.output_cost_usd_per_million is not None
+                    quota_tracker["cost_usd"] += calculate_cost_usd(
+                        p_tok,
+                        c_tok,
+                        input_cost_usd_per_million=policy.input_cost_usd_per_million,
+                        output_cost_usd_per_million=policy.output_cost_usd_per_million,
+                    )
                 decision = decode_model_reply(
                     reply,
                     request,
@@ -640,6 +732,36 @@ def _audit_payload(audit: ModelCallAudit) -> dict[str, object]:
     return {field.name: getattr(audit, field.name) for field in fields(ModelCallAudit)}
 
 
+def _quota_limit_reached(
+    policy: WorkbookModelPolicy,
+    quota_tracker: dict[str, Any],
+) -> bool:
+    return bool(
+        (
+            policy.max_tokens_per_workbook is not None
+            and quota_tracker["tokens"] >= policy.max_tokens_per_workbook
+        )
+        or (
+            policy.max_cost_usd_per_workbook is not None
+            and quota_tracker["cost_usd"] >= policy.max_cost_usd_per_workbook
+        )
+    )
+
+
+def _quota_usage_unavailable(
+    policy: WorkbookModelPolicy,
+    usage: Mapping[str, int],
+) -> bool:
+    token_usage_available = any(
+        key in usage for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+    )
+    cost_usage_available = "prompt_tokens" in usage and "completion_tokens" in usage
+    return bool(
+        (policy.max_tokens_per_workbook is not None and not token_usage_available)
+        or (policy.max_cost_usd_per_workbook is not None and not cost_usage_available)
+    )
+
+
 def _is_response_error(error: Exception) -> bool:
     return isinstance(error, WorkbookModelResponseError)
 
@@ -655,7 +777,7 @@ def _safe_identity_token(
         isinstance(value, str)
         and 0 < len(value) <= 64
         and value.isascii()
-        and all(character.isalnum() or character in "._-" for character in value)
+        and all(character.isalnum() or character in "._-/" for character in value)
     ):
         return value, False
     return None, True

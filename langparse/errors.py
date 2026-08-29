@@ -15,6 +15,7 @@ class ErrorType(str, Enum):
     OCR_UNAVAILABLE = "ocr_unavailable"
     LAYOUT_QUALITY_WARNING = "layout_quality_warning"
     TABLE_EXTRACTION_FAILED = "table_extraction_failed"
+    WORKBOOK_EVALUATION_FAILED = "workbook_evaluation_failed"
 
 
 @dataclass
@@ -27,6 +28,10 @@ def classify_exception(exc: BaseException) -> ClassifiedError:
     message = str(exc)
     lowered = message.lower()
 
+    from langparse.workbooks.evaluation.schema import WorkbookEvaluationError
+
+    if isinstance(exc, WorkbookEvaluationError):
+        return ClassifiedError(ErrorType.WORKBOOK_EVALUATION_FAILED, message)
     if isinstance(exc, FileNotFoundError):
         return ClassifiedError(ErrorType.FILE_NOT_FOUND, message)
     if isinstance(exc, ImportError):

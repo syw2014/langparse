@@ -9,7 +9,7 @@ from types import MappingProxyType
 from typing import Literal, TypeAlias
 
 REGION_SCHEMA_VERSION = 1
-REGION_PROMPT_VERSION = "region-choice-v1"
+REGION_PROMPT_VERSION = "region-choice-v2"
 REGION_RULE_VERSION = "region-rules-v1"
 REGION_VALIDATOR_VERSION = "region-validator-v1"
 REGION_PRIVACY_VERSION = "region-privacy-v1"
@@ -37,8 +37,16 @@ class WorkbookModelPolicy:
     max_cells_per_case: int = 500
     max_request_bytes: int = 256_000
     max_response_bytes: int = 128_000
+    kill_switch: bool = False
+    max_tokens_per_workbook: int | None = None
+    max_cost_usd_per_workbook: float | None = None
+    input_cost_usd_per_million: float | None = None
+    output_cost_usd_per_million: float | None = None
+    cost_pricing_version: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.kill_switch, bool):
+            raise ValueError("kill_switch must be a bool")
         for name in ("timeout_seconds", "workbook_timeout_seconds"):
             value = getattr(self, name)
             if (
@@ -59,6 +67,49 @@ class WorkbookModelPolicy:
             value = getattr(self, name)
             if type(value) is not int or value <= 0:
                 raise ValueError(f"{name} must be an exact positive integer")
+        if self.max_tokens_per_workbook is not None:
+            if type(self.max_tokens_per_workbook) is not int or self.max_tokens_per_workbook <= 0:
+                raise ValueError("max_tokens_per_workbook must be an exact positive integer")
+        if self.max_cost_usd_per_workbook is not None:
+            if (
+                isinstance(self.max_cost_usd_per_workbook, bool)
+                or not isinstance(self.max_cost_usd_per_workbook, Real)
+                or not math.isfinite(self.max_cost_usd_per_workbook)
+                or self.max_cost_usd_per_workbook <= 0
+            ):
+                raise ValueError("max_cost_usd_per_workbook must be a finite positive real")
+            for name in (
+                "input_cost_usd_per_million",
+                "output_cost_usd_per_million",
+            ):
+                value = getattr(self, name)
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, Real)
+                    or not math.isfinite(value)
+                    or value < 0
+                ):
+                    raise ValueError(
+                        "cost pricing requires finite non-negative input and output rates"
+                    )
+            version = self.cost_pricing_version
+            if (
+                not isinstance(version, str)
+                or not 0 < len(version.strip()) <= 64
+                or not version.isascii()
+                or not all(character.isalnum() or character in "._-" for character in version)
+            ):
+                raise ValueError("cost_pricing_version must be a non-empty safe ASCII identifier")
+            object.__setattr__(self, "cost_pricing_version", version.strip())
+        elif any(
+            value is not None
+            for value in (
+                self.input_cost_usd_per_million,
+                self.output_cost_usd_per_million,
+                self.cost_pricing_version,
+            )
+        ):
+            raise ValueError("cost pricing fields require max_cost_usd_per_workbook")
 
 
 @dataclass(frozen=True)
@@ -142,6 +193,8 @@ class ProviderReply:
                 raise TypeError("usage keys must be strings")
             if not isinstance(value, int) or isinstance(value, bool):
                 raise TypeError("usage values must be non-bool integers")
+            if value < 0:
+                raise TypeError("usage values must be non-negative integers")
             copied_usage[key] = value
         object.__setattr__(self, "usage", MappingProxyType(copied_usage))
 

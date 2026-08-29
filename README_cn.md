@@ -10,7 +10,7 @@
 
 ## 🚀 项目状态
 
-LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（579 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
+LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（649 个测试通过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
 
 项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（PaddleOCR-VL、vision-LLM 后端），以及帮忙压测"引擎中立路由"这个设计本身。
 
@@ -126,9 +126,11 @@ flowchart LR
 pip install langparse
 ```
 
-如果需要 MinerU 或 DeepDoc 运行时，请安装可选依赖：
+只安装实际需要的可选能力：
 
 ```bash
+pip install "langparse[excel]"
+pip install "langparse[excel,model]"  # 可选的 OpenAI 工作簿消歧
 pip install "langparse[mineru]"
 pip install "langparse[deepdoc]"
 pip install "langparse[all]"
@@ -213,11 +215,26 @@ workbook 结果；CSV、旧版 `.xls` 和非 workbook 输入继续走兼容路�
 langparse parse budget.xlsx --chunk --chunk-profile analysis --format json
 ```
 
-#### 可选的 Phase 4A 模型消歧
+#### 可选的工作簿模型消歧
 
-工作簿模型消歧是需要调用方显式注入的 library API。默认模式为 `off`：直接构造
+工作簿模型消歧始终需要调用方显式启用。默认模式为 `off`：直接构造
 `ExcelParser()`，或调用 `ParseService` 时不传 `workbook_disambiguation`，都不会构造
 模型 Adapter/cache、读取 provider 配置或产生任何隐式模型网络请求。
+
+```bash
+pip install "langparse[excel,model]"
+export OPENAI_API_KEY="..."
+export OPENAI_MODEL="gpt-4o-mini"
+# 使用 OpenAI-compatible endpoint 时可选：
+export OPENAI_BASE_URL="https://example.invalid/v1"
+
+langparse parse budget.xlsx --model --disambiguation auto --format json
+```
+
+CLI 故意不接受 API Key 参数，因为进程参数和 shell history 不是 secret store。只有
+`--model` 或显式 `--disambiguation auto|required` 才会启用网络；仅设置环境变量不会
+自动启用。紧急停用可设置 `LANGPARSE_DISABLE_MODEL=1`。library API 既可以使用内置的
+`OpenAIWorkbookStructureAdapter`，也可以注入其他 `WorkbookStructureModelAdapter`。
 
 ```python
 from langparse.parsers.excel_parser import ExcelParser
@@ -275,15 +292,37 @@ cache 不写磁盘，但 envelope 中由 provider 提供的字符串可能留在
 schema、prompt、rule、validator、privacy 版本和确定性 fallback 的 rule confidence；这些
 值不采信 provider 输入。
 
-Phase 4A **没有内置 production provider Adapter**，也没有 provider CLI/env 配置。
-现有测试和只读工作簿验收证明的是显式 opt-in Seam 的安全性与兼容性，不证明真实模型
-提高了解析准确率。production Adapter、Golden Set/staging 的准确率、延迟/成本证据和
-provider 隐私审计属于 Phase 4B；截图/VLM 属于 Phase 4C，第二个领域契约属于 Phase 4D。
+工作簿歧义评估可通过下面的显式命令运行：
 
-summary/index chunks、内置 production 模型 Adapter 与真实模型效果评估、富信息
-`.xls`/`.xlsb`
-adapter、图片/图表语义 Block、标准 bundle 输出和生产加固仍待后续实现；分隔文本和
-旧版输入目前继续走兼容 adapter。
+```bash
+langparse benchmark-workbook-ambiguity \
+  samples/workbook_ambiguity/public-manifest.json \
+  --output-dir reports/workbook-ambiguity
+
+# 真实 provider evidence 仍需显式启用：
+langparse benchmark-workbook-ambiguity private-manifest.json --model
+```
+
+报告按 digest 不可变发布，发现缺失或被修改的重放产物时会拒绝覆盖。`production_ready`
+还要求 holdout 数据、至少 30 个 ambiguous cases 和独立的 operational staging evidence；
+仓库内置的 tuning seed 本身永远不能满足发布门。截图/VLM 属于 Phase 4C，第二个领域契约
+属于 Phase 4D。
+
+成本熔断不会根据模型名猜测价格。library 调用方设置 `max_cost_usd_per_workbook` 时，必须
+同时在 `WorkbookModelPolicy` 中提供 `input_cost_usd_per_million`、
+`output_cost_usd_per_million` 和稳定的 `cost_pricing_version`。这些费率应来自实际部署的
+provider 合同；OpenAI-compatible endpoint 也遵循同一规则。
+
+Phase 4B 已提供可选的 OpenAI SDK Adapter、基于环境变量的 provider 配置、严格结构化
+响应契约、基于已上报 usage/cost 的熔断，以及不可变评估报告管线。这是一条可用的
+provider 路径，但本身不等于生产效果证据：放行仍需要有代表性的私有 holdout、staging
+延迟/成本/故障模式证据和 provider 隐私审查。token/cost 预算会在已上报 usage 达到限制后
+阻止 retry 或后续调用，但无法阻止第一次 provider 调用本身越界，因此它是熔断器，不是
+账单硬保证。
+
+summary/index chunks、富信息 `.xls`/`.xlsb` adapter、图片/图表语义 Block、标准 bundle
+输出和进一步生产加固仍待后续实现；截图/VLM 属于 Phase 4C，第二个领域契约属于 Phase
+4D，分隔文本和旧版输入目前继续走兼容 adapter。
 
 ### 扫描件
 
@@ -410,6 +449,7 @@ uv sync                      # 仅核心（无第三方依赖）
 uv pip install -e ".[pdf]"   # PDF 解析（pdfplumber）
 uv pip install -e ".[docx]"  # Word 解析（python-docx）
 uv pip install -e ".[excel]" # Excel 解析（pandas + openpyxl）
+uv pip install -e ".[model]" # 可选 OpenAI 工作簿消歧
 uv pip install -e ".[ocr]"   # OCR（rapidocr_onnxruntime）
 uv pip install -e ".[mineru]"# MinerU 运行时（体积较大）
 uv pip install -e ".[deepdoc]"# DeepDoc 运行时（OCR/版面/表格 ONNX 权重，首次运行下载约 100MB）

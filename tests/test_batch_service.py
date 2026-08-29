@@ -267,6 +267,31 @@ def test_batch_service_reuses_workbook_disambiguation_without_engine_kwargs(tmp_
     assert parse_service.engine_kwargs_seen == [{}, {}]
 
 
+def test_batch_service_keeps_workbook_model_credentials_out_of_engine_config(tmp_path):
+    source = tmp_path / "book.xlsx"
+    source.write_text("placeholder", encoding="utf-8")
+    parse_service = StubParseService()
+
+    result = BatchParseService(parse_service=parse_service).run(
+        [source],
+        output_dir=tmp_path / "out",
+        max_workers=1,
+        model="gpt-test",
+        api_key="sk-secret-example",
+        base_url="https://openai.example/v1",
+    )
+
+    assert result.success_count == 1
+    assert parse_service.engine_creation_kwargs == [{}]
+    assert parse_service.engine_kwargs_seen == [
+        {
+            "model": "gpt-test",
+            "api_key": "sk-secret-example",
+            "base_url": "https://openai.example/v1",
+        }
+    ]
+
+
 def test_concurrent_batch_items_share_thread_safe_workbook_cache(tmp_path):
     sources = []
     for name in ("first", "second"):

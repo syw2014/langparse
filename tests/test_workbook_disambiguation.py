@@ -404,6 +404,28 @@ def test_auto_redacts_reply_reasons_and_unsafe_adapter_identity_from_audit():
     assert audit.validation_codes == ("unsafe_identity_redacted",)
 
 
+def test_auto_preserves_routed_model_identity_with_a_slash_in_audit():
+    case = ambiguity_case_fixture()
+    identity = ModelIdentity(
+        provider="openai",
+        model="provider/model-name",
+        revision="2026-08-28",
+    )
+    adapter = ScriptedAdapter.selected(case, identity=identity)
+
+    result = WorkbookRegionDisambiguator().resolve(
+        [case],
+        WorkbookDisambiguation.auto(adapter),
+    )
+
+    audit = result.resolutions[0].audit
+    assert audit is not None
+    assert audit.provider == "openai"
+    assert audit.model == "provider/model-name"
+    assert audit.model_revision == "2026-08-28"
+    assert audit.validation_codes == ()
+
+
 def test_required_redacts_reply_reasons_and_unsafe_adapter_identity_from_diagnostics():
     case = ambiguity_case_fixture()
     secret = "private cell prompt credential=https://private.endpoint/token"
@@ -1073,7 +1095,7 @@ def test_request_contract_version_change_misses_the_cache(monkeypatch, version: 
     if version == "schema":
         monkeypatch.setattr(contract, "REGION_SCHEMA_VERSION", 2)
     elif version == "prompt":
-        monkeypatch.setattr(contract, "REGION_PROMPT_VERSION", "region-choice-v2")
+        monkeypatch.setattr(contract, "REGION_PROMPT_VERSION", "region-choice-v3")
     else:
         monkeypatch.setattr(contract, "REGION_PRIVACY_VERSION", "region-privacy-v2")
     second_adapter = ScriptedAdapter.selected(case)

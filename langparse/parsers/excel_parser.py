@@ -17,10 +17,51 @@ class ExcelParser(BaseParser):
     marked ``paginated=False``.
     """
 
-    def __init__(self, disambiguation: WorkbookDisambiguation | None = None) -> None:
-        self.disambiguation = (
-            WorkbookDisambiguation.off() if disambiguation is None else disambiguation
-        )
+    def __init__(
+        self,
+        disambiguation: str | WorkbookDisambiguation | None = None,
+        *,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
+        if isinstance(disambiguation, WorkbookDisambiguation):
+            self.disambiguation = disambiguation
+        elif isinstance(disambiguation, str):
+            mode = disambiguation.lower()
+            if mode == "off":
+                self.disambiguation = WorkbookDisambiguation.off()
+            elif mode in ("auto", "required"):
+                from langparse.workbooks.modeling.openai_adapter import (
+                    OpenAIWorkbookStructureAdapter,
+                )
+
+                adapter = OpenAIWorkbookStructureAdapter.from_env(
+                    cli_model=model,
+                    cli_api_key=api_key,
+                    cli_base_url=base_url,
+                )
+                if mode == "auto":
+                    self.disambiguation = WorkbookDisambiguation.auto(adapter)
+                else:
+                    self.disambiguation = WorkbookDisambiguation.required(adapter)
+            else:
+                raise ValueError(f"Invalid disambiguation mode: {disambiguation}")
+        elif model is not None:
+            from langparse.workbooks.modeling.openai_adapter import (
+                OpenAIWorkbookStructureAdapter,
+            )
+
+            adapter = OpenAIWorkbookStructureAdapter.from_env(
+                cli_model=model,
+                cli_api_key=api_key,
+                cli_base_url=base_url,
+            )
+            self.disambiguation = WorkbookDisambiguation.auto(adapter)
+        else:
+            self.disambiguation = (
+                WorkbookDisambiguation.off() if disambiguation is None else disambiguation
+            )
 
     def parse_result(self, file_path: str | Path, **kwargs) -> ParsedDocumentResult:
         path = self._resolve_existing_path(file_path)

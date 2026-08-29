@@ -142,6 +142,10 @@ class ParseService:
         # `chunk` is named explicitly rather than left in **kwargs: kwargs also
         # feed engine construction, and MinerU folds unknown kwargs into
         # extra_options and sends them to its API as form fields.
+        model = kwargs.pop("model", None)
+        api_key = kwargs.pop("api_key", None)
+        base_url = kwargs.pop("base_url", None)
+        kwargs.pop("disambiguation", None)
         outputs = []
         active_engine = engine or self._create_engine(engine_name, **kwargs)
         for file_path in self.expand_inputs(inputs):
@@ -156,6 +160,9 @@ class ParseService:
                         chunk=chunk,
                         chunk_profile=chunk_profile,
                         workbook_disambiguation=workbook_disambiguation,
+                        model=model,
+                        api_key=api_key,
+                        base_url=base_url,
                         **kwargs,
                     ),
                 )
@@ -207,7 +214,10 @@ class ParseService:
         engine=None,
         chunk=False,
         chunk_profile: str | None = None,
-        workbook_disambiguation: WorkbookDisambiguation | None = None,
+        workbook_disambiguation: str | WorkbookDisambiguation | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
         **kwargs,
     ):
         """
@@ -234,9 +244,13 @@ class ParseService:
                 **kwargs,
             )
         else:
-            parsed = self._parser_for_kind(kind, workbook_disambiguation).parse_result(
-                path, **kwargs
-            )
+            parsed = self._parser_for_kind(
+                kind,
+                workbook_disambiguation,
+                model=model,
+                api_key=api_key,
+                base_url=base_url,
+            ).parse_result(path, **kwargs)
         if chunk:
             self._populate_chunks(parsed, chunk_profile)
         return parsed
@@ -272,7 +286,11 @@ class ParseService:
     def _parser_for_kind(
         self,
         kind: str,
-        workbook_disambiguation: WorkbookDisambiguation | None = None,
+        workbook_disambiguation: str | WorkbookDisambiguation | None = None,
+        *,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ):
         if kind == "docx":
             from langparse.parsers.docx_parser import DocxParser
@@ -281,7 +299,12 @@ class ParseService:
         if kind == "excel":
             from langparse.parsers.excel_parser import ExcelParser
 
-            return ExcelParser(disambiguation=workbook_disambiguation)
+            return ExcelParser(
+                disambiguation=workbook_disambiguation,
+                model=model,
+                api_key=api_key,
+                base_url=base_url,
+            )
         if kind == "markdown":
             from langparse.parsers.markdown_parser import MarkdownParser
 
@@ -302,6 +325,9 @@ class ParseService:
 
     def parse_batch(self, inputs, engine_name="simple", engine=None, **kwargs):
         workbook_disambiguation = kwargs.pop("workbook_disambiguation", None)
+        model = kwargs.pop("model", None)
+        api_key = kwargs.pop("api_key", None)
+        base_url = kwargs.pop("base_url", None)
         documents = []
         active_engine = engine or self._create_engine(engine_name, **kwargs)
         for file_path in self.expand_inputs(inputs):
@@ -311,6 +337,9 @@ class ParseService:
                     engine_name=engine_name,
                     engine=active_engine,
                     workbook_disambiguation=workbook_disambiguation,
+                    model=model,
+                    api_key=api_key,
+                    base_url=base_url,
                     **kwargs,
                 )
             )
@@ -321,7 +350,19 @@ class ParseService:
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        active_engine = engine or self._create_engine(engine_name, **kwargs)
+        engine_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k
+            not in (
+                "model",
+                "api_key",
+                "base_url",
+                "workbook_disambiguation",
+                "disambiguation",
+            )
+        }
+        active_engine = engine or self._create_engine(engine_name, **engine_kwargs)
         if hasattr(active_engine, "process_document"):
             process_document = active_engine.process_document
             if not callable(process_document):

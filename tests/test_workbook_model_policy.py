@@ -117,6 +117,29 @@ def test_policy_accepts_finite_positive_real_timeouts():
     assert policy.workbook_timeout_seconds == 3
 
 
+def test_cost_quota_requires_explicit_versioned_rates():
+    with pytest.raises(ValueError, match="cost pricing"):
+        WorkbookModelPolicy(max_cost_usd_per_workbook=0.01)
+
+    with pytest.raises(ValueError, match="cost_pricing_version"):
+        WorkbookModelPolicy(
+            max_cost_usd_per_workbook=0.01,
+            input_cost_usd_per_million=1.25,
+            output_cost_usd_per_million=5.0,
+        )
+
+    policy = WorkbookModelPolicy(
+        max_cost_usd_per_workbook=0.01,
+        input_cost_usd_per_million=1.25,
+        output_cost_usd_per_million=5.0,
+        cost_pricing_version="vendor-contract-2026-q3",
+    )
+
+    assert policy.input_cost_usd_per_million == 1.25
+    assert policy.output_cost_usd_per_million == 5.0
+    assert policy.cost_pricing_version == "vendor-contract-2026-q3"
+
+
 def test_policy_and_configuration_are_immutable():
     configured = WorkbookDisambiguation.auto(RecordingAdapter())
 

@@ -1,5 +1,5 @@
-"""Typed policy and provider port for opt-in workbook model disambiguation."""
-
+from .config import WorkbookModelConfig, resolve_workbook_model_config
+from .openai_adapter import OpenAIWorkbookStructureAdapter
 from .policy import WorkbookDisambiguation
 from .ports import (
     InvalidRegionAmbiguityCaseError,
@@ -29,16 +29,18 @@ __all__ = [
     "InvalidRegionAmbiguityCaseError",
     "ModelCallAudit",
     "ModelIdentity",
+    "OpenAIWorkbookStructureAdapter",
     "ProviderReply",
     "RegionAmbiguityCase",
     "RegionCellCue",
     "RegionChoice",
-    "RegionModelDecision",
     "RegionFeatureScalar",
+    "RegionModelDecision",
     "RegionResolution",
     "RegionResolutionBatch",
     "RequiredWorkbookDisambiguationError",
     "WorkbookDisambiguation",
+    "WorkbookModelConfig",
     "WorkbookModelConfigurationError",
     "WorkbookModelError",
     "WorkbookModelMode",
@@ -46,4 +48,5 @@ __all__ = [
     "WorkbookModelRequest",
     "WorkbookModelResponseError",
     "WorkbookStructureModelAdapter",
+    "resolve_workbook_model_config",
 ]

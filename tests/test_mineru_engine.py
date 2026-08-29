@@ -169,6 +169,14 @@ def test_ensure_runtime_is_noop_for_api_managed_flow():
     assert engine._ensure_runtime() is None
 
 
+def test_service_manager_preserves_configured_runtime_package():
+    engine = MinerUEngine(runtime_package="custom-mineru-runtime")
+
+    manager = engine._create_service_manager()
+
+    assert manager.runtime_package == "custom-mineru-runtime"
+
+
 def test_process_forwards_runtime_kwargs(monkeypatch, tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")

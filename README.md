@@ -10,7 +10,7 @@
 
 ## 🚀 Project Status
 
-LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (579 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
+LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (649 tests passing). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
 
 Still pre-1.0. Looking for early contributors and design partners, particularly to help wire up additional vertical engines (PaddleOCR-VL, vision-LLM backends) and pressure-test the engine-neutral routing design.
 
@@ -126,9 +126,11 @@ Once v0.1 is released, you will be able to install it via pip:
 pip install langparse
 ```
 
-If you need the MinerU or DeepDoc runtime, install the optional extra:
+Install only the optional capabilities you need:
 
 ```bash
+pip install "langparse[excel]"
+pip install "langparse[excel,model]"  # optional OpenAI workbook disambiguation
 pip install "langparse[mineru]"
 pip install "langparse[deepdoc]"
 pip install "langparse[all]"
@@ -260,12 +262,32 @@ layer.
 langparse parse budget.xlsx --chunk --chunk-profile analysis --format json
 ```
 
-#### Optional Phase 4A model disambiguation
+#### Optional workbook model disambiguation
 
-Workbook model disambiguation is an explicit, caller-injected library API. The
-default is `off`: constructing `ExcelParser()` or calling `ParseService` without
+Workbook model disambiguation remains explicitly opt-in. The default is `off`:
+constructing `ExcelParser()` or calling `ParseService` without
 `workbook_disambiguation` performs no model Adapter or cache construction, reads
-no provider configuration, and creates no implicit model network work.
+no provider configuration, and creates no implicit model network work. Install
+the official OpenAI SDK integration separately from the core parser:
+
+```bash
+pip install "langparse[excel,model]"
+export OPENAI_API_KEY="..."
+export OPENAI_MODEL="gpt-4o-mini"
+# Optional for an OpenAI-compatible endpoint:
+export OPENAI_BASE_URL="https://example.invalid/v1"
+
+langparse parse budget.xlsx --model --disambiguation auto --format json
+```
+
+API keys are intentionally not accepted as CLI arguments because process
+arguments and shell history are not secret stores. `--model` or an explicit
+`--disambiguation auto|required` enables network work; environment variables
+alone never enable it. Set `LANGPARSE_DISABLE_MODEL=1` for the runtime kill
+switch.
+
+The library interface may either use the built-in `OpenAIWorkbookStructureAdapter`
+or inject another `WorkbookStructureModelAdapter`:
 
 ```python
 from langparse.parsers.excel_parser import ExcelParser
@@ -338,18 +360,42 @@ Each model-call audit records local schema, prompt, rule, validator, and privacy
 versions plus the deterministic fallback rule confidence; these values never
 come from the provider.
 
-Phase 4A ships **no built-in production provider Adapter** and has no provider
-CLI or environment configuration. Its tests and read-only workbook acceptance
-prove the safety and compatibility of the opt-in seam, not that a real model
-improves parsing accuracy. A production Adapter, Golden Set/staging accuracy,
-latency/cost evidence, and provider privacy audit remain Phase 4B; screenshots
-and VLM are Phase 4C, and a second domain contract is Phase 4D.
+The workbook ambiguity evaluator is available with:
 
-Summary/index chunks, a built-in production model Adapter and real-model effect
-evaluation, rich
-`.xls`/`.xlsb` adapters, image/chart semantic blocks, standard bundle output,
-and production hardening remain follow-up work; delimited and legacy inputs
-keep the compatibility adapter for now.
+```bash
+langparse eval \
+  samples/workbook_ambiguity/public-manifest.json \
+  --output-dir reports/workbook-ambiguity
+
+# Live provider evidence is still explicit:
+langparse eval private-manifest.json --model
+```
+
+Reports are immutable by digest and reject incomplete or modified replays.
+`production_ready` additionally requires holdout data, at least 30 ambiguous
+cases, and separate operational staging evidence; the bundled tuning seed can
+never satisfy that release gate by itself.
+
+Cost circuit breakers never infer prices from a model name. Library callers
+that set `max_cost_usd_per_workbook` must also supply
+`input_cost_usd_per_million`, `output_cost_usd_per_million`, and a stable
+`cost_pricing_version` in `WorkbookModelPolicy`. These rates should come from
+the deployment's provider contract, including for OpenAI-compatible endpoints.
+
+Phase 4B includes the optional OpenAI SDK Adapter, environment-based provider
+configuration, a strict structured-response contract, observed usage/cost
+circuit breakers, and an immutable evaluation report pipeline. This is a
+usable provider path, but not production-effectiveness evidence by itself:
+release still requires a representative private holdout, staging latency/cost
+and failure-mode evidence, and a provider privacy review. The observed token
+and cost budgets stop retries or later calls after reported usage reaches the
+limit; they cannot prevent the first provider call from exceeding a budget and
+therefore are circuit breakers rather than billing guarantees.
+
+Summary/index chunks, rich `.xls`/`.xlsb` adapters, image/chart semantic blocks,
+standard bundle output, and further production hardening remain follow-up work;
+screenshots and VLM are Phase 4C, a second domain contract is Phase 4D, and
+delimited and legacy inputs keep the compatibility adapter for now.
 
 ### Scanned PDFs
 
@@ -530,6 +576,7 @@ uv sync                      # core only (no third-party dependencies)
 uv pip install -e ".[pdf]"   # PDF parsing (pdfplumber)
 uv pip install -e ".[docx]"  # Word parsing (python-docx)
 uv pip install -e ".[excel]" # Excel parsing (pandas + openpyxl)
+uv pip install -e ".[model]" # Optional OpenAI workbook disambiguation
 uv pip install -e ".[ocr]"   # OCR (rapidocr_onnxruntime)
 uv pip install -e ".[mineru]"# MinerU runtime (large download)
 uv pip install -e ".[deepdoc]"# DeepDoc runtime (OCR/layout/table ONNX weights, ~100MB download on first run)

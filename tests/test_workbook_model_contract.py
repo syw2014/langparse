@@ -29,6 +29,15 @@ from langparse.workbooks.modeling.types import (
 from langparse.workbooks.types import CandidateRegion, CellSnapshot, SheetSnapshot, SourceRef
 
 
+def test_provider_reply_rejects_negative_usage():
+    with pytest.raises(TypeError, match="non-negative"):
+        ProviderReply(
+            body=b"{}",
+            provider_request_id="request-1",
+            usage={"total_tokens": -1},
+        )
+
+
 def test_region_request_contains_only_candidate_local_safe_cues():
     sheet, candidate, assessment = ambiguous_region_with_sensitive_facts()
 
@@ -40,7 +49,7 @@ def test_region_request_contains_only_candidate_local_safe_cues():
 
     payload = json.loads(request.body)
     assert payload["schema_version"] == 1
-    assert payload["prompt_version"] == "region-choice-v1"
+    assert payload["prompt_version"] == "region-choice-v2"
     assert payload["privacy_version"] == REGION_PRIVACY_VERSION
     assert request.privacy_version == REGION_PRIVACY_VERSION
     assert payload["request_checksum"] == request.request_checksum

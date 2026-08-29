@@ -7,6 +7,70 @@ hang a version number on. Once there's a first release, this will switch to
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/)
 version sections.
 
+## [2026-08-29]
+
+### Fixed
+- The dependency-free package import and `langparse --help` no longer import
+  `openpyxl` through workbook exports or the ambiguity benchmark command.
+  Excel and provider dependencies are loaded only when those capabilities are
+  selected.
+- GitHub test jobs now use uv's project virtual environment instead of the
+  externally managed system Python. The PyPI workflow now runs the full test,
+  lint, format, and build gates before publishing.
+
+### Verification
+- The full suite passes 649 tests; Ruff lint and format checks pass for all 130
+  Python files, workflow YAML and diff whitespace checks are clean, and the
+  locked CI installation completes.
+- Fresh wheel installs pass both the zero-dependency import/CLI smoke test and
+  an `excel,model` parse of the 15-Sheet budget workbook. The real workbook
+  reports successful reconstruction with zero warnings/errors and produces 39
+  retrieval chunks plus 20 analysis chunks with complete source references.
+
+## [2026-08-28]
+
+### Added
+- Phase 4B's explicitly enabled OpenAI SDK workbook Adapter, environment-based
+  configuration, strict JSON Schema response contract, provider identity in
+  benchmark digests, and the `benchmark-workbook-ambiguity` evaluation command.
+- Fail-closed token/cost circuit breakers and immutable, content-addressed
+  benchmark reports with full artifact-set replay validation.
+
+### Changed
+- Batch parsing now keeps model credentials out of engine options while passing
+  them only to workbook disambiguation. CLI process arguments no longer accept
+  API keys; secrets come from environment configuration.
+- Live evaluation now scores the final production decode/audit outcome instead
+  of loosely parsing raw provider replies. Invalid checksums, missing usage,
+  missing explicit versioned cost rates, negative usage, and paid invalid
+  retries fail closed.
+- `production_ready` additionally requires a holdout split, at least 30
+  ambiguous cases, and independent operational staging evidence. The bundled
+  tuning seed can never certify production readiness.
+- Existing report replays compare every regular artifact, source roots must be
+  relative, report directory names are cross-platform safe, and model identity
+  participates in the run digest.
+- OpenAI-compatible providers now receive explicit choice semantics and exact
+  status instructions with zero temperature and a fixed seed. The prompt
+  contract is `region-choice-v2`; routed model names containing `/` remain
+  auditable, and all model contract versions participate in benchmark digests.
+
+### Known limitations
+- Usage-based budgets are post-response circuit breakers, not billing
+  guarantees: the first provider call can exceed a configured budget. Real
+  production release still needs private holdout, staging, privacy, latency,
+  cost, and rollback evidence.
+
+### Verification
+- The full suite passes 648 tests; Ruff lint and format checks pass for all 129
+  Python files, the lockfile and whitespace checks are clean, the default
+  offline CLI makes zero model calls, and both sdist and wheel build.
+- A live OpenAI-compatible run on the public tuning seed accepted all responses
+  in one attempt, selected 2/2 cases correctly, fixed one baseline error,
+  introduced zero errors, and made zero calls for the clear sample. It remains
+  correctly blocked from production readiness because holdout, minimum-sample,
+  and operational evidence are absent.
+
 ## [2026-08-26]
 
 ### Added

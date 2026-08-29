@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +7,39 @@ from langparse.engines.pdf.mineru_client import MinerUClient
 from langparse.engines.pdf.mineru_service import MinerUServiceManager
 from langparse.engines.pdf.simple import BasePDFEngine
 from langparse.types import ParsedDocumentResult, ParsedElement, ParsedPageResult
+
+_SENSITIVE_OPTION_KEYS = frozenset(
+    {
+        "api_key",
+        "openai_api_key",
+        "model",
+        "base_url",
+        "openai_base_url",
+        "openai_model",
+        "workbook_disambiguation",
+        "disambiguation",
+        "token",
+        "secret",
+        "apikey",
+        "auth",
+        "authorization",
+        "password",
+        "bearer",
+        "credentials",
+    }
+)
+_SENSITIVE_OPTION_SUFFIXES = ("_key", "_secret", "_token", "_password", "_auth")
+
+
+def _sanitize_extra_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
+    if options is None:
+        return {}
+    return {
+        key: value
+        for key, value in options.items()
+        if key.lower() not in _SENSITIVE_OPTION_KEYS
+        and not key.lower().endswith(_SENSITIVE_OPTION_SUFFIXES)
+    }
 
 
 class MinerUEngine(BasePDFEngine):
@@ -48,7 +81,10 @@ class MinerUEngine(BasePDFEngine):
         self.model_source = model_source
         self.auto_install_runtime = auto_install_runtime
         self.runtime_package = runtime_package
-        self.extra_options = {**(extra_options or {}), **kwargs}
+        self.extra_options = {
+            **_sanitize_extra_options(extra_options),
+            **_sanitize_extra_options(kwargs),
+        }
 
     def _cuda_available(self) -> bool:
         try:
@@ -76,12 +112,13 @@ class MinerUEngine(BasePDFEngine):
 
     def _build_runtime_config(self, **kwargs: Any) -> dict[str, Any]:
         requested_device = kwargs.get("device", self.device)
+        runtime_extra_options = _sanitize_extra_options(kwargs.get("extra_options"))
         return {
             "device": self._resolve_device(requested_device),
             "model_dir": kwargs.get("model_dir", self.model_dir),
             "download_dir": kwargs.get("download_dir", self.download_dir),
             "enable_ocr": kwargs.get("enable_ocr", self.enable_ocr),
-            "extra_options": {**self.extra_options, **kwargs.get("extra_options", {})},
+            "extra_options": {**self.extra_options, **runtime_extra_options},
         }
 
     def _build_service_config(self) -> dict[str, Any]:

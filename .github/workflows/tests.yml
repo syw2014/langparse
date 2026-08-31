@@ -32,6 +32,7 @@ jobs:
         with:
           version: 0.12.7
           enable-cache: true
+          cache-suffix: py-${{ matrix.python-version }}
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
@@ -61,6 +62,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: 0.12.7
+          cache-suffix: lint
 
       - name: Sync lint environment
         run: uv sync --extra dev --locked

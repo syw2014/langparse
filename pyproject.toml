@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "langparse"
-version = "0.0.1"
+version = "0.1.0rc1"
 description = "LangParse is a universal document parsing and text chunking engine for LLM or agent applications — Documents In, Knowledge Out."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,6 +20,9 @@ classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries",
     "Topic :: Text Processing :: Linguistic",
 ]
@@ -33,33 +36,35 @@ dependencies = []
 langparse = "langparse.cli:main"
 
 [project.optional-dependencies]
-pdf = ["pdfplumber>=0.10.0"]
+pdf = ["pdfplumber>=0.11.10"]
 docx = ["python-docx>=1.1.0"]
 excel = ["pandas>=2.0.0", "openpyxl>=3.1.0"]
 model = ["openai>=2.0.0,<3.0.0"]
 # OCR fallback lives in the PDF engine, so it needs the PDF stack to be useful.
 # pdfplumber already pulls in pypdfium2, which rasterises the page.
-ocr = ["rapidocr_onnxruntime>=1.3.0", "pdfplumber>=0.10.0"]
-mineru = ["mineru[all]"]
+ocr = ["rapidocr_onnxruntime>=1.3.0", "pdfplumber>=0.11.10"]
+# Remote MinerU needs no extra. This installs the API/orchestration package only;
+# operators choose an official backend extra separately for local inference.
+mineru = ["mineru>=3.4,<4"]
 deepdoc = [
-    "pdfplumber>=0.10.0",
+    "pdfplumber>=0.11.10",
     "opencv-python-headless>=4.9.0",
     "onnxruntime>=1.17.0",
-    "pypdf>=4.0.0",
+    "pypdf>=6.15.0",
     "huggingface_hub>=0.20.0",
     "scikit-learn>=1.3.0",
     "shapely>=2.0.0",
     "pyclipper>=1.3.0",
     "jieba>=0.42.1",
 ]
-all = ["pdfplumber", "python-docx", "pandas", "openpyxl", "openai>=2.0.0,<3.0.0", "rapidocr_onnxruntime", "mineru[all]", "opencv-python-headless", "onnxruntime", "pypdf", "huggingface_hub", "scikit-learn", "shapely", "pyclipper", "jieba"]
+all = ["pdfplumber>=0.11.10", "python-docx", "pandas", "openpyxl", "openai>=2.0.0,<3.0.0", "rapidocr_onnxruntime", "mineru>=3.4,<4", "opencv-python-headless", "onnxruntime", "pypdf>=6.15.0", "huggingface_hub", "scikit-learn", "shapely", "pyclipper", "jieba"]
 # The test suite exercises every parser, and conftest.py builds .docx/.xlsx
 # fixtures at import time, so `pip install -e ".[dev]"` must be enough to run it.
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.6.0",
-    "pdfplumber>=0.10.0",
+    "pdfplumber>=0.11.10",
     "python-docx>=1.1.0",
     "pandas>=2.0.0",
     "openpyxl>=3.1.0",

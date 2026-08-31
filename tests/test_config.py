@@ -18,6 +18,9 @@ def isolated_langparse_config_env(tmp_path, monkeypatch):
         "LANGPARSE_MINERU_API_PORT",
         "LANGPARSE_MINERU_API_COMMAND",
         "LANGPARSE_MINERU_API_START_TIMEOUT",
+        "LANGPARSE_MINERU_REQUEST_TIMEOUT",
+        "LANGPARSE_MINERU_BACKEND",
+        "LANGPARSE_MINERU_SERVER_URL",
         "LANGPARSE_MINERU_MODEL_POLICY",
         "LANGPARSE_MINERU_MODEL_SOURCE",
         "LANGPARSE_MINERU_AUTO_INSTALL_RUNTIME",
@@ -83,7 +86,7 @@ def test_default_mineru_values_are_exposed():
     assert settings.get("engines.mineru.model_policy") == "download_if_missing"
     assert settings.get("engines.mineru.model_source") is None
     assert settings.get("engines.mineru.auto_install_runtime") is False
-    assert settings.get("engines.mineru.runtime_package") == "mineru[all]"
+    assert settings.get("engines.mineru.runtime_package") == "mineru>=3.4,<4"
     assert settings.get("engines.mineru.extra_options") == {}
 
 
@@ -106,3 +109,17 @@ def test_env_enables_mineru_runtime_auto_install(monkeypatch):
     settings = Config()
 
     assert settings.get("engines.mineru.auto_install_runtime") is True
+
+
+def test_env_configures_external_mineru_vlm_topology(monkeypatch):
+    """Catch external MinerU deployments silently losing their VLM routing fields."""
+    monkeypatch.setenv("LANGPARSE_MINERU_BACKEND", "vlm-http-client")
+    monkeypatch.setenv("LANGPARSE_MINERU_SERVER_URL", "http://vlm.example:21670")
+    monkeypatch.setenv("LANGPARSE_MINERU_REQUEST_TIMEOUT", "912.5")
+
+    Config = load_config_class()
+    settings = Config()
+
+    assert settings.get("engines.mineru.backend") == "vlm-http-client"
+    assert settings.get("engines.mineru.server_url") == "http://vlm.example:21670"
+    assert settings.get("engines.mineru.request_timeout") == 912.5

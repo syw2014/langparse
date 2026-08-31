@@ -32,6 +32,9 @@ def build_parser():
     parse_cmd.add_argument("--api-port", type=int, default=None)
     parse_cmd.add_argument("--api-command", default=None)
     parse_cmd.add_argument("--api-start-timeout", type=float, default=None)
+    parse_cmd.add_argument("--mineru-request-timeout", type=float, default=None)
+    parse_cmd.add_argument("--mineru-backend", default=None)
+    parse_cmd.add_argument("--mineru-server-url", default=None)
     parse_cmd.add_argument(
         "--model-policy", choices=["download_if_missing", "require_existing"], default=None
     )
@@ -81,6 +84,9 @@ def build_parser():
     benchmark_cmd.add_argument("--format", default="json")
     benchmark_cmd.add_argument("--max-workers", type=int, default=1)
     benchmark_cmd.add_argument("--api-url", default=None)
+    benchmark_cmd.add_argument("--mineru-request-timeout", type=float, default=None)
+    benchmark_cmd.add_argument("--mineru-backend", default=None)
+    benchmark_cmd.add_argument("--mineru-server-url", default=None)
     benchmark_cmd.add_argument("--device", default=None)
     benchmark_cmd.add_argument("--model-dir", default=None)
     benchmark_cmd.add_argument("--download-dir", default=None)
@@ -145,6 +151,9 @@ def _run(args, parser) -> int:
             key: value
             for key, value in {
                 "api_url": args.api_url,
+                "request_timeout": args.mineru_request_timeout,
+                "backend": args.mineru_backend,
+                "server_url": args.mineru_server_url,
                 "device": args.device,
                 "model_dir": args.model_dir,
                 "download_dir": args.download_dir,
@@ -190,6 +199,9 @@ def _run(args, parser) -> int:
             "api_port": args.api_port,
             "api_command": args.api_command,
             "api_start_timeout": args.api_start_timeout,
+            "request_timeout": args.mineru_request_timeout,
+            "backend": args.mineru_backend,
+            "server_url": args.mineru_server_url,
             "model_policy": args.model_policy,
             "model_source": args.model_source,
             "auto_install_runtime": args.auto_install_runtime,

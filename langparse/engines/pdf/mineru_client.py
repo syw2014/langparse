@@ -85,6 +85,7 @@ class MinerUClient:
     def _build_form_fields(self, runtime_config: dict[str, Any]) -> dict[str, str]:
         fields = {
             "return_md": "true",
+            "return_content_list": "true",
             "response_format_zip": "false",
         }
         extra_options = runtime_config.get("extra_options", {})

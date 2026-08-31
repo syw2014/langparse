@@ -14,11 +14,17 @@ def main():
             "Update pdf_path in examples/mineru_remote_api.py to point to a real PDF file."
         )
 
+    api_url = os.environ.get("LANGPARSE_MINERU_API_URL")
+    if not api_url:
+        raise RuntimeError("Set LANGPARSE_MINERU_API_URL to an existing mineru-api base URL.")
+
     doc = AutoParser.parse(
         str(pdf_path),
         engine="mineru",
-        api_url="http://127.0.0.1:8000",
-        device="cpu",
+        api_url=api_url,
+        backend=os.environ.get("LANGPARSE_MINERU_BACKEND"),
+        server_url=os.environ.get("LANGPARSE_MINERU_SERVER_URL"),
+        request_timeout=float(os.environ.get("LANGPARSE_MINERU_REQUEST_TIMEOUT", "300")),
     )
 
     print("Source:", doc.metadata.get("source"))

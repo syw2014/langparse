@@ -302,6 +302,12 @@ def test_cli_main_single_parse_passes_mineru_api_kwargs(monkeypatch):
             "mineru-api",
             "--api-start-timeout",
             "12",
+            "--mineru-request-timeout",
+            "900",
+            "--mineru-backend",
+            "vlm-http-client",
+            "--mineru-server-url",
+            "http://vlm.example:21670",
             "--model-policy",
             "require_existing",
             "--model-source",
@@ -325,6 +331,9 @@ def test_cli_main_single_parse_passes_mineru_api_kwargs(monkeypatch):
                 "api_port": 8010,
                 "api_command": "mineru-api",
                 "api_start_timeout": 12.0,
+                "request_timeout": 900.0,
+                "backend": "vlm-http-client",
+                "server_url": "http://vlm.example:21670",
                 "model_policy": "require_existing",
                 "model_source": "local",
                 "auto_install_runtime": True,
@@ -401,6 +410,12 @@ def test_cli_benchmark_command_accepts_manifest_and_output_dir():
             "reports",
             "--max-workers",
             "2",
+            "--mineru-backend",
+            "vlm-http-client",
+            "--mineru-server-url",
+            "http://vlm.example:21670",
+            "--mineru-request-timeout",
+            "900",
         ]
     )
 
@@ -482,11 +497,30 @@ def test_cli_main_benchmark_delegates_to_benchmark_service(monkeypatch):
             "reports",
             "--max-workers",
             "2",
+            "--mineru-backend",
+            "vlm-http-client",
+            "--mineru-server-url",
+            "http://vlm.example:21670",
+            "--mineru-request-timeout",
+            "900",
         ]
     )
 
     assert exit_code == 0
-    assert calls == [("samples/public.example.json", "reports", "mineru", "json", 2, {})]
+    assert calls == [
+        (
+            "samples/public.example.json",
+            "reports",
+            "mineru",
+            "json",
+            2,
+            {
+                "backend": "vlm-http-client",
+                "server_url": "http://vlm.example:21670",
+                "request_timeout": 900.0,
+            },
+        )
+    ]
 
 
 def test_cli_parses_non_pdf_input_without_a_pdf_engine(tmp_path, capsys):

@@ -29,7 +29,7 @@ class MinerUServiceManager:
         model_policy: str = "download_if_missing",
         model_source: str | None = None,
         auto_install_runtime: bool = False,
-        runtime_package: str = "mineru[all]",
+        runtime_package: str = "mineru>=3.4,<4",
     ):
         self.api_url = api_url.rstrip("/") if api_url else None
         self.host = host
@@ -83,7 +83,8 @@ class MinerUServiceManager:
                 raise RuntimeError(
                     "Unable to start local mineru-api service using command: "
                     f"{self.command}. MinerU runtime was not found. Install it with "
-                    '`pip install -U "mineru[all]"` or retry with auto_install_runtime=True.'
+                    '`pip install -U "mineru>=3.4,<4"` (plus the official backend extra '
+                    "needed for local inference) or retry with auto_install_runtime=True."
                 )
         try:
             return subprocess.Popen(

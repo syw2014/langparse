@@ -138,6 +138,32 @@ def test_constructor_flattens_config_derived_extra_options(monkeypatch, tmp_path
     }
 
 
+def test_external_vlm_topology_becomes_file_parse_fields():
+    """Catch backend/server_url being consumed locally instead of sent to /file_parse."""
+    engine = MinerUEngine(
+        device="cpu",
+        backend="vlm-http-client",
+        server_url="http://vlm.example:21670",
+    )
+
+    runtime_config = engine._build_runtime_config()
+    fields = MinerUClient("http://mineru.example:25820")._build_form_fields(runtime_config)
+
+    assert fields["backend"] == "vlm-http-client"
+    assert fields["server_url"] == "http://vlm.example:21670"
+
+
+def test_request_timeout_configures_http_client_not_file_parse_fields():
+    """Catch request_timeout leaking into MinerU's multipart form or being ignored."""
+    engine = MinerUEngine(device="cpu", request_timeout=912.5)
+
+    client = engine._create_client("http://mineru.example:25820")
+    fields = client._build_form_fields(engine._build_runtime_config())
+
+    assert client.timeout == 912.5
+    assert "request_timeout" not in fields
+
+
 def test_process_document_tolerates_runtime_kwargs(monkeypatch, tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")
@@ -406,6 +432,15 @@ def test_client_uses_current_parse_method_field_when_ocr_is_disabled():
 
     assert fields["parse_method"] == "txt"
     assert "method" not in fields
+
+
+def test_client_requests_content_list_for_page_and_table_structure():
+    """Catch successful Markdown-only responses collapsing a document to one synthetic page."""
+    client = MinerUClient("http://mineru.example")
+
+    fields = client._build_form_fields({"enable_ocr": True})
+
+    assert fields["return_content_list"] == "true"
 
 
 def test_client_extracts_markdown_from_mineru_3_results_response():

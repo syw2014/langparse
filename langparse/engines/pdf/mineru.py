@@ -60,10 +60,12 @@ class MinerUEngine(BasePDFEngine):
         api_command: str = "mineru-api",
         api_start_timeout: float = 30.0,
         request_timeout: float = 300.0,
+        backend: str | None = None,
+        server_url: str | None = None,
         model_policy: str = "download_if_missing",
         model_source: str | None = None,
         auto_install_runtime: bool = False,
-        runtime_package: str = "mineru[all]",
+        runtime_package: str = "mineru>=3.4,<4",
         extra_options: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
@@ -77,6 +79,8 @@ class MinerUEngine(BasePDFEngine):
         self.api_command = api_command
         self.api_start_timeout = api_start_timeout
         self.request_timeout = request_timeout
+        self.backend = backend
+        self.server_url = server_url
         self.model_policy = model_policy
         self.model_source = model_source
         self.auto_install_runtime = auto_install_runtime
@@ -85,6 +89,10 @@ class MinerUEngine(BasePDFEngine):
             **_sanitize_extra_options(extra_options),
             **_sanitize_extra_options(kwargs),
         }
+        if self.backend is not None:
+            self.extra_options["backend"] = self.backend
+        if self.server_url is not None:
+            self.extra_options["server_url"] = self.server_url
 
     def _cuda_available(self) -> bool:
         try:

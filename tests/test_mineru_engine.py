@@ -399,6 +399,78 @@ def test_client_normalizes_content_list_response(tmp_path):
     assert pages[1]["elements"][0]["kind"] == "text"
 
 
+def test_client_uses_current_parse_method_field_when_ocr_is_disabled():
+    client = MinerUClient("http://mineru.example")
+
+    fields = client._build_form_fields({"enable_ocr": False})
+
+    assert fields["parse_method"] == "txt"
+    assert "method" not in fields
+
+
+def test_client_extracts_markdown_from_mineru_3_results_response():
+    client = MinerUClient("http://mineru.example")
+    response = {
+        "task_id": "85447098-83b6-499a-a174-cf5dfa54a386",
+        "status": "completed",
+        "backend": "vlm-http-client",
+        "file_names": ["sample.pdf"],
+        "version": "3.4.4",
+        "results": {
+            "sample": {
+                "md_content": "# Drinking water standard\n\nParsed by MinerU.",
+            }
+        },
+    }
+
+    pages = client._normalize_parse_response(response)
+
+    assert pages == [
+        {
+            "page_number": 1,
+            "markdown": "# Drinking water standard\n\nParsed by MinerU.",
+        }
+    ]
+
+
+def test_client_extracts_json_content_list_from_mineru_3_results_response():
+    client = MinerUClient("http://mineru.example")
+    response = {
+        "task_id": "85447098-83b6-499a-a174-cf5dfa54a386",
+        "status": "completed",
+        "backend": "vlm-http-client",
+        "file_names": ["sample.pdf"],
+        "version": "3.4.4",
+        "results": {
+            "sample": {
+                "md_content": "# Drinking water standard",
+                "content_list": json.dumps(
+                    [
+                        {
+                            "type": "text",
+                            "text": "Drinking water standard",
+                            "page_idx": 0,
+                            "bbox": [10, 20, 30, 40],
+                        }
+                    ]
+                ),
+            }
+        },
+    }
+
+    pages = client._normalize_parse_response(response)
+
+    assert pages[0]["plain_text"] == "Drinking water standard"
+    assert pages[0]["elements"] == [
+        {
+            "kind": "text",
+            "text": "Drinking water standard",
+            "bbox": [10, 20, 30, 40],
+            "metadata": {"page_idx": 0},
+        }
+    ]
+
+
 def _table_response():
     return {
         "markdown": "# Doc",

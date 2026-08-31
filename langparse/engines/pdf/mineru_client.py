@@ -89,7 +89,7 @@ class MinerUClient:
         }
         extra_options = runtime_config.get("extra_options", {})
         if runtime_config.get("enable_ocr") is False:
-            fields["method"] = "txt"
+            fields["parse_method"] = "txt"
         if runtime_config.get("device"):
             fields["device"] = str(runtime_config["device"])
         if runtime_config.get("model_dir"):
@@ -269,6 +269,18 @@ class MinerUClient:
                     result.get("full_md"),
                 ]
             )
+        results = response.get("results")
+        if isinstance(results, dict):
+            for file_result in results.values():
+                if isinstance(file_result, dict):
+                    candidates.extend(
+                        [
+                            file_result.get("md_content"),
+                            file_result.get("markdown"),
+                            file_result.get("md"),
+                            file_result.get("full_md"),
+                        ]
+                    )
         for candidate in candidates:
             if isinstance(candidate, str) and candidate:
                 return candidate
@@ -277,6 +289,11 @@ class MinerUClient:
     def _extract_content_list(self, response: dict[str, Any]) -> list[dict[str, Any]]:
         for key in ("content_list", "content_list_v2"):
             value = response.get(key)
+            if isinstance(value, str):
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    continue
             if isinstance(value, list):
                 if value and isinstance(value[0], dict):
                     return value
@@ -290,4 +307,11 @@ class MinerUClient:
         result = response.get("result")
         if isinstance(result, dict):
             return self._extract_content_list(result)
+        results = response.get("results")
+        if isinstance(results, dict):
+            for file_result in results.values():
+                if isinstance(file_result, dict):
+                    content_list = self._extract_content_list(file_result)
+                    if content_list:
+                        return content_list
         return []

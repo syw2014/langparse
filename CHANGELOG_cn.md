@@ -1,10 +1,28 @@
 # 更新日志
 
-本文档记录项目的显著变更，按日期分组，而不是按版本号——项目至今没有发布到
-PyPI（`pyproject.toml` 的版本号从始至终停在 `0.0.1`，也没有任何 git tag），
-没有"版本"可以挂靠。等正式发布第一个版本后，会切换成
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) +
-[语义化版本](https://semver.org/lang/zh-CN/) 的版本分区格式。
+本文档记录项目的显著变更。版本区段遵循
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 与
+[语义化版本](https://semver.org/lang/zh-CN/)；下方按日期分组的内容保留发布前开发历史。
+
+## [未发布]
+
+## [0.1.0rc1] - 2026-08-31
+
+### 新增
+- 首个公开候选版本：提供零依赖核心解析/分块、复杂多 Sheet Excel 结构重建、PDF 引擎
+  路由、批处理、质量 benchmark，以及统一的原文/分块输出。
+- Python、CLI 与环境变量均可配置外部 MinerU 拓扑，包括独立的
+  `vlm-http-client` server URL 与请求超时。
+
+### 修复
+- 兼容 MinerU 3.x 的 `results.<file>.md_content` 与 JSON 字符串形式
+  `content_list`，并归一化为页、元素、表格和图片。
+- MinerU 请求会显式要求返回 `content_list`，远程调用成功时不再退化为只有 Markdown
+  的单个合成页。
+
+### 安全
+- 发布流程验证并发布同一份构建制品；DeepDoc 下载固定到不可变的上游模型 revision，
+  全部必需权重均按随版本固定的 SHA-256 校验。
 
 ## [2026-08-29]
 

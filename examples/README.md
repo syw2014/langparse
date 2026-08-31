@@ -11,7 +11,7 @@ This directory contains runnable examples for common LangParse workflows.
 
 ## MinerU examples
 
-- `mineru_remote_api.py`: connect to an existing local or remote `mineru-api`
+- `mineru_remote_api.py`: connect to an existing `mineru-api`, optionally backed by a separate vLLM server
 - `mineru_local_managed.py`: let LangParse start and stop a local `mineru-api`
 - `mineru_batch_service.py`: batch parse a directory of PDFs through `ParseService`
 
@@ -31,3 +31,6 @@ python examples/benchmark_usage.py
 ```
 
 All MinerU examples expect you to update the sample PDF path before running them.
+The remote example reads `LANGPARSE_MINERU_API_URL` and optional
+`LANGPARSE_MINERU_BACKEND`, `LANGPARSE_MINERU_SERVER_URL`, and
+`LANGPARSE_MINERU_REQUEST_TIMEOUT` environment variables.

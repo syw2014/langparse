@@ -1,11 +1,31 @@
 # Changelog
 
-All notable changes to this project are documented here. Entries are grouped
-by date rather than version: nothing has shipped to PyPI yet (`pyproject.toml`
-has sat at `0.0.1` throughout, no git tags exist), so there's no release to
-hang a version number on. Once there's a first release, this will switch to
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) + [SemVer](https://semver.org/)
-version sections.
+All notable changes to this project are documented here. Versioned sections
+follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+[Semantic Versioning](https://semver.org/); the dated sections below preserve
+the pre-release development history.
+
+## [Unreleased]
+
+## [0.1.0rc1] - 2026-08-31
+
+### Added
+- First public release candidate with dependency-free core parsing/chunking,
+  structured multi-sheet Excel reconstruction, PDF engine routing, batch
+  parsing, quality benchmarks, and normalized raw/chunked outputs.
+- External MinerU topology configuration through Python, CLI, and environment
+  variables, including a separate `vlm-http-client` server URL and request timeout.
+
+### Fixed
+- MinerU 3.x responses using `results.<file>.md_content` and JSON-encoded
+  `content_list` are normalized into pages, elements, tables, and images.
+- MinerU requests now explicitly ask for `content_list`; successful remote
+  parses no longer collapse to one Markdown-only synthetic page.
+
+### Security
+- The release process validates and publishes the same built distributions;
+  DeepDoc downloads are fixed to an immutable upstream model revision and all
+  required weights are checked against release-pinned SHA-256 digests.
 
 ## [2026-08-29]
 

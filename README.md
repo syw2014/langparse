@@ -118,12 +118,10 @@ Same shape as the [LiteParse](https://github.com/run-llama/liteparse) diagram, d
 
 ## 📦 Installation
 
-*(Note: The project is still in development and not yet published to PyPI.)*
-
-Once v0.1 is released, you will be able to install it via pip:
+The first public release candidate is `0.1.0rc1`:
 
 ```bash
-pip install langparse
+pip install --pre "langparse==0.1.0rc1"
 ```
 
 Install only the optional capabilities you need:
@@ -131,10 +129,15 @@ Install only the optional capabilities you need:
 ```bash
 pip install "langparse[excel]"
 pip install "langparse[excel,model]"  # optional OpenAI workbook disambiguation
-pip install "langparse[mineru]"
 pip install "langparse[deepdoc]"
 pip install "langparse[all]"
 ```
+
+Calling an existing remote MinerU API needs only the core package. Install
+`langparse[mineru]` only when this Python environment must provide and start a
+local `mineru-api` orchestrator. Local inference backends remain an explicit
+operator choice; for example, install the official `mineru[pipeline]` extra for
+the CPU/GPU pipeline backend instead of pulling every platform backend.
 
 ## ⚡ Quick Start (Alpha)
 
@@ -447,6 +450,7 @@ LangParse can run MinerU through `mineru-api`.
 
 Runtime selection works like this:
 - If you pass or configure `api_url`, LangParse calls that MinerU service directly.
+- A remote `mineru-api` backed by a separate vLLM server also receives `backend` and `server_url` as `/file_parse` form fields. This path does **not** require the local `[mineru]` extra.
 - If `api_url` is not set, LangParse will try to start a local `mineru-api` service and manage its lifecycle for the current parse.
 - If `mineru-api` is not installed, pass `--auto-install-runtime` or `auto_install_runtime=True` to let LangParse install the configured runtime package in the current Python environment before starting the local service.
 
@@ -463,9 +467,10 @@ from langparse import AutoParser
 doc = AutoParser.parse(
     "paper.pdf",
     engine="mineru",
-    api_url="http://127.0.0.1:8000",
-    device="cuda",
-    model_dir="./models",
+    api_url="http://mineru.example:25820",
+    backend="vlm-http-client",
+    server_url="http://vlm.example:21670",
+    request_timeout=900,
 )
 ```
 
@@ -495,6 +500,9 @@ Environment variables:
 
 ```bash
 export LANGPARSE_MINERU_API_URL=http://127.0.0.1:8000
+export LANGPARSE_MINERU_BACKEND=vlm-http-client
+export LANGPARSE_MINERU_SERVER_URL=http://vlm.example:21670
+export LANGPARSE_MINERU_REQUEST_TIMEOUT=900
 export LANGPARSE_MINERU_DEVICE=cuda
 export LANGPARSE_MINERU_MODEL_DIR=./models
 export LANGPARSE_MINERU_DOWNLOAD_DIR=./downloads
@@ -520,7 +528,12 @@ code 2 and a one-line message.
 Single-file parsing:
 
 ```bash
-langparse parse paper.pdf --engine mineru --api-url http://127.0.0.1:8000 --device cuda --model-dir ./models --download-dir ./downloads --format json
+langparse parse paper.pdf --engine mineru \
+  --api-url http://mineru.example:25820 \
+  --mineru-backend vlm-http-client \
+  --mineru-server-url http://vlm.example:21670 \
+  --mineru-request-timeout 900 \
+  --format json
 ```
 
 Batch parsing:
@@ -578,7 +591,7 @@ uv pip install -e ".[docx]"  # Word parsing (python-docx)
 uv pip install -e ".[excel]" # Excel parsing (pandas + openpyxl)
 uv pip install -e ".[model]" # Optional OpenAI workbook disambiguation
 uv pip install -e ".[ocr]"   # OCR (rapidocr_onnxruntime)
-uv pip install -e ".[mineru]"# MinerU runtime (large download)
+uv pip install -e ".[mineru]"# MinerU API/orchestrator (local backend is explicit)
 uv pip install -e ".[deepdoc]"# DeepDoc runtime (OCR/layout/table ONNX weights, ~100MB download on first run)
 uv pip install -e ".[all]"   # everything above
 ```
@@ -626,7 +639,7 @@ If you use LangParse in your research, product, or publication, we would appreci
 ```
 
 ## Changelog
-See [CHANGELOG.md](CHANGELOG.md) ([中文](CHANGELOG_cn.md)) for what's changed, grouped by date — there's no version history yet since nothing has shipped to PyPI.
+See [CHANGELOG.md](CHANGELOG.md) ([中文](CHANGELOG_cn.md)) for release notes and the dated development history.
 
 ## License
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).

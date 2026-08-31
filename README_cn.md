@@ -118,12 +118,10 @@ flowchart LR
 
 ## 📦 安装 (Installation)
 
-*(注意：项目仍在开发中，尚未发布到 PyPI。)*
-
-当 v0.1 版本发布后，您将能够通过 pip 安装：
+首个公开候选版本为 `0.1.0rc1`：
 
 ```bash
-pip install langparse
+pip install --pre "langparse==0.1.0rc1"
 ```
 
 只安装实际需要的可选能力：
@@ -131,10 +129,13 @@ pip install langparse
 ```bash
 pip install "langparse[excel]"
 pip install "langparse[excel,model]"  # 可选的 OpenAI 工作簿消歧
-pip install "langparse[mineru]"
 pip install "langparse[deepdoc]"
 pip install "langparse[all]"
 ```
+
+连接已有远程 MinerU API 只需要核心包。只有需要当前 Python 环境提供并启动本地
+`mineru-api` 编排服务时，才安装 `langparse[mineru]`。本地推理后端仍由部署者显式选择；
+例如 CPU/GPU pipeline 场景单独安装官方 `mineru[pipeline]`，不再默认拉取所有平台后端。
 
 ## ⚡ 快速开始 (Alpha)
 
@@ -358,7 +359,7 @@ PDFParser(engine="simple", enable_ocr=True, ocr_min_chars=500)
 
 ### MinerU 运行时
 
-LangParse 现在可以通过 `mineru-api` 调用 MinerU。你可以传入 `api_url` 连接已有服务，也可以省略 `api_url` 让 LangParse 尝试启动本地 `mineru-api` 并在当前解析任务结束后关闭。
+LangParse 现在可以通过 `mineru-api` 调用 MinerU。你可以传入 `api_url` 连接已有服务，也可以省略 `api_url` 让 LangParse 尝试启动本地 `mineru-api` 并在当前解析任务结束后关闭。若该 API 通过独立 vLLM 服务完成推理，再传入 `backend="vlm-http-client"` 与 `server_url`；它们会作为 `/file_parse` 表单字段发送，这条远程路径不需要安装本地 `[mineru]` extra。
 
 如果当前 Python 环境没有安装 `mineru-api`，可以传入 `--auto-install-runtime` 或 Python 参数 `auto_install_runtime=True`，LangParse 会先在当前环境中安装配置的 MinerU runtime 包，再启动本地服务。
 
@@ -372,9 +373,10 @@ from langparse import AutoParser
 doc = AutoParser.parse(
     "paper.pdf",
     engine="mineru",
-    api_url="http://127.0.0.1:8000",
-    device="cuda",
-    model_dir="./models",
+    api_url="http://mineru.example:25820",
+    backend="vlm-http-client",
+    server_url="http://vlm.example:21670",
+    request_timeout=900,
 )
 ```
 
@@ -405,7 +407,12 @@ langparse parse mixed_folder/ --batch --output-dir out --metrics
 单文件解析：
 
 ```bash
-langparse parse paper.pdf --engine mineru --device cuda --model-dir ./models --download-dir ./downloads --format json
+langparse parse paper.pdf --engine mineru \
+  --api-url http://mineru.example:25820 \
+  --mineru-backend vlm-http-client \
+  --mineru-server-url http://vlm.example:21670 \
+  --mineru-request-timeout 900 \
+  --format json
 ```
 
 本地缺少 MinerU runtime 时自动安装：
@@ -451,7 +458,7 @@ uv pip install -e ".[docx]"  # Word 解析（python-docx）
 uv pip install -e ".[excel]" # Excel 解析（pandas + openpyxl）
 uv pip install -e ".[model]" # 可选 OpenAI 工作簿消歧
 uv pip install -e ".[ocr]"   # OCR（rapidocr_onnxruntime）
-uv pip install -e ".[mineru]"# MinerU 运行时（体积较大）
+uv pip install -e ".[mineru]"# MinerU API/编排层（本地推理后端需显式选择）
 uv pip install -e ".[deepdoc]"# DeepDoc 运行时（OCR/版面/表格 ONNX 权重，首次运行下载约 100MB）
 uv pip install -e ".[all]"   # 以上全部
 ```
@@ -502,7 +509,7 @@ uv run langparse benchmark samples/public.example.json --engine simple --output-
 
 ## 📋 更新日志
 
-变更记录见 [CHANGELOG_cn.md](CHANGELOG_cn.md)（[English](CHANGELOG.md)），按日期分组——项目还没有发布到 PyPI，暂时没有版本号可以挂靠。
+变更记录见 [CHANGELOG_cn.md](CHANGELOG_cn.md)（[English](CHANGELOG.md)），包含版本发布说明和按日期保留的开发历史。
 
 ## 📄 许可证
 

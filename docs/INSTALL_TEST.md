@@ -6,36 +6,36 @@
 
 ```bash
 # 安装基础版本
-uv pip install dist/langparse-0.0.1-py3-none-any.whl
+uv pip install dist/langparse-0.1.0rc1-py3-none-any.whl
 
 # 安装 MinerU 可选依赖
-uv pip install "dist/langparse-0.0.1-py3-none-any.whl[mineru]"
+uv pip install "dist/langparse-0.1.0rc1-py3-none-any.whl[mineru]"
 
 # 或安装带所有可选依赖的完整版本
-uv pip install "dist/langparse-0.0.1-py3-none-any.whl[all]"
+uv pip install "dist/langparse-0.1.0rc1-py3-none-any.whl[all]"
 
 # 或只安装特定功能的依赖
-uv pip install "dist/langparse-0.0.1-py3-none-any.whl[pdf,docx]"
+uv pip install "dist/langparse-0.1.0rc1-py3-none-any.whl[pdf,docx]"
 ```
 
 ### 方法 2: 使用标准 pip
 
 ```bash
 # 安装基础版本
-pip install dist/langparse-0.0.1-py3-none-any.whl
+pip install dist/langparse-0.1.0rc1-py3-none-any.whl
 
 # 安装 MinerU 可选依赖
-pip install "dist/langparse-0.0.1-py3-none-any.whl[mineru]"
+pip install "dist/langparse-0.1.0rc1-py3-none-any.whl[mineru]"
 
 # 或安装完整版本
-pip install "dist/langparse-0.0.1-py3-none-any.whl[all]"
+pip install "dist/langparse-0.1.0rc1-py3-none-any.whl[all]"
 ```
 
 ## 从发布包安装
 
 ```bash
-pip install "langparse[mineru]"
-pip install "langparse[all]"
+pip install --pre "langparse==0.1.0rc1"
+pip install --pre "langparse[all]==0.1.0rc1"
 ```
 
 ## 可选依赖说明
@@ -44,7 +44,7 @@ pip install "langparse[all]"
 - `docx`: Word 文档解析支持 (python-docx)
 - `excel`: Excel 解析支持 (pandas, openpyxl)
 - `ocr`: OCR 支持 (rapidocr_onnxruntime)
-- `mineru`: MinerU PDF 运行时支持 (`mineru[all]`)
+- `mineru`: 仅安装本地 MinerU API/编排基础包；远程 API 不需要，本地推理后端按部署选择官方 extra
 - `all`: 安装所有可选依赖
 - `dev`: 开发依赖 (pytest)
 
@@ -53,7 +53,7 @@ pip install "langparse[all]"
 运行测试脚本：
 
 ```bash
-python test_installation.py
+python examples/verify_install.py
 ```
 
 预期输出：
@@ -108,7 +108,7 @@ for chunk in chunks:
 
 MinerU 支持两种运行方式：
 
-- 远程或已有本地服务：传入 `api_url`
+- 远程或已有本地服务：传入 `api_url`；独立 vLLM 拓扑再传 `backend` 与 `server_url`，无需安装 `[mineru]`
 - 本地托管服务：省略 `api_url`，LangParse 会尝试启动 `mineru-api`
 - 当前环境缺少 `mineru-api`：传入 `--auto-install-runtime` 或 Python 参数 `auto_install_runtime=True`，LangParse 会先安装配置的 runtime 包
 
@@ -125,6 +125,15 @@ gpu_doc = AutoParser.parse(
     model_dir="./models",
 )
 
+remote_vlm_doc = AutoParser.parse(
+    "paper.pdf",
+    engine="mineru",
+    api_url="http://mineru.example:25820",
+    backend="vlm-http-client",
+    server_url="http://vlm.example:21670",
+    request_timeout=900,
+)
+
 cpu_doc = AutoParser.parse(
     "paper.pdf",
     engine="mineru",
@@ -137,7 +146,7 @@ cpu_doc = AutoParser.parse(
 
 ```bash
 # 单文件
-langparse parse paper.pdf --engine mineru --device cuda --model-dir ./models --download-dir ./downloads --format json
+langparse parse paper.pdf --engine mineru --api-url http://mineru.example:25820 --mineru-backend vlm-http-client --mineru-server-url http://vlm.example:21670 --mineru-request-timeout 900 --format json
 
 # 批量
 langparse parse docs/ --engine mineru --batch --output-dir out --format json
@@ -163,10 +172,10 @@ source test-env/bin/activate  # Linux/Mac
 # 或 test-env\Scripts\activate  # Windows
 
 # 安装包
-uv pip install dist/langparse-0.0.1-py3-none-any.whl[all]
+uv pip install dist/langparse-0.1.0rc1-py3-none-any.whl[all]
 
 # 运行测试
-python test_installation.py
+python examples/verify_install.py
 
 # 退出环境
 deactivate

@@ -1,6 +1,6 @@
 # LangParse 首个公开 Alpha 发布实施计划
 
-> **状态：** 代码与 GitHub 发布门完成，等待 PyPI Trusted Publisher 登录配置
+> **状态：** `v0.1.0rc1` 已通过 GitHub OIDC 发布到 PyPI，并完成公网安装验证
 > **目标版本：** `0.1.0rc1`
 > **设计依据：** `docs/superpowers/specs/2026-06-02-langparse-product-readiness-design.md`
 > **原则：** 从“用户能否可靠安装并完成真实任务”倒推发布门；默认假设网络、配置、依赖、制品和供应链都会在边界处失败。
@@ -99,5 +99,5 @@
 - [x] 加固 Tests workflow：固定 action SHA/uv 版本、最小权限、超时和矩阵缓存隔离；Python 3.10–3.13 与 lint 全部通过且无 annotations。
 - [x] 配置 GitHub `pypi` Environment：`syw2014` 必须手动审批，允许单维护者本人审批，部署来源仅允许 `v*` tag。
 - [x] 保护 `main`：要求 lint 与 Python 3.10–3.13 checks、严格同步、线性历史，并禁止 force-push/删除；因当前只有一位管理员，暂不强制管理员执行或 PR 审批。
-- [ ] 登录 PyPI，创建 `langparse` pending Trusted Publisher：owner `syw2014`、repository `langparse`、workflow `pypi-publish.yml`、environment `pypi`。
-- [ ] Trusted Publisher 回读确认后创建 `v0.1.0rc1` GitHub prerelease，审批 `pypi` Environment，并验证 PyPI 项目、制品、元数据和安装。
+- [x] 登录 PyPI，创建 `langparse` pending Trusted Publisher：owner `syw2014`、repository `langparse`、workflow `pypi-publish.yml`、environment `pypi`。
+- [x] Trusted Publisher 回读确认后创建 `v0.1.0rc1` GitHub prerelease，审批 `pypi` Environment，并验证 PyPI 项目、制品、元数据和安装。

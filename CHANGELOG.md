@@ -7,6 +7,11 @@ the pre-release development history.
 
 ## [Unreleased]
 
+### Added
+- Expose the installed distribution version through both
+  `langparse.__version__` and `langparse --version`, with one package-metadata
+  source of truth.
+
 ## [0.1.0rc1] - 2026-08-31
 
 ### Added

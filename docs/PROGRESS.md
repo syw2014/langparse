@@ -3,7 +3,7 @@
 **版本**: 0.1.0rc1（已发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
 **最后更新**: 2026-09-01
-**测试**: 658 passed，1 skipped；Ruff lint `All checks passed!`，format `131 files already formatted`
+**测试**: 660 passed，1 skipped；Ruff lint `All checks passed!`，format `131 files already formatted`
 
 > 本文档在 2026-07-30 重写。此前版本声称 v0.1.0、测试覆盖 100%、解析器完成度 100%，三项均与实际不符，已按代码现状订正。2026-08-03 补充"项目定位"一节并重排"已知缺口"优先级，理由见下。
 
@@ -49,7 +49,7 @@ LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领
 | Benchmark | 可用 | 通用解析 benchmark 提供结构阈值 + 保真度（文本编辑距离 / 表格 TEDS）；工作簿歧义 benchmark 提供严格 Golden Set、不可变报告与生产效果门 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-"658 passed，1 skipped" 指当前发布提交的测试结果，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+"660 passed，1 skipped" 指当前主分支的测试结果，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
 
 ---
 
@@ -126,7 +126,7 @@ langparse/
    chunks 携带版本化 profile/visibility metadata，analysis 额外提供 source-linked
    normalized records。真实 15-Sheet 工作簿回归中 retrieval 保持 39 chunks，两套
    profile 均精确守恒 228 个 data/total `row_id`，analysis 的 `table_rows` chunk 数
-   不多于 retrieval；当前全量测试为 658 passed，1 skipped。
+   不多于 retrieval；当前全量测试为 660 passed，1 skipped。
 6. ✅ **Phase 4 可选模型 fallback 的可交付范围（2026-08-29）**：模型不能改写事实层；
    默认离线路径和显式模型路径均已完成：
    - ✅ **Phase 4A（2026-08-26）安全的 region-kind 消歧核心**：完成 typed

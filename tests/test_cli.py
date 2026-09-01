@@ -1,9 +1,11 @@
 import json
 from datetime import date
+from importlib import metadata
 from pathlib import Path
 
 import pytest
 
+import langparse
 from langparse.cli import build_parser, main
 from langparse.metrics import BatchRunResult
 from langparse.services.parse_service import ParseService
@@ -80,6 +82,20 @@ def test_cli_main_help_exits_cleanly(capsys):
 
     assert exc_info.value.code == 0
     assert "usage: langparse" in captured.out
+
+
+def test_package_exposes_installed_distribution_version():
+    assert langparse.__version__ == metadata.version("langparse")
+
+
+def test_cli_main_version_matches_installed_distribution(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--version"])
+
+    captured = capsys.readouterr()
+
+    assert exc_info.value.code == 0
+    assert captured.out == f"langparse {metadata.version('langparse')}\n"
 
 
 def test_render_output_returns_markdown():

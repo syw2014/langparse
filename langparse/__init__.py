@@ -1,3 +1,7 @@
+from importlib.metadata import version as _distribution_version
+
+__version__ = _distribution_version("langparse")
+
 from langparse.autoparser import AutoParser
 from langparse.chunkers.semantic import SemanticChunker
 from langparse.core.chunker import BaseChunker
@@ -16,6 +20,7 @@ from langparse.types import (
 )
 
 __all__ = [
+    "__version__",
     "Document",
     "Chunk",
     "ParsedDocumentResult",

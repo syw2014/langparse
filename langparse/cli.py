@@ -5,6 +5,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from langparse import __version__
 from langparse.errors import classify_exception
 from langparse.services.batch_service import BatchParseService
 from langparse.services.benchmark_service import BenchmarkService
@@ -16,6 +17,7 @@ def build_parser():
         prog="langparse",
         description="Parse documents and evaluate parsing quality.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     parse_cmd = subparsers.add_parser(

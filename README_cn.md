@@ -1,124 +1,80 @@
-# LangParse
+<p align="center">
+  <img src="https://raw.githubusercontent.com/syw2014/langparse/main/assets/langparse-mark-512.png" alt="LangParse Logo" width="128">
+</p>
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+<h1 align="center">LangParse</h1>
 
-> Documents In, Knowledge Out. (文档进，知识出。)
+<p align="center"><strong>文档进，结构出。</strong></p>
 
-**LangParse 是文档解析与分块方向的一个厂商中立编排层（orchestration layer）** —— 类比 LLM 领域的 LiteLLM，只是对接的对象是各种解析引擎，而不是各家 LLM 供应商。
+<p align="center">
+  <a href="README.md">English</a>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="Apache 2.0 license"></a>
+  <a href="https://pypi.org/project/langparse/"><img src="https://img.shields.io/pypi/v/langparse?include_prereleases" alt="PyPI version"></a>
+  <a href="https://github.com/syw2014/langparse/actions"><img src="https://github.com/syw2014/langparse/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+</p>
+
+LangParse 是一个面向开发者的 Python 文档解析工具集，把文档转换为程序、Agent
+和数据管道可以直接消费的结构化结果。
+
+项目有两条产品主线：
+
+- **易用的通用文档解析**：用一套可预测的接口处理 PDF、DOCX、Excel、CSV、
+  Markdown 和文本，并按需提供分块、批处理、质量检查及可插拔 PDF 后端。
+- **更精确、更丰富的 Excel 理解**：保留工作簿事实，识别逻辑表、表单、矩阵、
+  文本区域和跨 Sheet 关系，而不是把工作簿直接压平成普通文本。
+
+PDF 和 Word 能力让 LangParse 覆盖完整文档管道；Excel 是项目主动做深、
+形成差异化的方向。
 
 ---
 
-## 🚀 项目状态
+## 项目状态
 
-LangParse 已经过了最初的原型阶段：Markdown/DOCX/Excel/PDF 解析、语义分块、批处理、质检和 CI 全链路可用（660 个测试通过，1 个跳过）。当前逐模块的状态和活跃路线图见 [docs/PROGRESS.md](docs/PROGRESS.md)——"现在做到哪一步了"以那份文档为准，不是这一节。
+首个公开候选版本为 `0.1.0rc1`。多格式解析、OOXML 工作簿结构化、语义分块、
+批处理、质量检查和 CI 已可用。项目仍处于 pre-1.0；各模块的真实完成度和已知缺口
+以 [docs/PROGRESS.md](docs/PROGRESS.md) 为准。
 
-项目仍是 pre-1.0，欢迎早期贡献者和设计伙伴加入，尤其是帮忙接入更多垂直引擎（PaddleOCR-VL、vision-LLM 后端），以及帮忙压测"引擎中立路由"这个设计本身。
+## 为什么选择 LangParse？
 
-## 🤔 为什么选择 LangParse？
+多数文档处理业务并不需要又一个复杂平台，而是需要一套容易安装、容易调用，
+并且对自身解析边界足够诚实的工具。
 
-当前 RAG/Agent 场景下的文档解析工具分两类，但都没有解决完整问题：
+Excel 不能沿用 PDF 和 Word 的文本抽取思路。真实工作簿可能包含公式、合并表头、
+重复打印片段、表单、矩阵、隐藏行列、批注、链接以及跨 Sheet 延续的表格。直接转成
+Markdown 会丢失后续分析无法恢复的信息。
 
-1. **单一、有主见的解析引擎**（MinerU、Docling、Marker、LlamaParse……）。每一个在自己的适用范围内都很强，但一旦选定就被锁定在它的取舍上——想在"轻量通用解析"和"重量级垂直引擎"（比如中文/复杂版面场景的 MinerU、DeepDoc）之间切换，往往意味着重写整条管道。
-2. **号称"多引擎"、实际并不中立的封装层**。像 MegaParse、LiteParse 这类项目名义上支持多个后端，但产品结构上都在为自家的旗舰选项导流——MegaParse README 里的 benchmark 表格存在的目的就是证明自家的 vision 解析器打败它包装的第三方引擎；LiteParse 明确写着复杂文档要升级到付费的 LlamaParse。两者都没有把 MinerU、DeepDoc 这类可自托管的垂直引擎当作真正平等的选项接入。
-
-**LangParse 两者都不是——它是适配/路由层。** 统一接口下，通用引擎（基于 pdfplumber 的 `simple`）和垂直/自托管引擎（目前是 `mineru` 和 `deepdoc`，`paddle` 在推进中）享有同等的一等公民地位，不会为了给某个付费选项导流而刻意弱化其他引擎。分块策略是叠加在引擎之上、完全独立的另一个选择。输出既可以是解析原文，也可以是分块后的内容——同一套 API，你说了算。
-
-**非目标**（写在这里是为了防止后续范围漂移）：
-- 不跟 MinerU / Docling / LlamaParse 拼原始解析精度——精度天花板由引擎本身决定，编排层改变不了这件事。
-- 不是一个独立的解析质量评测/排行榜项目（这类需求应参考 OmniDocBench、SCORE-Bench）。`services/fidelity.py` 里的保真度评分存在的意义,是帮你在**自己的文档**上对比选型,是辅助能力,不是产品的核心叙事。
-- 不绑定任何单一厂商的云端 API 作为唯一路径——自托管引擎和远程 API 引擎都应该是平等的后端选项。
-
-## 🏗️ 架构
+因此 LangParse 把三层信息明确分开：
 
 ```mermaid
 flowchart LR
-    subgraph Input["输入格式"]
-        direction TB
-        PDF["PDF"]
-        DOCX["DOCX / DOC"]
-        XLSX["XLSX / XLS / CSV"]
-        MD["MD / TXT"]
-    end
-
-    subgraph Router["路由层<br/>parsers/registry.py"]
-        direction TB
-        REG["内容嗅探优先，<br/>扩展名兜底<br/>（唯一事实源）"]
-    end
-
-    subgraph GenericEngines["通用引擎"]
-        direction TB
-        SIMPLE["simple<br/>(pdfplumber)"]
-        DOCXP["DocxParser"]
-        EXCELP["ExcelParser"]
-        MDP["MarkdownParser"]
-    end
-
-    subgraph VerticalEngines["垂直 / 自托管引擎"]
-        direction TB
-        MINERU["mineru ✅"]
-        DEEPDOC["deepdoc ✅"]
-        PADDLE["paddle 🚧 规划中"]
-        VISION["vision_llm 🚧 规划中"]
-    end
-
-    subgraph Result["统一结果"]
-        direction TB
-        PDR["ParsedDocumentResult<br/>pages / elements / tables / images"]
-    end
-
-    subgraph ChunkLayer["分块层（可插拔）"]
-        direction TB
-        SEM["SemanticChunker<br/>blocks.py + semantic.py"]
-    end
-
-    subgraph Output["输出"]
-        direction TB
-        RAW["解析原文<br/>Markdown / JSON"]
-        CHUNKS["分块结果<br/>Chunk[] + metadata"]
-    end
-
-    subgraph Services["服务层（横切关注点）"]
-        direction TB
-        BATCH["batch_service"]
-        QUALITY["quality 质检"]
-        BENCH["benchmark_service<br/>可选：在自己的语料上<br/>对比引擎选型"]
-        METRICS["metrics"]
-    end
-
-    Input --> Router
-    Router --> GenericEngines
-    Router --> VerticalEngines
-    GenericEngines --> Result
-    VerticalEngines --> Result
-    Result --> RAW
-    Result --> SEM
-    SEM --> CHUNKS
-    Result -.-> Services
-
-    style Input fill:#F5F5F5,color:#000000,stroke:#37D7FA,stroke-width:2px
-    style Router fill:#F5F5F5,color:#000000,stroke:#8A8F98,stroke-width:2px
-    style GenericEngines fill:#F5F5F5,color:#000000,stroke:#3E18F9,stroke-width:2px
-    style VerticalEngines fill:#F5F5F5,color:#000000,stroke:#FF8705,stroke-width:2px
-    style Result fill:#F5F5F5,color:#000000,stroke:#8A8F98,stroke-width:2px
-    style ChunkLayer fill:#F5F5F5,color:#000000,stroke:#1FAA59,stroke-width:2px
-    style Output fill:#F5F5F5,color:#000000,stroke:#FF8DF2,stroke-width:2px
-    style Services fill:#FAFAFA,color:#000000,stroke:#8A8F98,stroke-width:1px,stroke-dasharray: 4 3
+    A["文档<br/>PDF · DOCX · XLSX · CSV · MD · TXT"] --> B["简单统一的解析接口"]
+    B --> C["可消费结果<br/>Markdown · JSON · chunks"]
+    X["Excel / OOXML"] --> F["工作簿事实<br/>单元格 · 公式 · 样式 · 可见性"]
+    F --> S["工作簿结构<br/>逻辑表 · 表单 · 矩阵 · 关系"]
+    S --> C
+    C --> D["业务应用<br/>RAG · Agent · 数据管道"]
 ```
 
-和 [LiteParse](https://github.com/run-llama/liteparse) 那张图形式类似，但画的是不同的东西：他们画的是单一引擎内部的处理管线（格式转换 → 文本抽取 → OCR → 版面重建）；这张画的是**多引擎外层的路由层**——通用引擎和垂直引擎是平等的、都汇入同一个 `ParsedDocumentResult`，分块是叠加在结果之上、独立可选的一步，服务层（批处理/质检/benchmark）横切整条管线，而不是长在某一个引擎内部。
+丰富结构是事实源；Markdown 和检索分块是从结构派生出的视图，而不是结构的替代品。
 
-## ✨ 核心特性
+## 核心能力
 
-* **🔌 引擎中立路由**：通用引擎（`simple`）和垂直引擎（`mineru`、`deepdoc`，`paddle` 推进中）共享同一套接口和同一种输出形状（`ParsedDocumentResult`）。没有默认"主推"引擎，按你的文档特点自己选。
-* **📄 多格式解析**：开箱即用支持 `.pdf` `.docx` `.doc` `.xlsx` `.xlsm` `.xls` `.csv` `.md` `.txt`，全部归一化到同一套结构化结果。
-* **📗 OOXML 事实保真**：`.xlsx`/`.xlsm` 会在 `WorkbookIR.snapshot` 中保留坐标、原始/显示值、公式及缓存值、合并关系、样式指纹、可见性、行列尺寸、打印区域、批注、超链接和对象锚点。
-* **🧩 可插拔语义分块**：基于 Markdown 结构（标题、列表、表格、代码块）分块，和是哪个引擎产出的内容无关。
-* **📡 统一输出**：拿解析原文，或者拿带丰富 metadata（`source_file`、`page_number`、`header` 等）的分块结果——同一套 API,你决定。
-* **📊 可选的保真度评分**：`services/fidelity.py` 加上 `benchmark` CLI 命令,让你在需要证据支持选型决策时,在自己的文档上量化对比几个引擎。
+- **统一入口**：`AutoParser.parse_result(...)` 为支持的格式提供一致的结果契约。
+- **丰富的 Excel IR**：`.xlsx` 和 `.xlsm` 保留坐标、原始值和显示值、公式、
+  缓存值、合并关系、样式指纹、可见性、行列尺寸、打印区域、批注、超链接和对象锚点。
+- **工作簿语义结构重建**：确定性地区分逻辑表、表单、矩阵、文本和未分类区域，
+  同时保留源范围、置信度和诊断信息。
+- **通用文档覆盖**：支持 Markdown、DOCX、旧版 DOC、CSV、文本和 PDF；PDF
+  当前可选 `simple`、MinerU 和 DeepDoc 后端。
+- **下游可直接消费**：统一 Markdown/JSON、带来源引用的 chunks、批处理、指标和质量检查。
+- **可选模型辅助**：工作簿消歧必须显式启用；默认路径保持离线、确定性。
 
-## 📦 安装 (Installation)
+## 安装
 
-首个公开候选版本为 `0.1.0rc1`：
+安装当前候选版本：
 
 ```bash
 pip install --pre "langparse==0.1.0rc1"
@@ -134,10 +90,56 @@ pip install "langparse[all]"
 ```
 
 连接已有远程 MinerU API 只需要核心包。只有需要当前 Python 环境提供并启动本地
-`mineru-api` 编排服务时，才安装 `langparse[mineru]`。本地推理后端仍由部署者显式选择；
-例如 CPU/GPU pipeline 场景单独安装官方 `mineru[pipeline]`，不再默认拉取所有平台后端。
+`mineru-api` 编排服务时，才安装 `langparse[mineru]`。
 
-## ⚡ 快速开始 (Alpha)
+## 快速开始
+
+### 解析任意已支持文档
+
+```python
+from langparse import AutoParser
+
+result = AutoParser.parse_result("report.docx")
+
+print(result.markdown_content)
+print(result.metadata)
+```
+
+同一入口可处理 PDF、DOCX、Excel、CSV、Markdown 和文本。PDF 只有在需要时才选择后端：
+
+```python
+result = AutoParser.parse_result("scan.pdf", engine="deepdoc")
+```
+
+### 把 Excel 当作结构读取
+
+```python
+from langparse import ExcelParser
+from langparse.workbooks import WorkbookIR
+
+result = ExcelParser().parse_result("budget.xlsx")
+workbook = result.structure
+assert isinstance(workbook, WorkbookIR)
+assert workbook.snapshot is not None
+
+first_sheet = workbook.snapshot.sheets[0]
+print(first_sheet.cells["B2"].formula)
+
+for sheet in workbook.sheets:
+    for block in sheet.blocks:
+        print(block.kind, [ref.key for ref in block.source_refs])
+```
+
+工作簿 IR 始终关联回原始 Sheet 和单元格范围。可以从它派生 Markdown 或 chunks，
+同时保留校验和分析所需的事实。
+
+### 使用 CLI
+
+```bash
+langparse parse report.docx --format markdown
+langparse parse budget.xlsx --format json --chunk
+langparse parse docs/ --batch --chunk --metrics --output-dir out
+```
 
 ### 分块
 
@@ -167,7 +169,7 @@ langparse parse paper.pdf --chunk --format json
 langparse parse docs/ --batch --chunk --metrics --output-dir out
 ```
 
-### Excel 结构化结果
+### Excel 结构深入
 
 OOXML 工作簿不再被当作分页的 pandas 表格。每个 Sheet 只保留稳定的兼容序号，
 结果设置 `paginated=False`，并从同一次解析中提供无损源事实、确定性逻辑表、
@@ -193,8 +195,16 @@ print(parsed.chunks[0].metadata["chunk_type"])
 print(parsed.chunks[0].metadata["source_ranges"])
 print(analysis_chunks[0].structured_payload.get("records"))
 
-sheet_table = parsed.structure.sheets[0].blocks[0].logical_table
-cross_sheet_table = parsed.structure.table_continuations[0].logical_table
+logical_tables = [
+    block.logical_table
+    for sheet in parsed.structure.sheets
+    for block in sheet.blocks
+    if block.logical_table is not None
+]
+cross_sheet_tables = [
+    continuation.logical_table
+    for continuation in parsed.structure.table_continuations
+]
 ```
 
 解析器现在可确定性地按空白行/列带拆分独立表格，合并重复打印片段，构造多级
@@ -458,7 +468,7 @@ uv pip install -e ".[docx]"  # Word 解析（python-docx）
 uv pip install -e ".[excel]" # Excel 解析（pandas + openpyxl）
 uv pip install -e ".[model]" # 可选 OpenAI 工作簿消歧
 uv pip install -e ".[ocr]"   # OCR（rapidocr_onnxruntime）
-uv pip install -e ".[mineru]"# MinerU API/编排层（本地推理后端需显式选择）
+uv pip install -e ".[mineru]" # MinerU API（本地推理后端需显式选择）
 uv pip install -e ".[deepdoc]"# DeepDoc 运行时（OCR/版面/表格 ONNX 权重，首次运行下载约 100MB）
 uv pip install -e ".[all]"   # 以上全部
 ```
@@ -493,11 +503,11 @@ uv run langparse benchmark samples/public.example.json --engine simple --output-
 如果您在您的研究、产品或出版物中使用了 LangParse，我们非常欢迎您的引用！您可以使用以下 BibTeX 条目：
 
 ```bibtex
-@software{LangParse_2025,
+@software{LangParse_2026,
   author = {syw2014},
-  title = {LangParse: A universal document parsing and text chunking engine for LLM or agent applications},
-  month = {November},
-  year = {2025},
+  title = {LangParse: A developer-friendly document parsing toolkit with source-grounded Excel understanding},
+  month = {September},
+  year = {2026},
   publisher = {GitHub},
   url = {https://github.com/syw2014/langparse}
 }

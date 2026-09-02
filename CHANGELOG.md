@@ -8,9 +8,18 @@ the pre-release development history.
 ## [Unreleased]
 
 ### Added
+
 - Expose the installed distribution version through both
   `langparse.__version__` and `langparse --version`, with one package-metadata
   source of truth.
+- Add an original LangParse logo in scalable SVG and PNG formats.
+
+### Changed
+
+- Reframe the product around two complementary pillars: an easy general
+  document parsing toolkit and precise, source-grounded Excel understanding.
+- Restructure the English and Chinese READMEs around installation, quick use,
+  and rich workbook results instead of engine comparisons.
 
 ## [0.1.0rc1] - 2026-08-31
 

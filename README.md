@@ -1,124 +1,92 @@
-# LangParse
+<p align="center">
+  <img src="https://raw.githubusercontent.com/syw2014/langparse/main/assets/langparse-mark-512.png" alt="LangParse logo" width="128">
+</p>
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+<h1 align="center">LangParse</h1>
 
-> Documents In, Knowledge Out.
+<p align="center"><strong>Documents in. Structure out.</strong></p>
 
-**LangParse is a vendor-neutral orchestration layer for document parsing and chunking in LLM / Agent applications** — think LiteLLM, but for document parsing engines instead of LLM providers.
+<p align="center">
+  <a href="README_cn.md">简体中文</a>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="Apache 2.0 license"></a>
+  <a href="https://pypi.org/project/langparse/"><img src="https://img.shields.io/pypi/v/langparse?include_prereleases" alt="PyPI version"></a>
+  <a href="https://github.com/syw2014/langparse/actions"><img src="https://github.com/syw2014/langparse/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+</p>
+
+LangParse is a developer-friendly Python toolkit for turning documents into
+structured results that programs, agents, and data pipelines can use directly.
+
+It has two product pillars:
+
+- **Easy document parsing:** one predictable interface for PDF, DOCX, Excel,
+  CSV, Markdown, and text, with optional chunking, batch processing, quality
+  checks, and pluggable PDF backends.
+- **Precise, rich Excel understanding:** preserve workbook facts and reconstruct
+  logical tables, forms, matrices, text regions, and cross-sheet relationships
+  instead of flattening a workbook into plain text.
+
+PDF and Word support make LangParse useful across a document pipeline. Excel is
+where LangParse goes deliberately deeper.
 
 ---
 
-## 🚀 Project Status
+## Project status
 
-LangParse is past the initial prototype: Markdown/DOCX/Excel/PDF parsing, semantic chunking, batch processing, quality checks, and a CI pipeline are all working end to end (660 tests passing, 1 skipped). See [docs/PROGRESS.md](docs/PROGRESS.md) for the current module-by-module status and active roadmap — that file, not this section, is the source of truth for "what works today."
+The first public release candidate is `0.1.0rc1`. Core multi-format parsing,
+structured OOXML workbooks, semantic chunking, batch processing, quality checks,
+and CI are available today. LangParse remains pre-1.0; see
+[docs/PROGRESS.md](docs/PROGRESS.md) for the module-by-module source of truth and
+known gaps.
 
-Still pre-1.0. Looking for early contributors and design partners, particularly to help wire up additional vertical engines (PaddleOCR-VL, vision-LLM backends) and pressure-test the engine-neutral routing design.
+## Why LangParse?
 
-## 🤔 Why LangParse?
+Most document workflows do not need another complicated platform. They need a
+small toolkit that is easy to install, easy to call, and honest about the
+structure it can recover.
 
-Document parsing tooling for RAG/Agent pipelines today falls into two camps, and neither solves the whole problem:
+Excel also needs a different abstraction from PDF and Word. A workbook may
+contain formulas, merged headers, repeated print fragments, forms, matrices,
+hidden rows, comments, links, and tables continued across sheets. Converting it
+straight to Markdown destroys information that later analysis cannot recover.
 
-1. **Single, opinionated parsing engines** (MinerU, Docling, Marker, LlamaParse, ...). Each is strong within its own scope, but adopting one locks you into its trade-offs — switching between a lightweight generic parser and a heavyweight vertical engine (e.g. MinerU/DeepDoc for CJK or complex layouts) usually means rewriting your pipeline.
-2. **"Multi-engine" wrappers that aren't actually neutral.** Projects like MegaParse or LiteParse nominally support several backends, but the product is structured to fund a flagship offering — MegaParse's own vision-based parser (its README benchmark table exists to show it beating the third-party engines it wraps), LiteParse's own local engine with an explicit upsell to LlamaParse for anything complex. Neither wires up self-hosted vertical engines like MinerU or DeepDoc as genuine peers.
-
-**LangParse is neither of those — it's the adapter/routing layer.** One interface; generic engines (pdfplumber-based `simple`) and vertical/self-hosted engines (`mineru` and `deepdoc` today, `paddle` in progress) are equally first-class, pluggable backends, with no engine favored to drive adoption of a paid tier. Chunking strategy is a separate, independent choice on top of whichever engine parsed the document. Output is either the raw parsed document or chunked content — your call, same API.
-
-**Non-goals** (kept here so scope doesn't drift):
-- Not competing with MinerU / Docling / LlamaParse on raw extraction accuracy — that ceiling is set by the engine, not by this layer.
-- Not a standalone parser-evaluation benchmark/leaderboard project (see OmniDocBench, SCORE-Bench for that). The fidelity scoring in `services/fidelity.py` exists to help you compare engines *on your own documents* when picking a backend — a supporting feature, not the product's identity.
-- Not tied to any single vendor's cloud API as the only path — self-hosted engines and remote API engines are equally valid backends.
-
-## 🏗️ Architecture
+LangParse therefore keeps three layers separate:
 
 ```mermaid
 flowchart LR
-    subgraph Input["Input Formats"]
-        direction TB
-        PDF["PDF"]
-        DOCX["DOCX / DOC"]
-        XLSX["XLSX / XLS / CSV"]
-        MD["MD / TXT"]
-    end
-
-    subgraph Router["Router<br/>parsers/registry.py"]
-        direction TB
-        REG["content sniff first,<br/>extension as fallback<br/>(single source of truth)"]
-    end
-
-    subgraph GenericEngines["Generic Engines"]
-        direction TB
-        SIMPLE["simple<br/>(pdfplumber)"]
-        DOCXP["DocxParser"]
-        EXCELP["ExcelParser"]
-        MDP["MarkdownParser"]
-    end
-
-    subgraph VerticalEngines["Vertical / Self-Hosted Engines"]
-        direction TB
-        MINERU["mineru ✅"]
-        DEEPDOC["deepdoc ✅"]
-        PADDLE["paddle 🚧 planned"]
-        VISION["vision_llm 🚧 planned"]
-    end
-
-    subgraph Result["Unified Result"]
-        direction TB
-        PDR["ParsedDocumentResult<br/>pages / elements / tables / images"]
-    end
-
-    subgraph ChunkLayer["Chunking (pluggable)"]
-        direction TB
-        SEM["SemanticChunker<br/>blocks.py + semantic.py"]
-    end
-
-    subgraph Output["Output"]
-        direction TB
-        RAW["Raw parsed doc<br/>Markdown / JSON"]
-        CHUNKS["Chunked content<br/>Chunk[] + metadata"]
-    end
-
-    subgraph Services["Services (cross-cutting)"]
-        direction TB
-        BATCH["batch_service"]
-        QUALITY["quality checks"]
-        BENCH["benchmark_service<br/>optional: compare engines<br/>on your own corpus"]
-        METRICS["metrics"]
-    end
-
-    Input --> Router
-    Router --> GenericEngines
-    Router --> VerticalEngines
-    GenericEngines --> Result
-    VerticalEngines --> Result
-    Result --> RAW
-    Result --> SEM
-    SEM --> CHUNKS
-    Result -.-> Services
-
-    style Input fill:#F5F5F5,color:#000000,stroke:#37D7FA,stroke-width:2px
-    style Router fill:#F5F5F5,color:#000000,stroke:#8A8F98,stroke-width:2px
-    style GenericEngines fill:#F5F5F5,color:#000000,stroke:#3E18F9,stroke-width:2px
-    style VerticalEngines fill:#F5F5F5,color:#000000,stroke:#FF8705,stroke-width:2px
-    style Result fill:#F5F5F5,color:#000000,stroke:#8A8F98,stroke-width:2px
-    style ChunkLayer fill:#F5F5F5,color:#000000,stroke:#1FAA59,stroke-width:2px
-    style Output fill:#F5F5F5,color:#000000,stroke:#FF8DF2,stroke-width:2px
-    style Services fill:#FAFAFA,color:#000000,stroke:#8A8F98,stroke-width:1px,stroke-dasharray: 4 3
+    A["Documents<br/>PDF · DOCX · XLSX · CSV · MD · TXT"] --> B["Simple parsing API"]
+    B --> C["Consumable result<br/>Markdown · JSON · chunks"]
+    X["Excel / OOXML"] --> F["Workbook facts<br/>cells · formulas · styles · visibility"]
+    F --> S["Workbook structure<br/>tables · forms · matrices · relationships"]
+    S --> C
+    C --> D["Applications<br/>RAG · Agents · data pipelines"]
 ```
 
-Same shape as the [LiteParse](https://github.com/run-llama/liteparse) diagram, different point: theirs shows a single engine's internal pipeline (format conversion → text extraction → OCR → grid projection). This one shows the routing layer *around* multiple engines — generic and vertical engines are peers feeding the same `ParsedDocumentResult`, chunking is a separate optional stage on top, and services (batch/quality/benchmark) cut across the whole pipeline rather than living inside any one engine.
+Rich structure is the source of truth. Markdown and retrieval chunks are useful
+views derived from it, not replacements for it.
 
-## ✨ Core Features
+## Core capabilities
 
-* **🔌 Engine-neutral routing**: Generic (`simple`) and vertical (`mineru`, `deepdoc`, with `paddle` in progress) PDF engines share one interface and one output shape (`ParsedDocumentResult`). No default "flagship" engine — you pick based on your documents.
-* **📄 Multi-format parsing**: `.pdf` `.docx` `.doc` `.xlsx` `.xlsm` `.xls` `.csv` `.md` `.txt` out of the box, all normalized to the same structured result.
-* **📗 Lossless OOXML facts**: `.xlsx`/`.xlsm` parsing preserves coordinates, raw/display values, formulas and cached values, merges, style fingerprints, visibility, dimensions, print areas, comments, hyperlinks, and object anchors in `WorkbookIR.snapshot`.
-* **🧩 Pluggable semantic chunking**: Markdown-structure-aware chunking (headings, lists, tables, code blocks), decoupled from which engine produced the content.
-* **📡 Unified output**: Get the parsed document as-is, or chunked with rich metadata (`source_file`, `page_number`, `header`, ...) — same API either way.
-* **📊 Optional fidelity scoring**: `services/fidelity.py` plus the `benchmark` CLI command let you quantitatively compare engines on *your own* documents when you need evidence for a choice.
+- **One entry point:** `AutoParser.parse_result(...)` routes supported formats
+  through a consistent result contract.
+- **Rich Excel IR:** `.xlsx` and `.xlsm` preserve coordinates, raw and display
+  values, formulas, cached values, merges, style fingerprints, visibility,
+  dimensions, print areas, comments, hyperlinks, and object anchors.
+- **Semantic workbook reconstruction:** deterministic blocks distinguish
+  logical tables, forms, matrices, text, and unclassified regions while keeping
+  source ranges and confidence diagnostics.
+- **General document coverage:** Markdown, DOCX, legacy DOC, CSV, text, and PDF;
+  PDF currently supports `simple`, MinerU, and DeepDoc backends.
+- **Downstream-ready output:** normalized Markdown/JSON, source-aware chunks,
+  batch processing, metrics, and quality checks.
+- **Optional model assistance:** explicit opt-in workbook disambiguation; the
+  default path remains offline and deterministic.
 
-## 📦 Installation
+## Installation
 
-The first public release candidate is `0.1.0rc1`:
+Install the current release candidate:
 
 ```bash
 pip install --pre "langparse==0.1.0rc1"
@@ -135,39 +103,57 @@ pip install "langparse[all]"
 
 Calling an existing remote MinerU API needs only the core package. Install
 `langparse[mineru]` only when this Python environment must provide and start a
-local `mineru-api` orchestrator. Local inference backends remain an explicit
-operator choice; for example, install the official `mineru[pipeline]` extra for
-the CPU/GPU pipeline backend instead of pulling every platform backend.
+local `mineru-api` orchestrator.
 
-## ⚡ Quick Start (Alpha)
+## Quick start
 
-You can try the current alpha version by cloning the repository:
-
-```bash
-git clone https://github.com/syw2014/langparse.git
-cd langparse
-pip install -e .
-```
-
-### Basic Usage
+### Parse any supported document
 
 ```python
-from langparse import MarkdownParser, SemanticChunker
+from langparse import AutoParser
 
-# 1. Initialize
-parser = MarkdownParser()
-chunker = SemanticChunker()
+result = AutoParser.parse_result("report.docx")
 
-# 2. Parse a file (currently supports .md)
-doc = parser.parse("README.md")
+print(result.markdown_content)
+print(result.metadata)
+```
 
-# 3. Chunk it semantically
-chunks = chunker.chunk(doc)
+The same entry point accepts PDF, DOCX, Excel, CSV, Markdown, and text. For PDF,
+select a backend only when you need one:
 
-# 4. Inspect chunks
-for chunk in chunks:
-    print(f"Header Path: {chunk.metadata.get('header_path')}")
-    print(f"Content: {chunk.content[:50]}...")
+```python
+result = AutoParser.parse_result("scan.pdf", engine="deepdoc")
+```
+
+### Inspect Excel as structure
+
+```python
+from langparse import ExcelParser
+from langparse.workbooks import WorkbookIR
+
+result = ExcelParser().parse_result("budget.xlsx")
+workbook = result.structure
+assert isinstance(workbook, WorkbookIR)
+assert workbook.snapshot is not None
+
+first_sheet = workbook.snapshot.sheets[0]
+print(first_sheet.cells["B2"].formula)
+
+for sheet in workbook.sheets:
+    for block in sheet.blocks:
+        print(block.kind, [ref.key for ref in block.source_refs])
+```
+
+The workbook IR remains linked to the original sheet and cell ranges. You can
+derive Markdown or chunks without losing the facts needed for validation and
+analysis.
+
+### Use the CLI
+
+```bash
+langparse parse report.docx --format markdown
+langparse parse budget.xlsx --format json --chunk
+langparse parse docs/ --batch --chunk --metrics --output-dir out
 ```
 
 ### Chunking
@@ -205,7 +191,7 @@ langparse parse paper.pdf --chunk --format json
 langparse parse docs/ --batch --chunk --metrics --output-dir out
 ```
 
-### Structured Excel results
+### Excel deep dive
 
 OOXML workbooks are not treated as paginated pandas tables. Each sheet keeps a
 stable compatibility ordinal, while the result sets `paginated=False` and
@@ -233,8 +219,16 @@ print(parsed.chunks[0].metadata["chunk_type"])
 print(parsed.chunks[0].metadata["source_ranges"])
 print(analysis_chunks[0].structured_payload.get("records"))
 
-sheet_table = parsed.structure.sheets[0].blocks[0].logical_table
-cross_sheet_table = parsed.structure.table_continuations[0].logical_table
+logical_tables = [
+    block.logical_table
+    for sheet in parsed.structure.sheets
+    for block in sheet.blocks
+    if block.logical_table is not None
+]
+cross_sheet_tables = [
+    continuation.logical_table
+    for continuation in parsed.structure.table_continuations
+]
 ```
 
 The parser deterministically separates tables across blank row/column bands,
@@ -628,11 +622,11 @@ For questions, feature requests, or bug reports, the preferred method is to **op
 If you use LangParse in your research, product, or publication, we would appreciate a citation! You can use the following BibTeX entry:
 
 ```bibtex
-@software{LangParse_2025,
+@software{LangParse_2026,
   author = {syw2014},
-  title = {LangParse: A universal document parsing and text chunking engine for LLM or agent applications},
-  month = {November},
-  year = {2025},
+  title = {LangParse: A developer-friendly document parsing toolkit with source-grounded Excel understanding},
+  month = {September},
+  year = {2026},
   publisher = {GitHub},
   url = {https://github.com/syw2014/langparse}
 }

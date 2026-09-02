@@ -2,29 +2,44 @@
 
 **版本**: 0.1.0rc1（已发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
-**最后更新**: 2026-09-01
-**测试**: 660 passed，1 skipped；Ruff lint `All checks passed!`，format `131 files already formatted`
+**最后更新**: 2026-09-02
+**测试**: 660 passed，1 skipped；Ruff（`langparse tests`）lint `All checks passed!`，
+format `131 files already formatted`
 
-> 本文档在 2026-07-30 重写。此前版本声称 v0.1.0、测试覆盖 100%、解析器完成度 100%，三项均与实际不符，已按代码现状订正。2026-08-03 补充"项目定位"一节并重排"已知缺口"优先级，理由见下。
+> 本文档在 2026-07-30 按代码现状重写，并在 2026-09-02 依据实际业务价值
+> 重新明确产品定位：通用文档能力解决“易用、好用”，Excel 结构理解形成主要差异。
 
 ---
 
 ## 项目定位
 
-LangParse 是文档解析 + 分块方向的**编排/适配层**，类比 LLM 领域的 LiteLLM：不做单一解析引擎去和 MinerU、Docling、DeepDoc 拼提取精度，而是提供统一接口，让通用引擎（`simple`/pdfplumber）和垂直/自托管引擎（`mineru`、`deepdoc`，以及规划中的 `paddle`）作为**平等的可插拔后端**共存，叠加独立可选的分块策略，统一输出解析原文或分块结果。
+LangParse 是一套**易用的通用文档解析工具集**，同时把**更精确、更丰富的 Excel
+解析引擎**作为核心差异化能力。PDF、Word、Markdown 等格式提供一致的接入和结果体验；
+Excel 则不止提取文本，而是尽可能保留事实、恢复业务结构，并让结果可验证、可追溯、
+可继续分析。
 
-**核心主张**：
-- **引擎中立**——不主推自家引擎，不为了衬托某个"旗舰"选项而刻意弱化其他引擎。这是市面上同类项目普遍做不到的地方：调研发现 MegaParse（7.4k star，已停更 18 个月）README 里的 benchmark 表格存在的目的是证明自家 `megaparse_vision` 打败它包装的第三方引擎；LlamaIndex 的 LiteParse 明确写着复杂文档要升级到付费的 LlamaParse。两者都没有把 MinerU、DeepDoc 这类可自托管的垂直引擎当作真正平等的选项接入。
-- **通用 + 垂直引擎并重**——CJK/复杂版面场景依赖的 MinerU、DeepDoc 等开源垂直引擎，要和 pdfplumber 这类通用引擎享有同等的一等公民待遇。
-- **分块策略独立可插拔**——解析引擎的选择和分块策略的选择互不耦合，可自由组合。
-- **统一输出形态**——同一套接口既能拿到解析原文（`ParsedDocumentResult`），也能拿到分块结果（`Chunk[]`）。
+**两条产品主线**：
+
+- **横向：好用的文档解析工具集**——安装轻、接口统一、默认行为可预测；解析、
+  分块、批处理、质量检查和输出能够按需组合，而不是要求用户先理解内部引擎。
+- **纵向：深入的 Excel 解析**——保留单元格坐标、公式、样式、合并关系、可见性和
+  对象等工作簿事实，进一步识别逻辑表、表单、矩阵、文本区域及跨 Sheet 关系。
+- **来源证据优先**——所有语义结构都应能回到原始 Sheet 和范围；不确定时保留诊断，
+  不用不可追溯的猜测覆盖源事实。
+- **面向下游消费**——丰富结构是事实源，Markdown、JSON、检索 chunks 和 Agent
+  上下文是从中派生的消费视图。
 
 **非目标（防止范围漂移）**：
-- 不是在跟 MinerU / Docling / LlamaParse 拼"谁解析得更准"——精度天花板由底层引擎决定，编排层改变不了这件事。
-- 不是一个独立的解析质量评测/排行榜项目——`services/fidelity.py` / `services/benchmark_service.py` 的定位是"帮用户在自己的语料上对比选型的辅助能力"，不是产品的核心叙事，更不对标 OmniDocBench / SCORE-Bench 这类专门的评测基准。
-- 不绑定任何单一厂商的云端 API 作为唯一路径——本地自托管引擎和远程 API 引擎应是平等的后端选项。
 
-> 判断新功能提案是否跑偏的简单测试："这是在加强编排层的中立性/引擎覆盖面，还是在悄悄把它变成又一个单一解析引擎（或一个独立的评测项目）？"——如果是后者，大概率跑偏了。
+- 不把“支持更多 PDF 引擎”或引擎排行榜当作产品目标；可插拔后端是通用工具集的
+  实现能力，不是 LangParse 的核心身份。
+- 不把 Excel 简化成“转 Markdown”或普通二维表读取器；一旦压平，公式、来源范围、
+  表单/矩阵语义和跨 Sheet 关系无法在下游恢复。
+- 不为了覆盖所有场景而默认引入全部依赖、模型或云服务；核心路径应保持轻量，
+  重能力显式安装、显式启用。
+
+> 判断新功能优先级的简单测试：“它是否让常见文档更容易可靠地解析，或者让 Excel
+> 结构更准确、更丰富、更可消费？”两者都不是时，不应进入近期主线。
 
 ---
 
@@ -96,9 +111,25 @@ langparse/
 
 ## 路线图 / 已知缺口
 
-优先级按"是否直接服务项目定位（引擎中立编排层）"排列，不是按实现难度。
+优先级按实际业务价值排列：先让 Excel 结构更准确、更丰富、更容易消费，再降低
+通用文档解析的接入和使用成本；新增 PDF 后端和引擎对比只按明确需求推进。
 
-### Excel 结构解析阶段
+### 当前下一阶段优先级
+
+1. **P0：建立 Excel 真实业务 Golden Set 与效果门**——覆盖多表 Sheet、表单、矩阵、
+   重复打印页、跨 Sheet 延续、隐藏区域和复杂公式；以结构准确率、来源引用完整率、
+   重建率和降级率衡量，而不是只看“能否导出 Markdown”。
+2. **P0：补齐更丰富的工作簿事实和结构**——优先评估富信息 `.xls/.xlsb`、图片/图表
+   语义 Block、命名区域及外部引用等真实业务缺口，保持事实层与语义层分离。
+3. **P0：稳定面向调用方的 Excel 消费契约**——提供版本化 bundle、明确的查询/导出
+   路径和可操作诊断，让数据分析与 Agent 不必理解内部装配流程。
+4. **P1：持续降低通用工具集使用成本**——围绕安装体积、首个成功示例、错误提示、
+   批处理和常用分块策略改进；独立 `FixedTokenChunker`、`SlidingWindowChunker`、
+   chunker 注册表与 CLI 选择属于这一层，而不是项目定位本身。
+5. **P2：按需求扩展 PDF/视觉后端**——PaddleOCR-VL、vision-LLM 与跨引擎评测属于
+   覆盖面和选型辅助，不先于 Excel 差异化及基础易用性。
+
+### 已完成的 Excel 结构解析阶段
 
 1. ✅ **Phase 1（2026-08-25）事实层与兼容接口**：OOXML 双路读取公式/缓存值，
    保留合并、样式、可见性、尺寸、打印信息和对象锚点；`ParsedDocumentResult`
@@ -150,19 +181,24 @@ langparse/
    - **可选未来扩展（不阻塞当前功能完成）**：局部截图/VLM、continuation/header hierarchy
      的第二模型契约、富信息 `.xls/.xlsb` adapter、图片/图表语义 Block 和标准 bundle 输出。
 
-**P0 —— 直接验证"通用引擎与垂直引擎平权"这条核心主张**
-1. ✅ **已完成（2026-08-05）——把 DeepDoc 从占位实现补成真实可用**：[langparse/engines/pdf/deepdoc_engine.py](../langparse/engines/pdf/deepdoc_engine.py) 现在是移植自 RAGFlow 的完整 OCR + 版面分析 + 表格结构识别流水线（ONNX/CPU 推理，见 `langparse/engines/pdf/deepdoc/`），已注册进 `ENGINE_MAP`，`--engine deepdoc` 端到端可用，CLI 无需新增任何 flag（`--device` `--model-dir` `--download-dir` `--model-policy` 本就是通用转发的 kwargs）。用真实扫描件 PDF 做过一次人工冒烟验证（非 CI 用例，模型从 HuggingFace `InfiniFlow/deepdoc` 首次运行时下载到 `~/.langparse/models/deepdoc`）：产出的 `markdown_content` 是可读的中文文本和结构化表格，整体非乱码非空。对照源图像逐项核对后，发现两类已知局限而非"完美识别"：字符级 OCR 误差（"竣工"识别成"峻工"、两处日期字段缺字/错位，属扫描件 OCR 正常范围）之外，表格结构重建在复杂版式下有真实缺陷——源文档一段竖排多字标签被表格结构识别器拆成 5 行乱序字符，另有 2 行在源图像里找不到对应内容，疑似红色签章文字碎片被误判为单元格；后者是表格结构还原本身的局限，不是简单的字符识别误差（见上方完成度表 DeepDoc 行的注记）。跑起来的垂直引擎从 MinerU 一个变成两个，"平权"主张不再只有单一样本支撑，但表格结构还原在复杂版式上的鲁棒性仍是待改进项，不宜过度宣称"识别干净"。
-2. **文档化"新引擎接入契约"**：`BaseEngine.process()` / `PageResult`（[core/engine.py](../langparse/core/engine.py)）接口已经存在，但没有一份面向贡献者的说明——新引擎要实现什么、必须保证什么输出形状、哪些 metadata 字段是引擎特定的。缺了这份文档，后续接入方式容易不一致，等价于悄悄破坏引擎中立性。
-3. **审计路由/配置层有没有隐性偏向**：
+### 通用工具集：已完成与待补工程明细
+
+1. ✅ **已完成（2026-08-05）——把 DeepDoc 从占位实现补成真实可用**：[langparse/engines/pdf/deepdoc_engine.py](../langparse/engines/pdf/deepdoc_engine.py) 现在是移植自 RAGFlow 的完整 OCR + 版面分析 + 表格结构识别流水线（ONNX/CPU 推理，见 `langparse/engines/pdf/deepdoc/`），已注册进 `ENGINE_MAP`，`--engine deepdoc` 端到端可用，CLI 无需新增任何 flag（`--device` `--model-dir` `--download-dir` `--model-policy` 本就是通用转发的 kwargs）。用真实扫描件 PDF 做过一次人工冒烟验证（非 CI 用例，模型从 HuggingFace `InfiniFlow/deepdoc` 首次运行时下载到 `~/.langparse/models/deepdoc`）：产出的 `markdown_content` 是可读的中文文本和结构化表格，整体非乱码非空。对照源图像逐项核对后，发现两类已知局限而非"完美识别"：字符级 OCR 误差（"竣工"识别成"峻工"、两处日期字段缺字/错位，属扫描件 OCR 正常范围）之外，表格结构重建在复杂版式下有真实缺陷——源文档一段竖排多字标签被表格结构识别器拆成 5 行乱序字符，另有 2 行在源图像里找不到对应内容，疑似红色签章文字碎片被误判为单元格；后者是表格结构还原本身的局限，不是简单的字符识别误差（见上方完成度表 DeepDoc 行的注记）。这证明 DeepDoc 后端可实际运行，但复杂版式下的表格重建仍有明确边界，不宜宣称“识别干净”。
+2. **文档化“新引擎接入契约”**：`BaseEngine.process()` / `PageResult`（[core/engine.py](../langparse/core/engine.py)）接口已经存在，但没有一份面向贡献者的说明——新引擎要实现什么、必须保证什么输出形状、哪些 metadata 字段是引擎特定的。缺少这份文档会让后续后端的接入方式和用户体验发生漂移。
+3. **审计路由与配置参数的归属**：
    - ✅ **已修复（2026-08-04）——路由曾经只信扩展名**：`parser_kind_for()` 之前纯按后缀查表，文件后缀被改错（比如真实内容是 xlsx 却存成 .csv，或反过来）会直接路由到错误的解析器，静默产出乱码而不是报错。现在 `parsers/sniff.py` 先按内容嗅探（PDF 魔数、OOXML zip 包内部路径判断 docx/xlsx），嗅探结果确定时覆盖扩展名；嗅探不出结论时（纯文本、旧版 OLE 二进制 `.doc`/`.xls`）才退回扩展名，行为不变。`ExcelParser` 内部的 csv/workbook 分支同步改为按内容判定。零新增依赖（zipfile 是标准库）。已知局限：旧版 OLE 复合文档格式（pre-2007 `.doc`/`.xls`）内部结构需要额外依赖才能精确解析，目前只能识别"是不是 OLE 容器"，识别不出具体是 doc 还是 xls，这种情况下继续退回扩展名。
    - ⬜ **仍待确认**：`--device` `--model-dir` `--download-dir` `--model-policy` 已确认是通用转发（`langparse/cli.py` 里按 kwargs 过滤转发给引擎构造函数，非 MinerU 专属分支）——DeepDoc 接入时原样复用了这套参数，没有为它单独改配置层，这一点是好消息。但 `--api-url` `--api-host` `--api-port` `--api-command` `--api-start-timeout` `--auto-install-runtime` `--runtime-package` 这组仍然明显比其他引擎多，且是 MinerU 独立服务生命周期管理特有的概念（DeepDoc 进程内运行，完全用不到）。这组参数要不要在配置层做区分（比如引擎自己声明支持哪些参数），还没有结论——不算"倾斜"，但也还没有证据证明未来第三个引擎接入时不会重演。
 
-**P1 —— 支撑 P0，不阻塞**
-4. **PaddleOCR-VL / vision_llm 引擎**：优先级低于 DeepDoc——DeepDoc 更能体现"CJK/复杂版面垂直引擎"这条叙事，且已被 RAGFlow 等项目验证过可行性。
-5. **标注语料 + 跨引擎量化对比**：不再是唯一阻塞项，重新定位为"帮用户在自己的语料上做工程选型决策的辅助能力"（呼应"项目定位"里的非目标）。DeepDoc 已经可用，simple / MinerU / DeepDoc 三引擎对比现在具备条件，比之前两个引擎更有说服力，可以着手做。
+### 通用格式扩展（按真实业务需求推进）
+
+4. **PaddleOCR-VL / vision_llm 引擎**：已有占位边界，但只有在真实文档集证明现有
+   PDF 后端无法满足需求时才提升优先级。
+5. **标注语料 + 跨引擎量化对比**：定位为帮助用户在自己的语料上做工程选型的
+   辅助能力，不作为产品叙事或近期主线。
 6. ✅ **已完成（2026-08-09）——OCR 兜底跨引擎一致性**：`ocr_applied`/`ocr_text_chars` 曾经在三个引擎里各表各的——`simple` 按"图片占比高+文本层薄"的启发式逐页判定；MinerU 转发它自己内部的判定结果；DeepDoc 因为无条件对每页跑 OCR，直接把文档级 `ocr_applied` 写死成 `True`、`ocr_text_chars` 算成全文本长度而非"真正靠 OCR 恢复的字符数"，导致 `quality.py` 的 `require_ocr_text` 质检和 `benchmark_service.py` 的 `ocr_applied_count` 对 DeepDoc 的产出完全失真（永远判定为"用了 OCR"）。现在 `DeepDocEngine` 另开一次 `pdfplumber` 读取，复用 `simple` 引擎同款的 `needs_ocr()` 启发式逐页独立判定（不改变 DeepDoc 内部实际跑 OCR 的时机），`render_pages()` 据此在页面级别补上这两个字段，文档级别按 MinerU 的 `any()`/`sum()` 方式汇总；新增的跨引擎测试用同一份合成的扫描页/原生数字页 fixture 驱动 simple 和 deepdoc，断言两者判定一致。MinerU 的判定结果仍然原样信任、不做二次校验，因为它来自我们不掌控内部逻辑的外部服务。已知局限：DeepDoc 内部对"原生文本层存在但乱码"（CID / 字体编码错乱）的页面也会走 OCR 重识别，这套外部启发式检测不到这个内部决策，这种窄场景下 `ocr_applied` 可能漏报为 `False`（最终文本输出不受影响，只是这个 metadata 信号在这种场景下不准）。另一个已知局限：`render_pages()` 的 `plain_text`（进而 `ocr_text_chars`）只累加表格/图片以外的正文片段，如果一个扫描页被 DeepDoc 判定为整页表格或图片，该页会报告 `ocr_applied=True` 但 `ocr_text_chars=0`——这不是本次改动引入的新问题（旧的硬编码逻辑同样有这个盲区），暂不修复，留作后续工作。
 
-**P2 —— 工程基建，不紧急**
+### 工程基建（不紧急）
+
 7. 无 mypy 配置（已有 ruff 与 `py.typed`）。
 8. `errors.py` 的分类靠字符串匹配，`"timeout" in message` 会误伤任何消息里恰好含该词的异常（[langparse/errors.py:40](../langparse/errors.py)）。
 

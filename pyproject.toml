@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "langparse"
 version = "0.1.0rc1"
-description = "LangParse is a universal document parsing and text chunking engine for LLM or agent applications — Documents In, Knowledge Out."
+description = "A developer-friendly document parsing toolkit with precise, source-grounded Excel understanding."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -27,7 +27,18 @@ classifiers = [
     "Topic :: Text Processing :: Linguistic",
 ]
 
-keywords = ["llm", "rag", "parsing", "chunking", "agent", "document-parsing"]
+keywords = [
+    "llm",
+    "rag",
+    "parsing",
+    "chunking",
+    "agent",
+    "document-parsing",
+    "excel",
+    "spreadsheet",
+    "workbook",
+    "xlsx",
+]
 
 # Zero required dependencies: install only the extras your formats need.
 dependencies = []

@@ -1,0 +1,749 @@
+{
+  "schema_version": 1,
+  "dataset_id": "workbook-quality-seed",
+  "dataset_version": "1",
+  "split": "tuning",
+  "source_root": "fixtures",
+  "quality_gate": {
+    "minimum": {
+      "block_precision": 1.0,
+      "block_recall": 1.0,
+      "header_path_accuracy": 1.0,
+      "row_role_f1": 1.0,
+      "form_field_exact_match": 1.0,
+      "matrix_axis_accuracy": 1.0,
+      "continuation_precision": 1.0,
+      "continuation_recall": 1.0,
+      "source_ref_completeness": 1.0,
+      "source_ref_validity_ratio": 1.0,
+      "cell_coverage_ratio": 1.0,
+      "object_fact_precision": 1.0,
+      "object_fact_recall": 1.0,
+      "object_semantic_recall": 0.0
+    },
+    "maximum": {
+      "fallback_rate": 0.1
+    }
+  },
+  "samples": [
+    {
+      "sample_id": "simple-table",
+      "path": "simple_table.xlsx",
+      "sha256": "sha256:6f0992a478228c1d362e7cabf62cfe4c404aa671024e12794cd16d0bf2f3889a",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "Data",
+            "blocks": [
+              {
+                "source_range": "A1:B3",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "Name"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "Value"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A1:B1",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A2:B2",
+                    "role": "data"
+                  },
+                  {
+                    "source_range": "A3:B3",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "Data!A1:B3"
+        ],
+        "objects": []
+      }
+    },
+    {
+      "sample_id": "two-tables",
+      "path": "two_tables.xlsx",
+      "sha256": "sha256:07403512a9dd980f470bb107a3f2525ff0f771ee50235a3814e35bcce96ebd04",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "Data",
+            "blocks": [
+              {
+                "source_range": "A1:B2",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "Name"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "Value"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A1:B1",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A2:B2",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              },
+              {
+                "source_range": "A5:B6",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "Code"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "Amount"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A5:B5",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A6:B6",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "Data!A1:B2",
+          "Data!A5:B6"
+        ],
+        "objects": []
+      }
+    },
+    {
+      "sample_id": "form",
+      "path": "form.xlsx",
+      "sha256": "sha256:7cb8ea776aa802f5f1abe47faf8914f520f2be276bba67e75f1e7db12702dc1c",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "Form",
+            "blocks": [
+              {
+                "source_range": "A1:B3",
+                "kind": "form",
+                "headers": [],
+                "rows": [],
+                "form_fields": [
+                  {
+                    "label": "项目名称",
+                    "value": "道路工程"
+                  },
+                  {
+                    "label": "建设单位",
+                    "value": "示例公司"
+                  }
+                ],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "Form!A1:B3"
+        ],
+        "objects": []
+      }
+    },
+    {
+      "sample_id": "matrix",
+      "path": "matrix.xlsx",
+      "sha256": "sha256:bf72f486f359b5c64b9dc3a7d0d4e3e4c24e2be6ca14fcbac86f2f5958efc6fd",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "Matrix",
+            "blocks": [
+              {
+                "source_range": "A1:C3",
+                "kind": "matrix",
+                "headers": [],
+                "rows": [],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [
+                    "North",
+                    "South"
+                  ],
+                  "columns": [
+                    "Q1",
+                    "Q2"
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "Matrix!A1:C3"
+        ],
+        "objects": []
+      }
+    },
+    {
+      "sample_id": "text",
+      "path": "text.xlsx",
+      "sha256": "sha256:a970bed3ef791457d2994c6fa36e26075ce000d21d7363f581b5b867b4b7f034",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "Notes",
+            "blocks": [
+              {
+                "source_range": "A1:A3",
+                "kind": "text",
+                "headers": [],
+                "rows": [],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "Notes!A1:A3"
+        ],
+        "objects": []
+      }
+    },
+    {
+      "sample_id": "sparse-unclassified",
+      "path": "sparse_unclassified.xlsx",
+      "sha256": "sha256:ddf9b41135234dfd85e6b50e0c0e674490cbad872c560ed8c45e70cadcd7ad26",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "Sparse",
+            "blocks": [
+              {
+                "source_range": "A1:B2",
+                "kind": "unclassified",
+                "headers": [],
+                "rows": [],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "Sparse!A1:B2"
+        ],
+        "objects": []
+      }
+    },
+    {
+      "sample_id": "cross-sheet-continuation",
+      "path": "continuation.xlsx",
+      "sha256": "sha256:9bcbe8c3ddc9b15d10f62b5309b68f0362662e410e36bc12a7160355b23817aa",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "清单1",
+            "blocks": [
+              {
+                "source_range": "A1:C4",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "Name"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "Code"
+                    ]
+                  },
+                  {
+                    "coordinate": "C",
+                    "path": [
+                      "Value"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A1:C1",
+                    "role": "title"
+                  },
+                  {
+                    "source_range": "A2:C2",
+                    "role": "context"
+                  },
+                  {
+                    "source_range": "A3:C3",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A4:C4",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          },
+          {
+            "name": "清单2",
+            "blocks": [
+              {
+                "source_range": "A1:C4",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "Name"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "Code"
+                    ]
+                  },
+                  {
+                    "coordinate": "C",
+                    "path": [
+                      "Value"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A1:C1",
+                    "role": "title"
+                  },
+                  {
+                    "source_range": "A2:C2",
+                    "role": "context"
+                  },
+                  {
+                    "source_range": "A3:C3",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A4:C4",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [
+          [
+            "清单1!A1:C4",
+            "清单2!A1:C4"
+          ]
+        ],
+        "required_source_refs": [
+          "清单1!A1:C4",
+          "清单2!A1:C4"
+        ],
+        "objects": []
+      }
+    },
+    {
+      "sample_id": "repeated-print-fragments",
+      "path": "repeated_fragments.xlsx",
+      "sha256": "sha256:88c9af73678bc1101a085dc060fa5413a776d50a5a3ea683949d382bccaebdf6",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "Budget",
+            "blocks": [
+              {
+                "source_range": "A1:L12",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "序号"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "项目编码"
+                    ]
+                  },
+                  {
+                    "coordinate": "C",
+                    "path": [
+                      "项目名称"
+                    ]
+                  },
+                  {
+                    "coordinate": "D",
+                    "path": [
+                      "项目特征描述"
+                    ]
+                  },
+                  {
+                    "coordinate": "E",
+                    "path": [
+                      "计量单位"
+                    ]
+                  },
+                  {
+                    "coordinate": "F",
+                    "path": [
+                      "工程量"
+                    ]
+                  },
+                  {
+                    "coordinate": "G",
+                    "path": [
+                      "综合单价(元)"
+                    ]
+                  },
+                  {
+                    "coordinate": "H",
+                    "path": [
+                      "合价(元)"
+                    ]
+                  },
+                  {
+                    "coordinate": "I",
+                    "path": [
+                      "其中",
+                      "人工费"
+                    ]
+                  },
+                  {
+                    "coordinate": "J",
+                    "path": [
+                      "其中",
+                      "机械费"
+                    ]
+                  },
+                  {
+                    "coordinate": "K",
+                    "path": [
+                      "其中",
+                      "管理费"
+                    ]
+                  },
+                  {
+                    "coordinate": "L",
+                    "path": [
+                      "备注"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A1:L1",
+                    "role": "title"
+                  },
+                  {
+                    "source_range": "A2:L2",
+                    "role": "context"
+                  },
+                  {
+                    "source_range": "A3:L3",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A4:L4",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A5:L5",
+                    "role": "data"
+                  },
+                  {
+                    "source_range": "A6:L6",
+                    "role": "data"
+                  },
+                  {
+                    "source_range": "A7:L7",
+                    "role": "repeated_title"
+                  },
+                  {
+                    "source_range": "A8:L8",
+                    "role": "repeated_context"
+                  },
+                  {
+                    "source_range": "A9:L9",
+                    "role": "repeated_header"
+                  },
+                  {
+                    "source_range": "A10:L10",
+                    "role": "repeated_header"
+                  },
+                  {
+                    "source_range": "A11:L11",
+                    "role": "data"
+                  },
+                  {
+                    "source_range": "A12:L12",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "Budget!A1:L12"
+        ],
+        "objects": []
+      }
+    },
+    {
+      "sample_id": "chart-facts",
+      "path": "chart.xlsx",
+      "sha256": "sha256:5ae5518465ff88747cb20dc175e9bfda1969e0804347f949545f8a1b0201a1e3",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "ChartData",
+            "blocks": [
+              {
+                "source_range": "A1:B3",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "Category"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "Sales"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A1:B1",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A2:B2",
+                    "role": "data"
+                  },
+                  {
+                    "source_range": "A3:B3",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "ChartData!A1:B3"
+        ],
+        "objects": [
+          {
+            "sheet_name": "ChartData",
+            "kind": "chart",
+            "anchor": "D2"
+          }
+        ]
+      }
+    },
+    {
+      "sample_id": "formula-hidden-sheet",
+      "path": "formula_hidden.xlsx",
+      "sha256": "sha256:594aedc58816603948352b084f66e2a26483c2ddb684984b9535fdc88c875057",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "Data",
+            "blocks": [
+              {
+                "source_range": "A1:C3",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "Item"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "Rate"
+                    ]
+                  },
+                  {
+                    "coordinate": "C",
+                    "path": [
+                      "Amount"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A1:C1",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A2:C2",
+                    "role": "data"
+                  },
+                  {
+                    "source_range": "A3:C3",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          },
+          {
+            "name": "Lookup",
+            "blocks": [
+              {
+                "source_range": "A1:B2",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "Name"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "Value"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A1:B1",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A2:B2",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "Data!A1:C3",
+          "Lookup!A1:B2"
+        ],
+        "objects": []
+      }
+    }
+  ]
+}

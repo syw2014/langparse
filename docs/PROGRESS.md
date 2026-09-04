@@ -61,7 +61,7 @@ Excel 则不止提取文本，而是尽可能保留事实、恢复业务结构�
 | PDF 解析（vision_llm / paddle） | 未实现 | 已移出 `ENGINE_MAP`，选用时立即报错而非解析时才失败 |
 | 语义分块 | 可用 | 块扫描器 + 尺寸装箱，见 `chunkers/blocks.py` |
 | 批处理 / 指标 / 质检 | 可用 | 全格式生效 |
-| Benchmark | 可用 | 通用解析 benchmark 提供结构阈值 + 保真度（文本编辑距离 / 表格 TEDS）；工作簿歧义 benchmark 提供严格 Golden Set、不可变报告与生产效果门 |
+| Benchmark | 可用 | 通用解析 benchmark 提供结构阈值 + 保真度（文本编辑距离 / 表格 TEDS）；工作簿歧义 benchmark 评估模型消歧；整份工作簿 quality benchmark 以 10 份公开 tuning fixture 评估 Block、表头、行角色、表单/矩阵、续接、source refs、fallback 和对象覆盖，并提供不可变报告与非回归门 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
 "660 passed，1 skipped" 指当前主分支的测试结果，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
@@ -116,9 +116,12 @@ langparse/
 
 ### 当前下一阶段优先级
 
-1. **P0：建立 Excel 真实业务 Golden Set 与效果门**——覆盖多表 Sheet、表单、矩阵、
-   重复打印页、跨 Sheet 延续、隐藏区域和复杂公式；以结构准确率、来源引用完整率、
-   重建率和降级率衡量，而不是只看“能否导出 Markdown”。
+1. **P0（公开基础已完成，私有 holdout 待补）：建立 Excel 真实业务 Golden Set 与效果门**
+   ——`benchmark-workbook-quality` 已用 10 份人工标注公开 tuning fixture 覆盖多表 Sheet、
+   表单、矩阵、重复打印页、跨 Sheet 延续、隐藏区域、公式、命名区域和图表事实，并以版本化 manifest、
+   多维结构指标、真值 digest、不可变报告与 CLI 非零退出码阻止回归。仍需扩充代表性私有
+   holdout，并对真实业务分布建立放行阈值；公开合成 seed 不等于生产效果证明。公式、
+   命名区域和 Sheet 可见性目前只是 seed 中的语料锚点，尚未纳入 v1 指标，由 #9 补齐。
 2. **P0：补齐更丰富的工作簿事实和结构**——优先评估富信息 `.xls/.xlsb`、图片/图表
    语义 Block、命名区域及外部引用等真实业务缺口，保持事实层与语义层分离。
 3. **P0：稳定面向调用方的 Excel 消费契约**——提供版本化 bundle、明确的查询/导出

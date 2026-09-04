@@ -373,6 +373,25 @@ Reports are immutable by digest and reject incomplete or modified replays.
 cases, and separate operational staging evidence; the bundled tuning seed can
 never satisfy that release gate by itself.
 
+Whole-workbook structural quality has a separate entry point, so model
+disambiguation accuracy is never presented as final Excel accuracy:
+
+```bash
+langparse benchmark-workbook-quality \
+  samples/workbook_quality/public-manifest.json \
+  --output-dir reports/workbook-quality
+```
+
+The public tuning seed contains ten manually labelled workbooks covering
+logical tables, multiple tables per sheet, forms, matrices, text, explicit
+fallback, cross-sheet continuation, repeated print fragments, chart facts,
+formulas, named ranges, and hidden sheets. Reports score block precision/recall, header paths,
+row roles, forms/matrices, continuations, source references, fallback, and
+object fact/semantic coverage. A failed gate returns exit code `1`; reports omit
+cell values and annotation content and include the complete truth digest in the
+immutable run digest. The public seed prevents regression; production evidence
+still requires a separate private holdout.
+
 Cost circuit breakers never infer prices from a model name. Library callers
 that set `max_cost_usd_per_workbook` must also supply
 `input_cost_usd_per_million`, `output_cost_usd_per_million`, and a stable

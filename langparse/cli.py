@@ -117,6 +117,17 @@ def build_parser():
         help="enable live model evaluation (reads OPENAI_MODEL from env if name omitted)",
     )
     eval_cmd.add_argument("--base-url", default=None, help="override OPENAI_BASE_URL")
+
+    quality_cmd = subparsers.add_parser(
+        "benchmark-workbook-quality",
+        aliases=["eval-workbook"],
+        help="evaluate complete workbook structure from a versioned manifest",
+    )
+    quality_cmd.add_argument("manifest")
+    quality_cmd.add_argument("--output-dir", default="reports/workbook-quality")
+    quality_cmd.add_argument(
+        "--no-markdown", action="store_true", help="disable markdown summary output"
+    )
     return parser
 
 
@@ -133,6 +144,22 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _run(args, parser) -> int:
+    if args.command in ("benchmark-workbook-quality", "eval-workbook"):
+        from langparse.services.workbook_quality_benchmark import (
+            WorkbookQualityBenchmarkService,
+        )
+
+        report = WorkbookQualityBenchmarkService().run(
+            args.manifest,
+            output_dir=args.output_dir,
+            markdown=not args.no_markdown,
+        )
+        print(
+            "langparse: workbook quality benchmark completed "
+            f"with status={report.summary['status']} ({report.run_digest})"
+        )
+        return 0 if report.summary["status"] == "passed" else 1
+
     if args.command in ("benchmark-workbook-ambiguity", "eval", "eval-excel"):
         from langparse.services.workbook_ambiguity_benchmark import (
             WorkbookAmbiguityBenchmarkService,

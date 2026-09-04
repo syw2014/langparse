@@ -319,6 +319,20 @@ langparse benchmark-workbook-ambiguity private-manifest.json --model
 仓库内置的 tuning seed 本身永远不能满足发布门。截图/VLM 属于 Phase 4C，第二个领域契约
 属于 Phase 4D。
 
+整份工作簿结构质量使用独立的评测入口，不把模型消歧正确率冒充 Excel 最终精度：
+
+```bash
+langparse benchmark-workbook-quality \
+  samples/workbook_quality/public-manifest.json \
+  --output-dir reports/workbook-quality
+```
+
+当前公开 tuning seed 包含 10 份人工标注工作簿，覆盖逻辑表、多表 Sheet、表单、矩阵、
+文本、fallback、跨 Sheet 续接、重复打印片段、图表事实、公式和隐藏 Sheet。报告同时给出
+Block precision/recall、表头路径、行角色、表单/矩阵、续接、来源引用、fallback 以及对象
+事实/语义覆盖；样本本身还包含命名区域。质量门失败时 CLI 返回 `1`。报告不写入单元格值或标注内容，并把完整真值
+digest 纳入不可变 run digest。公开 seed 只用于防回归；生产认证仍需独立的私有 holdout。
+
 成本熔断不会根据模型名猜测价格。library 调用方设置 `max_cost_usd_per_workbook` 时，必须
 同时在 `WorkbookModelPolicy` 中提供 `input_cost_usd_per_million`、
 `output_cost_usd_per_million` 和稳定的 `cost_pricing_version`。这些费率应来自实际部署的

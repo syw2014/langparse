@@ -11,7 +11,13 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import get_column_letter, range_boundaries
 
-from langparse.workbooks.types import CellSnapshot, SheetSnapshot, WorkbookSnapshot
+from langparse.workbooks.types import (
+    CellSnapshot,
+    RegionAnchor,
+    SheetSnapshot,
+    SourceRef,
+    WorkbookSnapshot,
+)
 
 
 class WorkbookAdapter(Protocol):
@@ -43,12 +49,34 @@ class OOXMLWorkbookAdapter:
                 keep_vba=keep_vba,
                 read_only=False,
             )
+            defined_name_anchors = _defined_name_region_anchors(
+                formula_book,
+                warnings,
+                scope="workbook",
+            )
+            local_defined_name_anchors = {
+                sheet.title: _defined_name_region_anchors(
+                    sheet,
+                    warnings,
+                    scope="worksheet",
+                ).get(sheet.title, [])
+                for sheet in formula_book.worksheets
+            }
+            local_defined_names = {
+                sheet.title: {name.casefold() for name in sheet.defined_names}
+                for sheet in formula_book.worksheets
+            }
             sheets = [
                 self._snapshot_sheet(
                     formula_sheet,
                     value_book[formula_sheet.title],
                     index,
                     warnings,
+                    _merge_defined_name_anchors(
+                        defined_name_anchors.get(formula_sheet.title, []),
+                        local_defined_name_anchors.get(formula_sheet.title, []),
+                        local_defined_names.get(formula_sheet.title, set()),
+                    ),
                 )
                 for index, formula_sheet in enumerate(formula_book.worksheets)
             ]
@@ -73,6 +101,7 @@ class OOXMLWorkbookAdapter:
         value_sheet: Any,
         index: int,
         warnings: list[str],
+        defined_name_anchors: list[RegionAnchor],
     ) -> SheetSnapshot:
         hidden_rows = sorted(
             row_index
@@ -114,6 +143,7 @@ class OOXMLWorkbookAdapter:
                     data_type=str(cell.data_type or ""),
                     number_format=cell.number_format or "General",
                     style_id=_style_fingerprint(cell),
+                    visual_style_id=_style_fingerprint(cell, visual_only=True),
                     hyperlink=_hyperlink_value(cell.hyperlink),
                     comment=cell.comment.text if cell.comment is not None else None,
                     hidden=cell.row in hidden_rows or cell.column_letter in hidden_columns,
@@ -133,6 +163,7 @@ class OOXMLWorkbookAdapter:
                     data_type=str(anchor_cell.data_type or ""),
                     number_format=anchor_cell.number_format or "General",
                     style_id=_style_fingerprint(anchor_cell),
+                    visual_style_id=_style_fingerprint(anchor_cell, visual_only=True),
                 ),
             )
             anchor_snapshot.rowspan = max_row - min_row + 1
@@ -166,11 +197,32 @@ class OOXMLWorkbookAdapter:
                 }
             )
 
+        region_anchors = [
+            RegionAnchor(
+                kind="excel_table",
+                source_ref=SourceRef(
+                    sheet_name=formula_sheet.title,
+                    range=_normalize_anchor_range(table.ref),
+                ),
+                name=table.name,
+                scope="worksheet",
+            )
+            for table in sorted(formula_sheet.tables.values(), key=lambda item: item.name)
+        ]
+        region_anchors.extend(defined_name_anchors)
+        region_anchors.sort(
+            key=lambda item: (
+                {"excel_table": 0, "defined_name": 1}.get(item.kind, 99),
+                item.source_ref.range,
+                item.name or "",
+            )
+        )
+
         return SheetSnapshot(
             name=formula_sheet.title,
             index=index,
             visibility=formula_sheet.sheet_state,
-            used_range=_used_range(cells),
+            used_range=_used_range(cells, region_anchors),
             print_area=_print_areas(formula_sheet.print_area),
             row_heights=row_heights,
             column_widths=column_widths,
@@ -179,7 +231,63 @@ class OOXMLWorkbookAdapter:
             merged_ranges=merged_ranges,
             cells=dict(sorted(cells.items(), key=lambda item: _coordinate_sort_key(item[0]))),
             objects=objects,
+            region_anchors=region_anchors,
         )
+
+
+def _defined_name_region_anchors(
+    owner: Any,
+    warnings: list[str],
+    *,
+    scope: str,
+) -> dict[str, list[RegionAnchor]]:
+    anchors: dict[str, list[RegionAnchor]] = {}
+    for name, definition in sorted(owner.defined_names.items()):
+        try:
+            destinations = list(definition.destinations)
+        except (AttributeError, TypeError, ValueError):
+            warnings.append("defined_name_anchor_unsupported")
+            continue
+        for sheet_name, target in destinations:
+            try:
+                normalized = _normalize_anchor_range(target)
+            except ValueError:
+                warnings.append("defined_name_anchor_unsupported")
+                continue
+            anchors.setdefault(sheet_name, []).append(
+                RegionAnchor(
+                    kind="defined_name",
+                    source_ref=SourceRef(sheet_name=sheet_name, range=normalized),
+                    name=name,
+                    scope=scope,
+                )
+            )
+    return anchors
+
+
+def _merge_defined_name_anchors(
+    workbook_anchors: list[RegionAnchor],
+    worksheet_anchors: list[RegionAnchor],
+    worksheet_names: set[str],
+) -> list[RegionAnchor]:
+    return [
+        *[
+            anchor
+            for anchor in workbook_anchors
+            if anchor.name is None or anchor.name.casefold() not in worksheet_names
+        ],
+        *worksheet_anchors,
+    ]
+
+
+def _normalize_anchor_range(value: str) -> str:
+    normalized = value.replace("$", "")
+    if "," in normalized or "!" in normalized:
+        raise ValueError("region anchor must be a single local range")
+    boundaries = range_boundaries(normalized)
+    if any(boundary is None for boundary in boundaries):
+        raise ValueError("region anchor must have finite row and column bounds")
+    return normalized
 
 
 def _should_capture(cell: Any) -> bool:
@@ -223,8 +331,8 @@ def _side_payload(side: Any) -> dict[str, Any]:
     return {"style": side.style, "color": _color_payload(side.color)}
 
 
-def _style_fingerprint(cell: Any) -> str:
-    if not cell.has_style:
+def _style_fingerprint(cell: Any, *, visual_only: bool = False) -> str:
+    if not cell.has_style and not visual_only:
         return ""
     payload = {
         "font": {
@@ -253,12 +361,13 @@ def _style_fingerprint(cell: Any) -> str:
             "wrap_text": cell.alignment.wrap_text,
             "text_rotation": cell.alignment.text_rotation,
         },
-        "number_format": cell.number_format,
-        "protection": {
+    }
+    if not visual_only:
+        payload["number_format"] = cell.number_format
+        payload["protection"] = {
             "locked": cell.protection.locked,
             "hidden": cell.protection.hidden,
-        },
-    }
+        }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]
 
@@ -273,12 +382,30 @@ def _coordinate_sort_key(coordinate: str) -> tuple[int, int]:
     return (int(match.group(2)), column)
 
 
-def _used_range(cells: dict[str, CellSnapshot]) -> str | None:
-    if not cells:
+def _used_range(
+    cells: dict[str, CellSnapshot],
+    region_anchors: list[RegionAnchor],
+) -> str | None:
+    table_ranges = [
+        range_boundaries(anchor.source_ref.range)
+        for anchor in region_anchors
+        if anchor.kind == "excel_table"
+    ]
+    if not cells and not table_ranges:
         return None
     coordinates = [_coordinate_sort_key(coordinate) for coordinate in cells]
-    rows = [row for row, _ in coordinates]
-    columns = [column for _, column in coordinates]
+    rows = [
+        *[row for row, _ in coordinates],
+        *[row for _, min_row, _, max_row in table_ranges for row in (min_row, max_row)],
+    ]
+    columns = [
+        *[column for _, column in coordinates],
+        *[
+            column
+            for min_column, _, max_column, _ in table_ranges
+            for column in (min_column, max_column)
+        ],
+    ]
     return (
         f"{get_column_letter(min(columns))}{min(rows)}:{get_column_letter(max(columns))}{max(rows)}"
     )

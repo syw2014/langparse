@@ -75,6 +75,7 @@ class ParseDiagnostics:
     errors: list[str] = field(default_factory=list)
     timings_by_stage: dict[str, float] = field(default_factory=dict)
     continuation_candidates: list[StructuredData] = field(default_factory=list)
+    region_diagnostics: list[StructuredData] = field(default_factory=list)
 
 
 @dataclass

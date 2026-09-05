@@ -25,6 +25,14 @@ class SourceRef:
         return f"{self.sheet_name}!{self.range}"
 
 
+@dataclass(frozen=True)
+class RegionAnchor:
+    kind: str
+    source_ref: SourceRef
+    name: str | None = None
+    scope: str = "workbook"
+
+
 @dataclass
 class CellSnapshot:
     coordinate: str
@@ -41,6 +49,7 @@ class CellSnapshot:
     hyperlink: str | None = None
     comment: str | None = None
     hidden: bool = False
+    visual_style_id: str = ""
 
 
 @dataclass
@@ -58,6 +67,7 @@ class SheetSnapshot:
     cells: dict[str, CellSnapshot] = field(default_factory=dict)
     objects: list[StructuredData] = field(default_factory=list)
     metadata: StructuredData = field(default_factory=dict)
+    region_anchors: list[RegionAnchor] = field(default_factory=list)
 
 
 @dataclass
@@ -76,6 +86,7 @@ class CandidateRegion:
     confidence: float = 1.0
     features: StructuredData = field(default_factory=dict)
     diagnostics: list[StructuredData] = field(default_factory=list)
+    reason_codes: list[str] = field(default_factory=list)
 
 
 @dataclass

@@ -169,6 +169,7 @@ SemanticChunker(max_chunk_size=1000, overlap=0, length_function=len)
   pulls in no dependencies; pass a tokenizer's encoder to budget in tokens:
   ```python
   import tiktoken
+
   encoder = tiktoken.get_encoding("cl100k_base")
   SemanticChunker(max_chunk_size=512, length_function=lambda t: len(encoder.encode(t)))
   ```
@@ -226,8 +227,7 @@ logical_tables = [
     if block.logical_table is not None
 ]
 cross_sheet_tables = [
-    continuation.logical_table
-    for continuation in parsed.structure.table_continuations
+    continuation.logical_table for continuation in parsed.structure.table_continuations
 ]
 ```
 
@@ -293,9 +293,9 @@ from langparse.workbooks.modeling import WorkbookDisambiguation
 
 # `adapter` is supplied by the caller and implements
 # WorkbookStructureModelAdapter.
-direct = ExcelParser(
-    disambiguation=WorkbookDisambiguation.auto(adapter)
-).parse_result("budget.xlsx")
+direct = ExcelParser(disambiguation=WorkbookDisambiguation.auto(adapter)).parse_result(
+    "budget.xlsx"
+)
 
 strict = ParseService().parse_result(
     "budget.xlsx",
@@ -382,10 +382,11 @@ langparse benchmark-workbook-quality \
   --output-dir reports/workbook-quality
 ```
 
-The public tuning seed contains ten manually labelled workbooks covering
-logical tables, multiple tables per sheet, forms, matrices, text, explicit
-fallback, cross-sheet continuation, repeated print fragments, chart facts,
-formulas, named ranges, and hidden sheets. Reports score block precision/recall, header paths,
+The public tuning seed contains thirteen manually labelled workbooks covering
+logical tables, multiple tables per sheet, adjacent native tables, visually
+separated tables without blank columns, form side notes, matrices, text,
+explicit fallback, cross-sheet continuation, repeated print fragments, chart
+facts, formulas, named ranges, and hidden sheets. Reports score block precision/recall, header paths,
 row roles, forms/matrices, continuations, source references, fallback, and
 object fact/semantic coverage. A failed gate returns exit code `1`; reports omit
 cell values and annotation content and include the complete truth digest in the

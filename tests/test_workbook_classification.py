@@ -116,3 +116,21 @@ def test_classifies_presentation_cover_as_text_instead_of_table():
 
     assert result.kind == "text"
     assert result.reason_codes == ["presentation_text_region"]
+
+
+def test_native_excel_table_anchor_overrides_sparse_form_shape():
+    sheet, candidate = _fixture(
+        [
+            ["Name", "Value"],
+            ["Alpha", 1],
+            [None, None],
+            [None, None],
+        ]
+    )
+    candidate.reason_codes = ["native_table_anchor"]
+
+    result = classify_candidate_region(sheet, candidate)
+
+    assert result.kind == "logical_table"
+    assert result.confidence == 0.98
+    assert result.reason_codes == ["native_table_anchor"]

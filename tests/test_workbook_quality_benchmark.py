@@ -135,7 +135,7 @@ def test_report_digest_includes_artifact_options(tmp_path: Path):
     assert not without_markdown.output_path.joinpath("workbook-quality-summary.md").exists()
 
 
-def test_public_workbook_quality_seed_runs_ten_representative_samples(tmp_path: Path):
+def test_public_workbook_quality_seed_covers_structural_region_anchors(tmp_path: Path):
     from langparse.services.workbook_quality_benchmark import WorkbookQualityBenchmarkService
     from langparse.workbooks.quality.schema import load_workbook_quality_manifest
 
@@ -147,8 +147,13 @@ def test_public_workbook_quality_seed_runs_ten_representative_samples(tmp_path: 
         output_dir=tmp_path / "public-seed-report",
     )
 
-    assert len(manifest.samples) >= 10
-    assert report.summary["sample_count"] >= 10
+    assert {
+        "adjacent-native-tables",
+        "styled-adjacent-tables",
+        "form-with-side-note",
+    }.issubset({sample.sample_id for sample in manifest.samples})
+    assert len(manifest.samples) >= 13
+    assert report.summary["sample_count"] >= 13
     assert report.summary["status"] == "passed"
     assert report.summary["metrics"]["object_fact_recall"] == 1.0
     assert report.summary["metrics"]["object_semantic_recall"] == 0.0

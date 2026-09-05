@@ -169,6 +169,249 @@
       }
     },
     {
+      "sample_id": "adjacent-native-tables",
+      "path": "adjacent_native_tables.xlsx",
+      "sha256": "sha256:cf149b650efc7ee9d0656b465016fdcd716a6078bea0c7b0ff6816a10546c5c1",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "Adjacent",
+            "blocks": [
+              {
+                "source_range": "A1:B3",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "Name"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "Value"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A1:B1",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A2:B2",
+                    "role": "data"
+                  },
+                  {
+                    "source_range": "A3:B3",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              },
+              {
+                "source_range": "C1:D3",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "C",
+                    "path": [
+                      "Item"
+                    ]
+                  },
+                  {
+                    "coordinate": "D",
+                    "path": [
+                      "Amount"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "C1:D1",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "C2:D2",
+                    "role": "data"
+                  },
+                  {
+                    "source_range": "C3:D3",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "Adjacent!A1:B3",
+          "Adjacent!C1:D3"
+        ],
+        "objects": []
+      }
+    },
+    {
+      "sample_id": "styled-adjacent-tables",
+      "path": "styled_adjacent_tables.xlsx",
+      "sha256": "sha256:a4d670251c9fc79551a77cb3319c883129fcbfafcdd5ea721e7bee4959fe02cb",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "Styled",
+            "blocks": [
+              {
+                "source_range": "A1:B3",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "A",
+                    "path": [
+                      "Name"
+                    ]
+                  },
+                  {
+                    "coordinate": "B",
+                    "path": [
+                      "Value"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "A1:B1",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "A2:B2",
+                    "role": "data"
+                  },
+                  {
+                    "source_range": "A3:B3",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              },
+              {
+                "source_range": "C1:D3",
+                "kind": "logical_table",
+                "headers": [
+                  {
+                    "coordinate": "C",
+                    "path": [
+                      "Item"
+                    ]
+                  },
+                  {
+                    "coordinate": "D",
+                    "path": [
+                      "Amount"
+                    ]
+                  }
+                ],
+                "rows": [
+                  {
+                    "source_range": "C1:D1",
+                    "role": "header"
+                  },
+                  {
+                    "source_range": "C2:D2",
+                    "role": "data"
+                  },
+                  {
+                    "source_range": "C3:D3",
+                    "role": "data"
+                  }
+                ],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "Styled!A1:B3",
+          "Styled!C1:D3"
+        ],
+        "objects": []
+      }
+    },
+    {
+      "sample_id": "form-with-side-note",
+      "path": "form_with_side_note.xlsx",
+      "sha256": "sha256:93c50f652385f12bf95654c8798ed4e6ad13dd89a15ac62ed2d6380920b8fab0",
+      "expectation": {
+        "sheets": [
+          {
+            "name": "FormNote",
+            "blocks": [
+              {
+                "source_range": "A1:B4",
+                "kind": "form",
+                "headers": [],
+                "rows": [],
+                "form_fields": [
+                  {
+                    "label": "项目名称",
+                    "value": "道路工程"
+                  },
+                  {
+                    "label": "建设单位",
+                    "value": "示例公司"
+                  },
+                  {
+                    "label": "负责人",
+                    "value": "张三"
+                  }
+                ],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              },
+              {
+                "source_range": "C1:C4",
+                "kind": "text",
+                "headers": [],
+                "rows": [],
+                "form_fields": [],
+                "matrix_axes": {
+                  "rows": [],
+                  "columns": []
+                }
+              }
+            ]
+          }
+        ],
+        "continuations": [],
+        "required_source_refs": [
+          "FormNote!A1:B4",
+          "FormNote!C1:C4"
+        ],
+        "objects": []
+      }
+    },
+    {
       "sample_id": "form",
       "path": "form.xlsx",
       "sha256": "sha256:7cb8ea776aa802f5f1abe47faf8914f520f2be276bba67e75f1e7db12702dc1c",

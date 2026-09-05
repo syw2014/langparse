@@ -27,6 +27,14 @@ def test_source_ref_and_ids_are_stable():
     assert stable_id("table", ref.key) != stable_id("table", "Data!A1:B3")
 
 
+def test_region_anchor_is_available_from_workbooks_public_api():
+    from langparse.workbooks import RegionAnchor
+
+    anchor = RegionAnchor("excel_table", SourceRef("Data", "A1:B2"), "Sales")
+
+    assert anchor.source_ref.key == "Data!A1:B2"
+
+
 def test_workbook_snapshot_preserves_coordinate_facts():
     cell = CellSnapshot(coordinate="B2", raw_value="=A2*2", formula="=A2*2")
     sheet = SheetSnapshot(name="Data", index=0, used_range="A1:B2", cells={"B2": cell})

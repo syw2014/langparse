@@ -152,6 +152,7 @@ SemanticChunker(max_chunk_size=1000, overlap=0, length_function=len)
 - **`length_function`** 决定尺寸如何计量。默认按字符数，不引入任何依赖；需要按 token 预算时传入分词器的编码函数：
   ```python
   import tiktoken
+
   encoder = tiktoken.get_encoding("cl100k_base")
   SemanticChunker(max_chunk_size=512, length_function=lambda t: len(encoder.encode(t)))
   ```
@@ -202,8 +203,7 @@ logical_tables = [
     if block.logical_table is not None
 ]
 cross_sheet_tables = [
-    continuation.logical_table
-    for continuation in parsed.structure.table_continuations
+    continuation.logical_table for continuation in parsed.structure.table_continuations
 ]
 ```
 
@@ -253,9 +253,9 @@ from langparse.services.parse_service import ParseService
 from langparse.workbooks.modeling import WorkbookDisambiguation
 
 # `adapter` 由调用方提供，并实现 WorkbookStructureModelAdapter。
-direct = ExcelParser(
-    disambiguation=WorkbookDisambiguation.auto(adapter)
-).parse_result("budget.xlsx")
+direct = ExcelParser(disambiguation=WorkbookDisambiguation.auto(adapter)).parse_result(
+    "budget.xlsx"
+)
 
 strict = ParseService().parse_result(
     "budget.xlsx",
@@ -327,8 +327,9 @@ langparse benchmark-workbook-quality \
   --output-dir reports/workbook-quality
 ```
 
-当前公开 tuning seed 包含 10 份人工标注工作簿，覆盖逻辑表、多表 Sheet、表单、矩阵、
-文本、fallback、跨 Sheet 续接、重复打印片段、图表事实、公式和隐藏 Sheet。报告同时给出
+当前公开 tuning seed 包含 13 份人工标注工作簿，覆盖逻辑表、多表 Sheet、相邻原生表、
+无空白列的视觉分区、表单旁注、矩阵、文本、fallback、跨 Sheet 续接、重复打印片段、
+图表事实、公式和隐藏 Sheet。报告同时给出
 Block precision/recall、表头路径、行角色、表单/矩阵、续接、来源引用、fallback 以及对象
 事实/语义覆盖；样本本身还包含命名区域。质量门失败时 CLI 返回 `1`。报告不写入单元格值或标注内容，并把完整真值
 digest 纳入不可变 run digest。公开 seed 只用于防回归；生产认证仍需独立的私有 holdout。

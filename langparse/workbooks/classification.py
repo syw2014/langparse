@@ -124,7 +124,7 @@ def classify_candidate_region(
 
     features = features if features is not None else extract_region_features(sheet, candidate)
     values, _ = _region_grid(sheet, candidate)
-    return _classify_region(values, features)
+    return _classify_region(values, features, candidate.reason_codes)
 
 
 def assess_candidate_region(
@@ -136,7 +136,7 @@ def assess_candidate_region(
     features = extract_region_features(sheet, candidate)
     feature_digest = _structural_feature_digest(features)
     values, _ = _region_grid(sheet, candidate)
-    deterministic = _classify_region(values, features)
+    deterministic = _classify_region(values, features, candidate.reason_codes)
     choices = [
         RegionChoice(
             choice_id=_choice_id(
@@ -184,9 +184,17 @@ def assess_candidate_region(
 def _classify_region(
     values: list[list[str]],
     features: RegionFeatures,
+    region_reason_codes: list[str] | None = None,
 ) -> BlockClassification:
     """Apply the existing deterministic winner rules to precomputed facts."""
 
+    if "native_table_anchor" in (region_reason_codes or []):
+        return BlockClassification(
+            "logical_table",
+            0.98,
+            ["native_table_anchor"],
+            features,
+        )
     text_reason = _text_reason(features)
     if text_reason:
         return BlockClassification("text", 0.9, [text_reason], features)

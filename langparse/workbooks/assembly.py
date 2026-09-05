@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from copy import deepcopy
 from dataclasses import asdict, dataclass, fields, replace
+from typing import Any
 
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_to_tuple, range_boundaries
@@ -187,9 +188,11 @@ def _assemble_deterministic(
     workbook_ir, diagnostics = assemble_baseline(snapshot)
     block_counts: Counter[str] = Counter()
     ambiguous_regions = []
+    region_diagnostics = []
     for sheet, sheet_ir in zip(snapshot.sheets, workbook_ir.sheets, strict=True):
         semantic_blocks: list[WorkbookBlock] = []
         for candidate in detect_candidate_regions(sheet):
+            region_diagnostics.append(_candidate_region_diagnostic(sheet.name, candidate))
             try:
                 classification = classify_candidate_region(sheet, candidate)
                 block = _block_for_candidate(
@@ -227,6 +230,7 @@ def _assemble_deterministic(
 
     diagnostics.block_count_by_kind = dict(sorted(block_counts.items()))
     diagnostics.ambiguous_regions = ambiguous_regions
+    diagnostics.region_diagnostics = region_diagnostics
     try:
         groups, candidates = link_table_continuations(snapshot, workbook_ir)
     except Exception as exc:
@@ -578,8 +582,12 @@ def _finalize_workbook(
     _, diagnostics = assemble_baseline(snapshot)
     block_counts: Counter[str] = Counter()
     ambiguous_regions = []
+    region_diagnostics = []
     for sheet_ir in workbook_ir.sheets:
         for block in sheet_ir.blocks:
+            region_diagnostic = _block_region_diagnostic(sheet_ir.name, block)
+            if region_diagnostic is not None:
+                region_diagnostics.append(region_diagnostic)
             if block.kind == "unclassified":
                 reason_codes = [
                     diagnostic["reason_code"]
@@ -599,6 +607,7 @@ def _finalize_workbook(
 
     diagnostics.block_count_by_kind = dict(sorted(block_counts.items()))
     diagnostics.ambiguous_regions = ambiguous_regions
+    diagnostics.region_diagnostics = region_diagnostics
     continuation_failed = False
     try:
         groups, candidates = link_table_continuations(snapshot, workbook_ir)
@@ -670,6 +679,36 @@ def _stable_codes(*codes: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(codes))
 
 
+def _candidate_region_diagnostic(
+    sheet_name: str,
+    candidate: CandidateRegion,
+) -> dict[str, Any]:
+    return {
+        "sheet_name": sheet_name,
+        "range": candidate.source_ref.range,
+        "reason_codes": list(candidate.reason_codes),
+        "confidence": candidate.confidence,
+        "conflicts": deepcopy(candidate.diagnostics),
+    }
+
+
+def _block_region_diagnostic(
+    sheet_name: str,
+    block: WorkbookBlock,
+) -> dict[str, Any] | None:
+    reason_codes = block.metadata.get("region_reason_codes")
+    confidence = block.metadata.get("region_confidence")
+    if reason_codes is None or confidence is None or not block.source_refs:
+        return None
+    return {
+        "sheet_name": sheet_name,
+        "range": block.source_refs[0].range,
+        "reason_codes": list(reason_codes),
+        "confidence": confidence,
+        "conflicts": deepcopy(block.metadata.get("region_diagnostics", [])),
+    }
+
+
 def _block_for_candidate(snapshot_source, sheet, candidate, classification):
     common = {
         "block_id": stable_id(
@@ -686,6 +725,9 @@ def _block_for_candidate(snapshot_source, sheet, candidate, classification):
             "cell_count": len(candidate.cell_refs),
             "features": asdict(classification.features),
             "reason_codes": list(classification.reason_codes),
+            "region_reason_codes": list(candidate.reason_codes),
+            "region_confidence": candidate.confidence,
+            "region_diagnostics": deepcopy(candidate.diagnostics),
         },
         "diagnostics": [
             {"reason_code": reason_code} for reason_code in classification.reason_codes
@@ -734,6 +776,9 @@ def _unclassified_block(
             "view": "raw_grid",
             "cell_count": len(candidate.cell_refs),
             "reason_codes": list(reason_codes),
+            "region_reason_codes": list(candidate.reason_codes),
+            "region_confidence": candidate.confidence,
+            "region_diagnostics": deepcopy(candidate.diagnostics),
         },
         diagnostics=diagnostics,
     )

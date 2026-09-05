@@ -1,0 +1,54 @@
+{
+  "artifact_options": {
+    "markdown": true
+  },
+  "dataset_digest": "sha256:c54901504fed829e327904a2b7cb6802fc70915683cf538c5dae03c0ccc64da4",
+  "dataset_id": "workbook-quality-seed",
+  "dataset_version": "1",
+  "gate_reasons": [],
+  "metric_schema_version": 1,
+  "metrics": {
+    "block_precision": 1.0,
+    "block_recall": 1.0,
+    "cell_coverage_ratio": 1.0,
+    "continuation_precision": 1.0,
+    "continuation_recall": 1.0,
+    "fallback_rate": 0.07692307692307693,
+    "form_field_exact_match": 1.0,
+    "header_path_accuracy": 1.0,
+    "matrix_axis_accuracy": 1.0,
+    "object_fact_precision": 1.0,
+    "object_fact_recall": 1.0,
+    "object_semantic_recall": 0.0,
+    "row_role_f1": 1.0,
+    "source_ref_completeness": 1.0,
+    "source_ref_validity_ratio": 1.0
+  },
+  "parser_version": "0.1.0rc1",
+  "quality_gate": {
+    "maximum": {
+      "fallback_rate": 0.1
+    },
+    "minimum": {
+      "block_precision": 1.0,
+      "block_recall": 1.0,
+      "cell_coverage_ratio": 1.0,
+      "continuation_precision": 1.0,
+      "continuation_recall": 1.0,
+      "form_field_exact_match": 1.0,
+      "header_path_accuracy": 1.0,
+      "matrix_axis_accuracy": 1.0,
+      "object_fact_precision": 1.0,
+      "object_fact_recall": 1.0,
+      "object_semantic_recall": 0.0,
+      "row_role_f1": 1.0,
+      "source_ref_completeness": 1.0,
+      "source_ref_validity_ratio": 1.0
+    }
+  },
+  "run_digest": "sha256:9059db5268cd0c96470da87a0eb63442aeb2ba980341d47fbdf6e39603ceebb7",
+  "sample_count": 13,
+  "schema_version": 1,
+  "split": "tuning",
+  "status": "passed"
+}

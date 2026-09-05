@@ -2,9 +2,9 @@
 
 **版本**: 0.1.0rc1（已发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
-**最后更新**: 2026-09-02
-**测试**: 660 passed，1 skipped；Ruff（`langparse tests`）lint `All checks passed!`，
-format `131 files already formatted`
+**最后更新**: 2026-09-05
+**测试**: 762 passed，1 skipped；Ruff（`langparse tests`）lint `All checks passed!`，
+format `139 files already formatted`
 
 > 本文档在 2026-07-30 按代码现状重写，并在 2026-09-02 依据实际业务价值
 > 重新明确产品定位：通用文档能力解决“易用、好用”，Excel 结构理解形成主要差异。
@@ -52,6 +52,7 @@ Excel 则不止提取文本，而是尽可能保留事实、恢复业务结构�
 | Markdown / DOCX 解析 | 可用 | 均产出结构化 pages/tables/elements |
 | Excel OOXML 事实解析（Phase 1） | 可用 | `.xlsx/.xlsm` 产出 `WorkbookIR.snapshot`、raw-grid、coverage/reconstruction diagnostics 和 source-aware chunks；非分页且不生成 `Unnamed:*` |
 | Excel 确定性逻辑表（Phase 2A） | 可用 | Sheet 内空白带多表区域、重复打印片段、多级表头、板块/数据/合计角色、语义 Markdown 与 source-aware `table_rows` chunks |
+| Excel 结构锚点区域检测 | 可用 | 原生 Excel Table、可用命名区域、多打印区域、视觉样式边界和稀疏旁注参与确定性分区；公式引用与跨区合并标题阻止误拆，Block 暴露稳定 reason codes、confidence 和冲突诊断 |
 | Excel Block 分类（Phase 2B1） | 可用 | 确定性区分 LogicalTable/Form/Matrix/Text/Unclassified，携带 confidence/reason codes/source-ref validity；mixed Sheet 全 Block 渲染和 chunk |
 | Excel 跨 Sheet 续接（Phase 2B2） | 可用 | 相邻逻辑表的高置信关联与聚合视图、模糊/拒绝候选诊断、源 Sheet Markdown/chunks 及 `continuation_id` 重组 metadata；continuation 模型契约仍属于 Phase 4D |
 | Excel 模型消歧（Phase 4A/4B） | 可用（显式 opt-in） | 默认 `off` 且零隐式模型网络；显式 `auto/required`、choice-only region-kind、OpenAI SDK Adapter、env 配置、严格响应/membership、本地 fallback/validators、预算/熔断、净化 diagnostics 与不可变效果评测均已完成。公开 tuning seed 为 2/2 正确、0 错误接受；生产效果认证仍需代表性私有 holdout 与 operational evidence |
@@ -61,10 +62,14 @@ Excel 则不止提取文本，而是尽可能保留事实、恢复业务结构�
 | PDF 解析（vision_llm / paddle） | 未实现 | 已移出 `ENGINE_MAP`，选用时立即报错而非解析时才失败 |
 | 语义分块 | 可用 | 块扫描器 + 尺寸装箱，见 `chunkers/blocks.py` |
 | 批处理 / 指标 / 质检 | 可用 | 全格式生效 |
-| Benchmark | 可用 | 通用解析 benchmark 提供结构阈值 + 保真度（文本编辑距离 / 表格 TEDS）；工作簿歧义 benchmark 评估模型消歧；整份工作簿 quality benchmark 以 10 份公开 tuning fixture 评估 Block、表头、行角色、表单/矩阵、续接、source refs、fallback 和对象覆盖，并提供不可变报告与非回归门 |
+| Benchmark | 可用 | 通用解析 benchmark 提供结构阈值 + 保真度（文本编辑距离 / 表格 TEDS）；工作簿歧义 benchmark 评估模型消歧；整份工作簿 quality benchmark 以 13 份公开 tuning fixture 评估 Block、表头、行角色、表单/矩阵、续接、source refs、fallback 和对象覆盖，并提供不可变报告与非回归门 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-"660 passed，1 skipped" 指当前主分支的测试结果，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+"762 passed，1 skipped" 指本次本地完整测试结果，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+
+结构锚点中的样式/密度信号属于启发式判断，confidence 是规则分值而非校准概率。
+上下区域还需具备独立表头与记录的形状；仅靠样式无法消除所有纯文本多级表头歧义。
+明确的 Excel Table/可用命名区域优先于视觉切分，真实业务效果仍需私有 holdout 验证。
 
 ---
 
@@ -117,8 +122,9 @@ langparse/
 ### 当前下一阶段优先级
 
 1. **P0（公开基础已完成，私有 holdout 待补）：建立 Excel 真实业务 Golden Set 与效果门**
-   ——`benchmark-workbook-quality` 已用 10 份人工标注公开 tuning fixture 覆盖多表 Sheet、
-   表单、矩阵、重复打印页、跨 Sheet 延续、隐藏区域、公式、命名区域和图表事实，并以版本化 manifest、
+   ——`benchmark-workbook-quality` 已用 13 份人工标注公开 tuning fixture 覆盖多表 Sheet、
+   相邻原生表、视觉分区、表单旁注、矩阵、重复打印页、跨 Sheet 延续、隐藏区域、公式、
+   命名区域和图表事实，并以版本化 manifest、
    多维结构指标、真值 digest、不可变报告与 CLI 非零退出码阻止回归。仍需扩充代表性私有
    holdout，并对真实业务分布建立放行阈值；公开合成 seed 不等于生产效果证明。公式、
    命名区域和 Sheet 可见性目前只是 seed 中的语料锚点，尚未纳入 v1 指标，由 #9 补齐。
@@ -160,7 +166,7 @@ langparse/
    chunks 携带版本化 profile/visibility metadata，analysis 额外提供 source-linked
    normalized records。真实 15-Sheet 工作簿回归中 retrieval 保持 39 chunks，两套
    profile 均精确守恒 228 个 data/total `row_id`，analysis 的 `table_rows` chunk 数
-   不多于 retrieval；当前全量测试为 660 passed，1 skipped。
+   不多于 retrieval；当前全量测试为 762 passed，1 skipped。
 6. ✅ **Phase 4 可选模型 fallback 的可交付范围（2026-08-29）**：模型不能改写事实层；
    默认离线路径和显式模型路径均已完成：
    - ✅ **Phase 4A（2026-08-26）安全的 region-kind 消歧核心**：完成 typed

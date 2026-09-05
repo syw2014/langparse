@@ -15,7 +15,9 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, Reference
+from openpyxl.styles import PatternFill
 from openpyxl.workbook.defined_name import DefinedName
+from openpyxl.worksheet.table import Table
 
 ROOT = Path(__file__).resolve().parent
 FIXTURES = ROOT / "fixtures"
@@ -169,6 +171,131 @@ def _two_tables() -> tuple[Workbook, dict]:
             )
         ],
         required_source_refs=["Data!A1:B2", "Data!A5:B6"],
+    )
+    return workbook, expected
+
+
+def _adjacent_native_tables() -> tuple[Workbook, dict]:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Adjacent"
+    for row in (
+        ["Name", "Value", "Item", "Amount"],
+        ["Alpha", 1, "First", 10],
+        ["Beta", 2, "Second", 20],
+    ):
+        sheet.append(row)
+    sheet.add_table(Table(displayName="LeftTable", ref="A1:B3"))
+    sheet.add_table(Table(displayName="RightTable", ref="C1:D3"))
+    expected = _expectation(
+        [
+            _sheet(
+                "Adjacent",
+                _block(
+                    "A1:B3",
+                    "logical_table",
+                    headers=[_header("A", "Name"), _header("B", "Value")],
+                    rows=[
+                        _row("A1:B1", "header"),
+                        _row("A2:B2", "data"),
+                        _row("A3:B3", "data"),
+                    ],
+                ),
+                _block(
+                    "C1:D3",
+                    "logical_table",
+                    headers=[_header("C", "Item"), _header("D", "Amount")],
+                    rows=[
+                        _row("C1:D1", "header"),
+                        _row("C2:D2", "data"),
+                        _row("C3:D3", "data"),
+                    ],
+                ),
+            )
+        ],
+        required_source_refs=["Adjacent!A1:B3", "Adjacent!C1:D3"],
+    )
+    return workbook, expected
+
+
+def _styled_adjacent_tables() -> tuple[Workbook, dict]:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Styled"
+    for row in (
+        ["Name", "Value", "Item", "Amount"],
+        ["Alpha", 1, "First", 10],
+        ["Beta", 2, "Second", 20],
+    ):
+        sheet.append(row)
+    right_fill = PatternFill("solid", fgColor="DDEBF7")
+    for row in sheet.iter_rows(min_row=1, max_row=3, min_col=3, max_col=4):
+        for cell in row:
+            cell.fill = right_fill
+    expected = _expectation(
+        [
+            _sheet(
+                "Styled",
+                _block(
+                    "A1:B3",
+                    "logical_table",
+                    headers=[_header("A", "Name"), _header("B", "Value")],
+                    rows=[
+                        _row("A1:B1", "header"),
+                        _row("A2:B2", "data"),
+                        _row("A3:B3", "data"),
+                    ],
+                ),
+                _block(
+                    "C1:D3",
+                    "logical_table",
+                    headers=[_header("C", "Item"), _header("D", "Amount")],
+                    rows=[
+                        _row("C1:D1", "header"),
+                        _row("C2:D2", "data"),
+                        _row("C3:D3", "data"),
+                    ],
+                ),
+            )
+        ],
+        required_source_refs=["Styled!A1:B3", "Styled!C1:D3"],
+    )
+    return workbook, expected
+
+
+def _form_with_side_note() -> tuple[Workbook, dict]:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "FormNote"
+    sheet.merge_cells("A1:B1")
+    sheet["A1"] = "项目登记"
+    for row_index, values in enumerate(
+        (
+            ("项目名称", "道路工程", "说明：本表用于登记道路工程基本情况，请核对后提交。"),
+            ("建设单位", "示例公司", None),
+            ("负责人", "张三", None),
+        ),
+        start=2,
+    ):
+        for column_index, value in enumerate(values, start=1):
+            sheet.cell(row=row_index, column=column_index, value=value)
+    expected = _expectation(
+        [
+            _sheet(
+                "FormNote",
+                _block(
+                    "A1:B4",
+                    "form",
+                    form_fields=[
+                        {"label": "项目名称", "value": "道路工程"},
+                        {"label": "建设单位", "value": "示例公司"},
+                        {"label": "负责人", "value": "张三"},
+                    ],
+                ),
+                _block("C1:C4", "text"),
+            )
+        ],
+        required_source_refs=["FormNote!A1:B4", "FormNote!C1:C4"],
     )
     return workbook, expected
 
@@ -485,6 +612,9 @@ def main() -> None:
     builders = [
         ("simple-table", "simple_table.xlsx", _simple_table),
         ("two-tables", "two_tables.xlsx", _two_tables),
+        ("adjacent-native-tables", "adjacent_native_tables.xlsx", _adjacent_native_tables),
+        ("styled-adjacent-tables", "styled_adjacent_tables.xlsx", _styled_adjacent_tables),
+        ("form-with-side-note", "form_with_side_note.xlsx", _form_with_side_note),
         ("form", "form.xlsx", _form),
         ("matrix", "matrix.xlsx", _matrix),
         ("text", "text.xlsx", _text),

@@ -68,7 +68,7 @@ jobs:
         run: uv sync --extra dev --locked
 
       - name: Lint
-        run: uv run ruff check langparse tests
+        run: uv run ruff check langparse tests scripts/verify_real_samples.py
 
       - name: Check formatting
-        run: uv run ruff format --check langparse tests
+        run: uv run ruff format --check langparse tests scripts/verify_real_samples.py

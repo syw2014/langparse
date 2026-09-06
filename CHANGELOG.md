@@ -9,6 +9,11 @@ the pre-release development history.
 
 ### Added
 
+- Add a local real-sample regression runner with pinned source hashes,
+  source-to-snapshot checks, chunk payload checks, explicit semantic annotations,
+  local OCR verification, and source/output review reports. Private data stays
+  outside Git; semantic failures return a nonzero exit code without certifying
+  production readiness.
 - Expose the installed distribution version through both
   `langparse.__version__` and `langparse --version`, with one package-metadata
   source of truth.
@@ -20,6 +25,16 @@ the pre-release development history.
   document parsing toolkit and precise, source-grounded Excel understanding.
 - Restructure the English and Chinese READMEs around installation, quick use,
   and rich workbook results instead of engine comparisons.
+
+### Fixed
+
+- Recognize hierarchical workbook item numbers in region classification, header
+  boundaries, and row roles so their values and source references reach analysis
+  records. Separate explicitly labelled project context and titles from headers,
+  including multiple context rows before a single print-page marker.
+- Include DeepDoc table cell text in plain-text output and OCR character counts,
+  without repeating merged cells. The local regression runner can explicitly
+  compare Simple OCR with DeepDoc using existing local model weights.
 
 ## [0.1.0rc1] - 2026-08-31
 

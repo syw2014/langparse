@@ -118,6 +118,41 @@ def test_parse_service_analysis_profile_records_and_reuses_structure(tmp_path):
     assert {chunk.metadata["chunk_profile"] for chunk in retrieval_chunks} == {"retrieval"}
 
 
+def test_analysis_preserves_hierarchical_budget_items_and_source_refs(tmp_path):
+    path = tmp_path / "hierarchical-budget.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Budget"
+    sheet.append(["工程费用汇总表"])
+    sheet.merge_cells("A1:C1")
+    sheet.append(["工程名称：示例工程"])
+    sheet.merge_cells("A2:C2")
+    sheet.append(["序号", "项目", "金额"])
+    sheet.append(["2.1", "组织措施", None])
+    sheet.append(["2.2", "技术措施", "125.58"])
+    sheet.append(["2.2.1", "明细", "25.58"])
+    workbook.save(path)
+
+    parsed = ParseService().parse_result(path, chunk=True, chunk_profile="analysis")
+    records = [
+        record
+        for chunk in parsed.chunks
+        if chunk.metadata["chunk_type"] == "table_rows"
+        for record in chunk.structured_payload["records"]
+    ]
+
+    assert [record["values"] for record in records] == [
+        ["2.1", "组织措施", ""],
+        ["2.2", "技术措施", "125.58"],
+        ["2.2.1", "明细", "25.58"],
+    ]
+    assert [record["source_refs"] for record in records] == [
+        ["Budget!A4:C4"],
+        ["Budget!A5:C5"],
+        ["Budget!A6:C6"],
+    ]
+
+
 def test_excel_parser_links_cross_sheet_continuation_and_chunks_source_members(tmp_path):
     path = tmp_path / "continued-table.xlsx"
     workbook = Workbook()
@@ -223,8 +258,10 @@ def test_private_budget_workbook_sheet_8_acceptance():
         if chunk.metadata["chunk_type"] == "table_rows"
         for row_id in chunk.metadata["row_ids"]
     ]
-    assert len(logical_row_ids) == 228
-    assert len(chunk_row_ids) == 228
+    # Eight source-backed 2.1/2.2 items on sheets 6/7/11/12 were previously
+    # misclassified as unknown and omitted from both chunk profiles.
+    assert len(logical_row_ids) == 236
+    assert len(chunk_row_ids) == 236
     assert len(logical_row_ids) == len(set(logical_row_ids))
     assert len(chunk_row_ids) == len(set(chunk_row_ids))
     assert len(chunk_row_ids) == len(logical_row_ids)
@@ -235,7 +272,7 @@ def test_private_budget_workbook_sheet_8_acceptance():
         if chunk.metadata["chunk_type"] == "table_rows"
         for row_id in chunk.metadata["row_ids"]
     ]
-    assert len(analysis_row_ids) == 228
+    assert len(analysis_row_ids) == 236
     assert len(analysis_row_ids) == len(set(analysis_row_ids))
     assert set(analysis_row_ids) == set(logical_row_ids)
     assert sum(chunk.metadata["chunk_type"] == "table_rows" for chunk in analysis_chunks) <= sum(

@@ -1,3 +1,4 @@
+import pytest
 from openpyxl.utils import get_column_letter
 
 from langparse.workbooks.tables import interpret_logical_table
@@ -140,6 +141,68 @@ def test_builds_multi_row_header_paths_from_merges():
     assert paths["I"] == ["其中", "人工费"]
     assert paths["J"] == ["其中", "机械费"]
     assert paths["K"] == ["其中", "管理费"]
+
+
+@pytest.mark.parametrize("page_marker", [False, True])
+def test_separates_title_and_multiple_context_rows_from_headers(page_marker):
+    sheet = SheetSnapshot(name="Summary", index=0, used_range="A1:C5")
+    _put_row(sheet, 1, ["工程费用汇总表"])
+    _put_row(sheet, 2, ["工程名称：示例工程"])
+    _put_row(
+        sheet, 3, ["单位工程名称：室外工程", None, "第 1 页 共 1 页" if page_marker else "单位：元"]
+    )
+    _put_row(sheet, 4, ["序号", "项目", "金额"])
+    _put_row(sheet, 5, ["2.2", "技术措施", 125])
+    candidate = CandidateRegion(source_ref=SourceRef(sheet_name=sheet.name, range="A1:C5"))
+
+    table = interpret_logical_table(sheet, candidate)
+
+    assert table.title == "工程费用汇总表"
+    assert table.fragments[0].context_row_numbers == [2, 3]
+    assert [column.path for column in table.columns] == [["序号"], ["项目"], ["金额"]]
+    assert [row.role for row in table.rows] == ["title", "context", "context", "header", "data"]
+
+
+def test_keeps_merged_parent_header_without_context_evidence():
+    sheet = SheetSnapshot(name="Data", index=0, used_range="A1:B3")
+    _put_row(sheet, 1, ["费用"])
+    sheet.cells["B1"] = CellSnapshot(coordinate="B1", merge_anchor="A1")
+    _put_row(sheet, 2, ["材料", "人工"])
+    _put_row(sheet, 3, [120, 80])
+    candidate = CandidateRegion(source_ref=SourceRef(sheet_name=sheet.name, range="A1:B3"))
+
+    table = interpret_logical_table(sheet, candidate)
+
+    assert table.title == ""
+    assert [column.path for column in table.columns] == [["费用", "材料"], ["费用", "人工"]]
+
+
+def test_native_table_header_labels_take_precedence_over_context_heuristics():
+    sheet = SheetSnapshot(name="Data", index=0, used_range="A1:B2")
+    _put_row(sheet, 1, ["项目名称：编号", "单位：元"])
+    _put_row(sheet, 2, [1, 125])
+    candidate = CandidateRegion(
+        source_ref=SourceRef(sheet_name=sheet.name, range="A1:B2"),
+        reason_codes=["native_table_anchor"],
+    )
+
+    table = interpret_logical_table(sheet, candidate)
+
+    assert [column.path for column in table.columns] == [["项目名称：编号"], ["单位：元"]]
+    assert [row.role for row in table.rows] == ["header", "data"]
+
+
+@pytest.mark.parametrize("identifier", ["2.1", "2.2", "1.2.3"])
+def test_hierarchical_first_body_row_is_data_even_without_amount(identifier):
+    sheet = SheetSnapshot(name="Data", index=0, used_range="A1:C2")
+    _put_row(sheet, 1, ["序号", "项目", "金额"])
+    _put_row(sheet, 2, [identifier, "措施项目", None])
+    candidate = CandidateRegion(source_ref=SourceRef(sheet_name=sheet.name, range="A1:C2"))
+
+    table = interpret_logical_table(sheet, candidate)
+
+    assert table.fragments[0].header_row_numbers == [1]
+    assert table.rows[1].role == "data"
 
 
 def test_classifies_budget_row_roles_and_sections():

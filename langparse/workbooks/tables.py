@@ -17,6 +17,10 @@ from langparse.workbooks.types import (
 )
 
 PAGE_RE = re.compile(r"第\s*(\d+)\s*页\s*共\s*(\d+)\s*页")
+ROW_NUMBER_RE = re.compile(r"[1-9]\d*(?:\.\d+)*")
+CONTEXT_LABEL_RE = re.compile(
+    r"^(?:工程名称|单位工程名称|项目名称|编制单位|编制日期|建设单位|单位|币种)\s*[:：]\s*\S"
+)
 
 
 def interpret_logical_table(
@@ -141,7 +145,7 @@ def _classify_content_row(values: list[str]) -> str:
     if first in {"", "0"} and _section_title(values):
         if any(_is_number(value) and float(value) != 0 for value in values[3:]):
             return "section_header"
-    if re.fullmatch(r"[1-9]\d*", first):
+    if ROW_NUMBER_RE.fullmatch(first):
         return "data"
     if (
         len(values) > 1
@@ -194,6 +198,7 @@ def _build_fragments(
 ) -> list[TableFragment]:
     if len(page_markers) == 1:
         context_row, page_number, total_pages = page_markers[0]
+        title_rows, context_rows = _print_preamble(sheet, min_row, context_row, min_col, max_col)
         header_rows = _header_rows_after(
             sheet, context_row, context_row + 1, max_row, min_col, max_col
         )
@@ -203,20 +208,29 @@ def _build_fragments(
                 source_ref=candidate.source_ref,
                 page_number=page_number,
                 total_pages=total_pages,
-                title_row_numbers=[min_row] if min_row < context_row else [],
-                context_row_numbers=[context_row],
+                title_row_numbers=title_rows,
+                context_row_numbers=context_rows,
                 header_row_numbers=header_rows,
                 diagnostics=[{"reason_code": "single_print_fragment"}],
             )
         ]
 
     if not _valid_page_sequence(page_markers):
-        header_rows = _header_rows_after(sheet, min_row - 1, min_row, max_row, min_col, max_col)
+        title_rows, context_rows = (
+            ([], [])
+            if "native_table_anchor" in candidate.reason_codes
+            else _unpaged_preamble(sheet, min_row, max_row, min_col, max_col)
+        )
+        header_start = context_rows[-1] + 1 if context_rows else min_row
+        header_rows = _header_rows_after(
+            sheet, header_start - 1, header_start, max_row, min_col, max_col
+        )
         return [
             TableFragment(
                 fragment_id=stable_id("fragment", candidate.source_ref.key),
                 source_ref=candidate.source_ref,
-                title_row_numbers=[min_row] if header_rows and min_row < header_rows[0] else [],
+                title_row_numbers=title_rows,
+                context_row_numbers=context_rows,
                 header_row_numbers=header_rows,
                 diagnostics=[{"reason_code": "no_consistent_print_sequence"}],
             )
@@ -276,6 +290,53 @@ def _valid_page_sequence(markers: list[tuple[int, int, int]]) -> bool:
     return len(totals) == 1 and pages == list(range(pages[0], pages[0] + len(pages)))
 
 
+def _is_context_row(sheet: SheetSnapshot, row: int, min_col: int, max_col: int) -> bool:
+    values = [
+        text.strip()
+        for column in range(min_col, max_col + 1)
+        if (text := _raw_cell_text(sheet, row, column)).strip()
+    ]
+    return bool(values) and all(
+        CONTEXT_LABEL_RE.match(value) or PAGE_RE.search(value) for value in values
+    )
+
+
+def _print_preamble(
+    sheet: SheetSnapshot, start: int, marker_row: int, min_col: int, max_col: int
+) -> tuple[list[int], list[int]]:
+    # A page marker anchors the preamble; keep preceding labelled context as well.
+    contexts = [marker_row]
+    for row in range(marker_row - 1, start - 1, -1):
+        if not _is_context_row(sheet, row, min_col, max_col):
+            break
+        contexts.insert(0, row)
+    titles = [start] if start < contexts[0] else []
+    return titles, contexts
+
+
+def _unpaged_preamble(
+    sheet: SheetSnapshot, start: int, end: int, min_col: int, max_col: int
+) -> tuple[list[int], list[int]]:
+    # A sparse title alone is ambiguous with a merged parent header. Require
+    # explicit labelled context immediately afterwards before assigning ownership.
+    first_values = [
+        _raw_cell_text(sheet, start, column).strip() for column in range(min_col, max_col + 1)
+    ]
+    title = (
+        not _is_context_row(sheet, start, min_col, max_col)
+        and sum(bool(value) for value in first_values) == 1
+    )
+    context_start = start + 1 if title else start
+    contexts = []
+    for row in range(context_start, end + 1):
+        if not _is_context_row(sheet, row, min_col, max_col):
+            break
+        contexts.append(row)
+    if not contexts or contexts[-1] == end:
+        return [], []
+    return [start] if title else [], contexts
+
+
 def _header_rows_after(
     sheet: SheetSnapshot,
     context_row: int,
@@ -300,7 +361,7 @@ def _looks_like_data_or_section(
     max_col: int,
 ) -> bool:
     first = _cell_text(sheet, row_number, min_col).strip()
-    if re.fullmatch(r"\d+", first):
+    if re.fullmatch(r"\d+", first) or ROW_NUMBER_RE.fullmatch(first):
         return True
     values = [_raw_cell_text(sheet, row_number, column) for column in range(min_col, max_col + 1)]
     if any(_is_number(value) for value in values) and any(

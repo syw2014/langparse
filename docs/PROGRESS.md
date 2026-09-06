@@ -2,9 +2,9 @@
 
 **版本**: 0.1.0rc1（已发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
-**最后更新**: 2026-09-05
-**测试**: 762 passed，1 skipped；Ruff（`langparse tests`）lint `All checks passed!`，
-format `139 files already formatted`
+**最后更新**: 2026-09-06
+**测试**: 792 passed，1 skipped；Ruff（`langparse tests scripts/verify_real_samples.py`）lint
+`All checks passed!`，format `140 files already formatted`
 
 > 本文档在 2026-07-30 按代码现状重写，并在 2026-09-02 依据实际业务价值
 > 重新明确产品定位：通用文档能力解决“易用、好用”，Excel 结构理解形成主要差异。
@@ -65,7 +65,27 @@ Excel 则不止提取文本，而是尽可能保留事实、恢复业务结构�
 | Benchmark | 可用 | 通用解析 benchmark 提供结构阈值 + 保真度（文本编辑距离 / 表格 TEDS）；工作簿歧义 benchmark 评估模型消歧；整份工作簿 quality benchmark 以 13 份公开 tuning fixture 评估 Block、表头、行角色、表单/矩阵、续接、source refs、fallback 和对象覆盖，并提供不可变报告与非回归门 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-"762 passed，1 skipped" 指本次本地完整测试结果，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+"792 passed，1 skipped" 指本次本地完整测试结果，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+
+### 真实样本本地回归（2026-09-06）
+
+已提供 [固定命令与复核流程](REAL_SAMPLE_REGRESSION.md)：对本机 1 份真实工作簿和 2 份
+PDF 固定源 hash，独立读取源事实，检查两套 chunks，并输出逐 Sheet/逐 PDF 页的本地对照
+报告。私有原件、标注清单和完整报告均保持 Git 忽略；CI 运行合成样本的验收脚本测试。
+
+已修复层级编号子项遗漏、无页码时标题/项目上下文混入列名，以及单个打印页码前的多条
+上下文遗漏。原生 Excel Table 的明确列名和无上下文证据的多层表头保持优先。
+真实工作簿 135 项已标注语义检查全部通过，原有 22 项 Excel 差异清零；2852 个非空单元格、
+290 处合并仍无差异。修复后两套 chunks 均完整保留 236 条 data/total 行，比修复前增加
+8 条此前被遗漏的层级子项；13 份公开 tuning fixture 的工作簿质量门也通过。
+
+PDF 默认 simple + OCR 仍有 3 项失败（1 项错字、2 项扫描表格存在性检查）。已完成本地
+DeepDoc 对照：两处表格存在性检查通过，但出现单元格错位、首页文字遗漏和标准文件
+13 页仅产出 12 个页面结果，语义断言仍有 4 项失败，另有页面完整性失败，因此未切换默认
+引擎。另已修复 DeepDoc 表格文字未进入 plain_text / OCR 字符计数的问题。
+DeepDoc 的模型侧／上游识别质量问题已记录到 [Issue #12](https://github.com/syw2014/langparse/issues/12)，
+本轮暂缓修复，待模型或上游改进后按原始断言重新评估。
+真实业务失败继续保留，当前样本集属于已知数据回归，仍不作为独立 holdout 或生产认证。
 
 结构锚点中的样式/密度信号属于启发式判断，confidence 是规则分值而非校准概率。
 上下区域还需具备独立表头与记录的形状；仅靠样式无法消除所有纯文本多级表头歧义。
@@ -165,8 +185,8 @@ langparse/
    1000）与 `analysis`（默认预算 4000）已通过 library、Batch 和 CLI 提供；所有
    chunks 携带版本化 profile/visibility metadata，analysis 额外提供 source-linked
    normalized records。真实 15-Sheet 工作簿回归中 retrieval 保持 39 chunks，两套
-   profile 均精确守恒 228 个 data/total `row_id`，analysis 的 `table_rows` chunk 数
-   不多于 retrieval；当前全量测试为 762 passed，1 skipped。
+   profile 在当时均守恒 228 个 data/total `row_id`，analysis 的 `table_rows` chunk 数
+   不多于 retrieval。2026-09-06 修复层级编号遗漏后为 236 行，详情见上方真实样本回归。
 6. ✅ **Phase 4 可选模型 fallback 的可交付范围（2026-08-29）**：模型不能改写事实层；
    默认离线路径和显式模型路径均已完成：
    - ✅ **Phase 4A（2026-08-26）安全的 region-kind 消歧核心**：完成 typed

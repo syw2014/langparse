@@ -152,6 +152,14 @@ def render_pages(
             if layout_type == "table":
                 rows = html_table_to_rows(text)
                 tables.append({"rows": rows})
+                # Use original cells, not the span-expanded grid, so merged
+                # text appears once in search text and OCR character counts.
+                table_text = "\n".join(
+                    "\t".join(cell["text"] for cell in row if cell["text"])
+                    for row in _extract_raw_rows(text)
+                ).strip()
+                if table_text:
+                    plain_parts.append(table_text)
                 markdown_parts.append(_rows_to_markdown_table(rows))
                 elements.append(
                     ParsedElement(

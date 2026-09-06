@@ -71,6 +71,16 @@ def test_table_box_produces_rows_and_markdown_table():
     assert pages[0].elements[0].kind == "table"
 
 
+def test_scanned_table_text_is_searchable_and_counted_once_per_source_cell():
+    html = "<table><tr><td rowspan='2'>项目</td><td>材料</td></tr><tr><td>125</td></tr></table>"
+
+    page = render_pages([_box(layout_type="table", text=html)], ocr_pages={1: True})[0]
+
+    assert page.plain_text == "项目\t材料\n125"
+    assert page.metadata["ocr_text_chars"] == len(page.plain_text)
+    assert page.tables[0]["rows"] == [["项目", "材料"], ["项目", "125"]]
+
+
 def test_figure_box_produces_an_image_entry_and_caption():
     pages = render_pages([_box(layout_type="figure", text="Figure 1: a chart")])
 

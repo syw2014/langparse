@@ -73,7 +73,7 @@ def extract_region_features(
     nonempty_by_column = tuple(
         sum(values[row][column] != "" for row in range(row_count)) for column in range(column_count)
     )
-    positive_ordinal_rows = sum(_is_positive_integer(row[0]) for row in values[1:] if row)
+    positive_ordinal_rows = sum(_is_row_ordinal(row[0]) for row in values[1:] if row)
     label_value_pairs = sum(_label_value_pairs(row) for row in values)
     numeric_grid_rows, numeric_grid_columns = _numeric_grid_shape(values)
     merged_title_rows = sum(
@@ -287,8 +287,9 @@ def _is_number(value: str) -> bool:
     return True
 
 
-def _is_positive_integer(value: str) -> bool:
-    return bool(re.fullmatch(r"[1-9]\d*", value.strip()))
+def _is_row_ordinal(value: str) -> bool:
+    # Printed schedules use both flat and hierarchical item numbers.
+    return bool(re.fullmatch(r"[1-9]\d*(?:\.\d+)*", value.strip()))
 
 
 def _label_value_pairs(row: list[str]) -> int:

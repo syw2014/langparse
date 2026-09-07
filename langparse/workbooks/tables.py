@@ -4,6 +4,7 @@ import re
 
 from openpyxl.utils import get_column_letter, range_boundaries
 
+from langparse.workbooks.labels import is_section_label, is_total_label
 from langparse.workbooks.types import (
     CandidateRegion,
     HeaderColumn,
@@ -95,6 +96,10 @@ def _build_rows_and_sections(
         for row_number in fragment.header_row_numbers:
             roles[row_number] = "header" if fragment_index == 0 else "repeated_header"
 
+    header_rows = fragments[0].header_row_numbers if fragments else []
+    ordinal_column = any(
+        _cell_text(sheet, row, min_col).strip() in {"序号", "编号"} for row in header_rows
+    )
     logical_rows: list[LogicalRow] = []
     sections: list[TableSection] = []
     current_section: TableSection | None = None
@@ -102,7 +107,12 @@ def _build_rows_and_sections(
         values = [
             _raw_cell_text(sheet, row_number, column) for column in range(min_col, max_col + 1)
         ]
-        role = roles.get(row_number) or _classify_content_row(values)
+        first_cell = sheet.cells.get(f"{get_column_letter(min_col)}{row_number}")
+        role = roles.get(row_number) or _classify_content_row(
+            values,
+            merged_section=bool(first_cell and first_cell.colspan > 1),
+            ordinal_column=ordinal_column,
+        )
         row_range = (
             f"{get_column_letter(min_col)}{row_number}:{get_column_letter(max_col)}{row_number}"
         )
@@ -137,26 +147,37 @@ def _build_rows_and_sections(
     return logical_rows, sections
 
 
-def _classify_content_row(values: list[str]) -> str:
-    normalized = "".join(values).replace(" ", "")
-    if "合计" in normalized or "总计" in normalized:
-        return "total"
+def _classify_content_row(
+    values: list[str], *, merged_section: bool = False, ordinal_column: bool = False
+) -> str:
+    nonempty = [value.strip() for value in values if value.strip()]
     first = values[0].strip() if values else ""
-    if first in {"", "0"} and _section_title(values):
-        if any(_is_number(value) and float(value) != 0 for value in values[3:]):
+    # A total is identified by its leading label, never by a word embedded in
+    # arbitrary description columns. A numbered record remains a record.
+    if nonempty and is_total_label(nonempty[0]):
+        return "total"
+    if merged_section and is_section_label(first):
+        return "section_header"
+    # Printed budget sections use empty/zero code columns followed by a title
+    # and amounts. A blank merged product cell plus an item/unit is a detail.
+    if ordinal_column and first in {"", "0"}:
+        if _section_title(values) and any(
+            _is_number(value) and float(value) != 0 for value in values[3:]
+        ):
             return "section_header"
     if ROW_NUMBER_RE.fullmatch(first):
         return "data"
-    if (
-        len(values) > 1
-        and values[1].strip()
-        and any(character.isdigit() for character in values[1])
-    ):
+    if ordinal_column:
+        # Preserve non-record annotations such as “其中” in numbered schedules.
+        return "data" if len(values) > 1 and any(c.isdigit() for c in values[1]) else "unknown"
+    if len(nonempty) >= 2:
         return "data"
     return "unknown"
 
 
 def _section_title(values: list[str]) -> str:
+    if values and is_section_label(values[0]):
+        return values[0].strip()
     for value in values[1:6]:
         text = value.strip()
         if text and not _is_number(text):
@@ -349,9 +370,27 @@ def _header_rows_after(
     for row_number in range(max(start_row, context_row + 1), end_row + 1):
         if _looks_like_data_or_section(sheet, row_number, min_col, max_col):
             break
+        if rows and _flat_header(sheet, rows[-1], min_col, max_col):
+            # A complete flat schema also supports text-only records. Do not
+            # consume the entire body while waiting for a numeric identifier.
+            break
         if _row_text(sheet, row_number, min_col, max_col):
             rows.append(row_number)
     return rows
+
+
+def _flat_header(sheet: SheetSnapshot, row: int, min_col: int, max_col: int) -> bool:
+    cells = [
+        sheet.cells.get(f"{get_column_letter(col)}{row}") for col in range(min_col, max_col + 1)
+    ]
+    return len(cells) >= 2 and all(
+        cell is not None
+        and cell.display_value.strip()
+        and not cell.merge_anchor
+        and cell.colspan == 1
+        and cell.rowspan == 1
+        for cell in cells
+    )
 
 
 def _looks_like_data_or_section(
@@ -368,8 +407,10 @@ def _looks_like_data_or_section(
         value.strip() and not _is_number(value) for value in values
     ):
         return True
-    row_text = _row_text(sheet, row_number, min_col, max_col).replace(" ", "")
-    return "合计" in row_text or "总计" in row_text
+    first_cell = sheet.cells.get(f"{get_column_letter(min_col)}{row_number}")
+    return is_total_label(first) or bool(
+        first_cell and first_cell.colspan > 1 and is_section_label(first)
+    )
 
 
 def _build_header_columns(

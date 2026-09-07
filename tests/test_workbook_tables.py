@@ -234,3 +234,14 @@ def test_classifies_budget_row_roles_and_sections():
         "土方"
     ]
     assert len({row.source_ref.key for row in table.rows}) == 12
+
+
+@pytest.mark.parametrize("label", ["总 计[一 + 二]", "合计=1+2+3", "小计（元）"])
+def test_total_label_can_include_calculation_or_unit(label):
+    sheet = SheetSnapshot(name="Data", index=0)
+    _put_row(sheet, 1, ["序号", "名称", "金额"])
+    _put_row(sheet, 2, [1, "项目", 20])
+    _put_row(sheet, 3, [label, None, 20])
+    candidate = CandidateRegion(source_ref=SourceRef("Data", "A1:C3"))
+
+    assert interpret_logical_table(sheet, candidate).rows[-1].role == "total"

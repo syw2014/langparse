@@ -584,3 +584,34 @@ def test_unbounded_region_anchor_is_ignored_without_breaking_detection():
 
     assert [region.source_ref.range for region in regions] == ["A1:B2"]
     assert regions[0].reason_codes == ["occupied_extent"]
+
+
+def test_sparse_large_table_does_not_rescan_all_cells_per_row(monkeypatch):
+    import langparse.workbooks.regions as regions_module
+
+    sheet = _sheet_with_values(
+        {f"{c}{r}": f"value {r}" for r in range(1, 301) for c in "ABCD" if c != "C" or r == 1}
+    )
+    original = regions_module._contains
+    calls = 0
+
+    def counted(*args):
+        nonlocal calls
+        calls += 1
+        return original(*args)
+
+    monkeypatch.setattr(regions_module, "_contains", counted)
+    regions = detect_candidate_regions(sheet)
+
+    assert [r.source_ref.range for r in regions] == ["A1:D300"]
+    assert calls < 30 * len(sheet.cells)
+
+
+def test_common_header_preserves_column_specific_body_styles():
+    sheet = _sheet_with_values({f"{c}{r}": f"{c}{r}" for r in range(1, 6) for c in "ABCD"})
+    for coordinate, cell in sheet.cells.items():
+        cell.visual_style_id = (
+            "header" if coordinate.endswith("1") else ("left" if coordinate[0] in "AB" else "right")
+        )
+
+    assert [r.source_ref.range for r in detect_candidate_regions(sheet)] == ["A1:D5"]

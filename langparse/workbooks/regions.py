@@ -10,6 +10,7 @@ from openpyxl.formula import Tokenizer
 from openpyxl.utils import column_index_from_string, get_column_letter, range_boundaries
 from openpyxl.utils.cell import coordinate_to_tuple
 
+from langparse.workbooks.labels import is_section_label, is_total_label
 from langparse.workbooks.types import (
     CandidateRegion,
     CellSnapshot,
@@ -115,10 +116,18 @@ def _initial_coarse_regions(
     coarse_regions = []
     for min_row, max_row in _consecutive_groups(row for row, _ in positions.values()):
         columns = {column for row, column in positions.values() if min_row <= row <= max_row}
-        coarse_regions.extend(
-            _Rect(min_column, min_row, max_column, max_row)
-            for min_column, max_column in _consecutive_groups(columns)
-        )
+        band = _Rect(min(columns), min_row, max(columns), max_row)
+        if _shared_header_style(sheet, band):
+            # A styled header extending through blank input columns supplies
+            # positive continuity evidence; blank cells remain non-assignable.
+            coarse_regions.append(band)
+        else:
+            coarse_regions.extend(
+                _Rect(min_column, min_row, max_column, max_row)
+                for min_column, max_column in _consecutive_groups(columns)
+            )
+
+    coarse_regions = _join_section_bands(sheet, coarse_regions)
 
     for anchor in sheet.region_anchors:
         if anchor.kind != "excel_table" or anchor.source_ref.sheet_name != sheet.name:
@@ -142,6 +151,37 @@ def _initial_coarse_regions(
         coarse_regions,
         key=lambda rect: (rect.min_row, rect.min_column, rect.max_row, rect.max_column),
     )
+
+
+def _join_section_bands(sheet: SheetSnapshot, rectangles: list[_Rect]) -> list[_Rect]:
+    result: list[_Rect] = []
+    for rect in rectangles:
+        previous = result[-1] if result else None
+        first = sheet.cells.get(f"{get_column_letter(rect.min_column)}{rect.min_row}")
+        continuation = first is not None and (
+            (first.colspan > 1 and is_section_label(first.display_value))
+            or is_total_label(first.display_value)
+        )
+        if (
+            previous is not None
+            and continuation
+            and previous.min_column == rect.min_column
+            and rect.max_column <= previous.max_column
+            and 0 < rect.min_row - previous.max_row <= 2
+            and _shared_header_style(sheet, previous)
+        ):
+            # Include the whole continuation row band, including disconnected
+            # amount cells following a merged subtotal label.
+            band_end = rect.max_row
+            result[-1] = _Rect(previous.min_column, previous.min_row, previous.max_column, band_end)
+        elif previous is not None and (
+            previous.min_row <= rect.min_row <= rect.max_row <= previous.max_row
+            and previous.min_column <= rect.min_column <= rect.max_column <= previous.max_column
+        ):
+            continue
+        else:
+            result.append(rect)
+    return result
 
 
 def _bounding_rect(rectangles: list[_Rect]) -> _Rect:
@@ -318,6 +358,9 @@ def _candidate_cuts(
     protected_rects: list[_Rect],
 ) -> list[_Cut]:
     cuts: dict[tuple[str, int], _Cut] = {}
+    # Formula-free exports are common. Never scan every cell for every possible
+    # row cut; tokenize each formula once and index the boundaries it protects.
+    formula_columns, formula_rows = _formula_boundaries(occupied, positions, rect)
     evidence = [
         (selected.rect, _anchor_reason(selected.anchor.kind))
         for selected in selected_anchors
@@ -341,7 +384,7 @@ def _candidate_cuts(
         cut = _Cut("vertical", boundary, "style_boundary")
         if not _cut_is_safe(sheet, rect, cut, protected_rects):
             continue
-        if _formula_crosses_column(occupied, positions, rect, boundary):
+        if boundary in formula_columns:
             continue
         if _is_style_boundary(sheet, rect, boundary):
             cuts[key] = cut
@@ -355,7 +398,7 @@ def _candidate_cuts(
         cut = _Cut("horizontal", boundary, "style_boundary")
         if not _cut_is_safe(sheet, rect, cut, protected_rects):
             continue
-        if _formula_crosses_row(occupied, positions, rect, boundary):
+        if boundary in formula_rows:
             continue
         if _is_row_style_boundary(sheet, rect, boundary):
             cuts[key] = cut
@@ -567,6 +610,8 @@ def _region_confidence(reasons: list[str], diagnostics: list[dict[str, Any]]) ->
 def _is_style_boundary(sheet: SheetSnapshot, rect: _Rect, boundary: int) -> bool:
     if boundary - rect.min_column + 1 < 2 or rect.max_column - boundary < 2:
         return False
+    if _shared_header_style(sheet, rect):
+        return False
     comparisons = []
     for row in range(rect.min_row, rect.max_row + 1):
         left = sheet.cells.get(f"{get_column_letter(boundary)}{row}")
@@ -581,13 +626,6 @@ def _is_style_boundary(sheet: SheetSnapshot, rect: _Rect, boundary: int) -> bool
 def _is_row_style_boundary(sheet: SheetSnapshot, rect: _Rect, boundary: int) -> bool:
     if boundary - rect.min_row + 1 < 2 or rect.max_row - boundary < 2:
         return False
-    top_rect = _Rect(rect.min_column, rect.min_row, rect.max_column, boundary)
-    bottom_rect = _Rect(rect.min_column, boundary + 1, rect.max_column, rect.max_row)
-    if not (
-        _looks_like_complete_table(sheet, top_rect)
-        and _looks_like_complete_table(sheet, bottom_rect)
-    ):
-        return False
     if not (
         _rows_have_stable_visual_style(sheet, rect, boundary - 1, boundary)
         and _rows_have_stable_visual_style(sheet, rect, boundary + 1, boundary + 2)
@@ -601,7 +639,43 @@ def _is_row_style_boundary(sheet: SheetSnapshot, rect: _Rect, boundary: int) -> 
             comparisons.append(
                 (top.visual_style_id or top.style_id) != (bottom.visual_style_id or bottom.style_id)
             )
-    return len(comparisons) >= 2 and sum(comparisons) / len(comparisons) >= 0.8
+    if len(comparisons) < 2 or sum(comparisons) / len(comparisons) < 0.8:
+        return False
+    # Only inspect prospective table bodies after finding an actual style
+    # transition. Uniform sparse sheets otherwise trigger quadratic scans.
+    return _looks_like_complete_table(
+        sheet, _Rect(rect.min_column, rect.min_row, rect.max_column, boundary)
+    ) and _looks_like_complete_table(
+        sheet, _Rect(rect.min_column, boundary + 1, rect.max_column, rect.max_row)
+    )
+
+
+def _shared_header_style(sheet: SheetSnapshot, rect: _Rect) -> bool:
+    cells = [
+        sheet.cells.get(f"{get_column_letter(column)}{rect.min_row}")
+        for column in range(rect.min_column, rect.max_column + 1)
+    ]
+    if len(cells) < 2 or any(
+        cell is None
+        or cell.merge_anchor
+        or cell.colspan > 1
+        or cell.formula
+        or (cell.display_value and not isinstance(cell.raw_value, str))
+        for cell in cells
+    ):
+        return False
+    styles = Counter(cell.visual_style_id or cell.style_id for cell in cells if cell)
+    style, count = styles.most_common(1)[0]
+    return (
+        bool(style)
+        and count / len(cells) >= 0.8
+        and sum(bool(cell.display_value.strip()) for cell in cells if cell) >= 2
+        and all(
+            (cell.visual_style_id or cell.style_id) == style
+            for cell in cells
+            if cell and not cell.display_value.strip()
+        )
+    )
 
 
 def _looks_like_complete_table(sheet: SheetSnapshot, rect: _Rect) -> bool:
@@ -729,44 +803,24 @@ def _is_row_density_boundary(
     )
 
 
-def _formula_crosses_column(
+def _formula_boundaries(
     occupied: dict[str, CellSnapshot],
     positions: dict[str, tuple[int, int]],
     rect: _Rect,
-    boundary: int,
-) -> bool:
+) -> tuple[set[int], set[int]]:
+    columns: set[int] = set()
+    rows: set[int] = set()
     for coordinate, cell in occupied.items():
-        row, formula_column = positions[coordinate]
-        if not _contains(rect, row, formula_column) or cell.formula is None:
+        if cell.formula is None:
             continue
-        for reference_column, reference_row in _local_formula_refs(cell.formula):
-            if not _contains(rect, reference_row, reference_column):
-                continue
-            if (formula_column <= boundary < reference_column) or (
-                reference_column <= boundary < formula_column
-            ):
-                return True
-    return False
-
-
-def _formula_crosses_row(
-    occupied: dict[str, CellSnapshot],
-    positions: dict[str, tuple[int, int]],
-    rect: _Rect,
-    boundary: int,
-) -> bool:
-    for coordinate, cell in occupied.items():
-        formula_row, column = positions[coordinate]
-        if not _contains(rect, formula_row, column) or cell.formula is None:
+        row, column = positions[coordinate]
+        if not _contains(rect, row, column):
             continue
-        for reference_column, reference_row in _local_formula_refs(cell.formula):
-            if not _contains(rect, reference_row, reference_column):
-                continue
-            if (formula_row <= boundary < reference_row) or (
-                reference_row <= boundary < formula_row
-            ):
-                return True
-    return False
+        for ref_column, ref_row in _local_formula_refs(cell.formula):
+            if _contains(rect, ref_row, ref_column):
+                columns.update(range(min(column, ref_column), max(column, ref_column)))
+                rows.update(range(min(row, ref_row), max(row, ref_row)))
+    return columns, rows
 
 
 def _local_formula_refs(formula: str) -> list[tuple[int, int]]:

@@ -335,7 +335,10 @@ def _has_stable_table_schema(
     if not all(value and not _is_number(value) for value in header):
         return False
     widths = [sum(value != "" for value in row) for row in values[1:]]
-    return bool(widths) and len(set(widths)) == 1 and widths[0] == len(header)
+    # Optional values and vertically merged group labels leave holes in valid
+    # records. A complete textual header plus consistently multi-field rows is
+    # sufficient; sparse covers/forms still fail the header requirement.
+    return bool(widths) and all(width >= 2 for width in widths)
 
 
 def _text_reason(features: RegionFeatures) -> str | None:

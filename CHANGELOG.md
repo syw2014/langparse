@@ -28,6 +28,12 @@ the pre-release development history.
 
 ### Fixed
 
+- Detect delimiters in text exports and preserve lexical values, including long
+  IDs, leading zeros, and literal NA strings, in tables and Markdown.
+- Avoid repeated full-sheet scans during region partitioning. Preserve shared
+  workbook headers across column styles, styled blank input columns, and explicit
+  section continuations; retain nullable and merged-label detail records and
+  distinguish subtotal labels from words embedded in record descriptions.
 - Recognize hierarchical workbook item numbers in region classification, header
   boundaries, and row roles so their values and source references reach analysis
   records. Separate explicitly labelled project context and titles from headers,

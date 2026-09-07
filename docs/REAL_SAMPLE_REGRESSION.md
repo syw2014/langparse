@@ -111,3 +111,27 @@ uv run --no-sync ruff format --check langparse tests scripts/verify_real_samples
 
 测试使用合成临时文件覆盖事实损坏、分块损坏、源文件漂移、扫描件降级、语义失败退出码和
 报告隔离，不要求 CI 持有私有真实文件。真实样本回归需在持有原文件的本地环境显式运行。
+
+## 2026-09-07 Golden 修复复验
+
+`data/golden/` 的 6 份有效文件已经在首次解析前冻结的源标注下复验通过：10,833 项语义
+断言零失败，10,640 条已标注 Excel 业务行在 analysis records 中完整且无重复，分隔文本
+的 64 条数据、22 列逐单元格一致。源事实与两套 workbook 分块一致性检查同时通过。
+
+修复涉及分隔符识别与文本值保留、区域检测重复扫描、列样式与内部空列误拆、分组表头延续、
+稀疏明细行识别，以及正文中的“合计”误触发汇总分类。9,558 条数据的大表从首测运行
+346 秒仍未返回，改善为本机单次解析 21.278 秒；含产物、源对照和两套分块的完整验收
+57.075 秒。该耗时是本机实测，不作为服务 SLA。
+
+验证证据：全量 pytest 802 passed / 1 skipped，Ruff 检查与格式检查通过；13 类公开
+workbook quality 基准通过；旧预算 135 项语义断言通过，236 条业务行保持一致。
+新增的合成布局测试位于 `tests/test_workbook_real_layouts.py`，可在不持有私有文件的 CI 运行。
+
+本机首测目录 `reports/golden-acceptance/2026-09-07/first-run/` 保留不动；本轮产物位于
+`reports/golden-acceptance/2026-09-07/regression-final/`，入口为 `index.html` 和
+`修复复验报告.md`。`summary.json` 记录本轮代码文件哈希。冻结标注哈希为
+`6e3ce815b325c57e367f660972c0e41ea00effd9bc1d83e7fbbd1b80286ed899`，原文件身份不变。
+
+该集合已参与修复，后续属于回归集。图片工作簿只验证已标注明细、源事实和绘图对象数量，
+不覆盖图片内语义及 WPS DISPIMG 视觉内容；额外的 `sales_data_sample.csv` 是 14 字节
+的下载错误页，仍作为无效输入保留，未计入通过。DeepDoc 模型侧问题继续由 Issue #12 跟踪。

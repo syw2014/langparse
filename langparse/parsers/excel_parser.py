@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 
 from langparse.core.parser import BaseParser
@@ -85,7 +86,24 @@ class ExcelParser(BaseParser):
         if is_legacy_workbook:
             sheets = pd.read_excel(path, sheet_name=None)
         else:
-            sheets = {None: pd.read_csv(path)}
+            with path.open(encoding="utf-8-sig", newline="") as stream:
+                sample = stream.read(65536)
+            try:
+                delimiter = csv.Sniffer().sniff(sample, delimiters=",\t;|").delimiter
+            except csv.Error:
+                # A sample can end inside a quoted multiline field. The header
+                # still provides a delimiter without counting commas in prose.
+                try:
+                    delimiter = (
+                        csv.Sniffer().sniff(sample.splitlines()[0], delimiters=",\t;|").delimiter
+                    )
+                except (csv.Error, IndexError):
+                    delimiter = ","
+            sheets = {
+                None: pd.read_csv(
+                    path, sep=delimiter, encoding="utf-8-sig", dtype=str, keep_default_na=False
+                )
+            }
 
         pages = [
             self._page_for_sheet(index + 1, sheet_name, frame)
@@ -157,7 +175,7 @@ class ExcelParser(BaseParser):
         )
 
     def _page_for_sheet(self, page_number: int, sheet_name, frame) -> ParsedPageResult:
-        table_markdown = frame.to_markdown(index=False)
+        table_markdown = frame.to_markdown(index=False, disable_numparse=True)
         heading = f"## Sheet: {sheet_name}\n" if sheet_name is not None else ""
         markdown_content = f"{heading}\n{table_markdown}\n" if heading else table_markdown
 

@@ -98,3 +98,21 @@ def test_document_metadata_does_not_alias_the_parse_result(sample_docx_file):
     parsed.metadata["extension"] = ".mutated"
 
     assert document.metadata["parsed_metadata"]["extension"] == ".docx"
+
+
+def test_delimited_text_preserves_quoted_fields_and_lexical_values(tmp_path):
+    source = tmp_path / "export.csv"
+    source.write_text(
+        '\ufeffid\tnote\tcode\tmissing\n1909415473667125248\t"one,two\nthree"\t0012\tNA\n2\ttext\t0000\t\n',
+        encoding="utf-8",
+    )
+
+    parsed = ExcelParser().parse_result(source)
+
+    assert parsed.pages[0].tables[0]["rows"] == [
+        ["id", "note", "code", "missing"],
+        ["1909415473667125248", "one,two\nthree", "0012", "NA"],
+        ["2", "text", "0000", ""],
+    ]
+    assert "1909415473667125248" in parsed.markdown_content
+    assert "0012" in parsed.markdown_content

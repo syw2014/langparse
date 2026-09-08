@@ -9,6 +9,10 @@ the pre-release development history.
 
 ### Added
 
+- Extend the real-sample runner with explicit CSV truth, scoped header paths,
+  drawing counts, annotated business-record checks, and compressed streamed
+  artifacts. Add installed-wheel Excel API/chunk/CLI checks to CI and release gates.
+
 - Add a local real-sample regression runner with pinned source hashes,
   source-to-snapshot checks, chunk payload checks, explicit semantic annotations,
   local OCR verification, and source/output review reports. Private data stays
@@ -27,6 +31,9 @@ the pre-release development history.
   and rich workbook results instead of engine comparisons.
 
 ### Fixed
+
+- Include tabulate and Pillow in the Excel and all extras so clean installations
+  can render CSV Markdown and preserve embedded workbook images.
 
 - Detect delimiters in text exports and preserve lexical values, including long
   IDs, leading zeros, and literal NA strings, in tables and Markdown.

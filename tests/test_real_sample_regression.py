@@ -265,3 +265,153 @@ def test_manifest_rejects_unsafe_ids_and_empty_samples(runner, workbook, tmp_pat
     manifest.write_text(json.dumps(data))
     with pytest.raises(ValueError):
         runner.run(manifest, tmp_path / "report")
+
+
+@pytest.fixture
+def csv_manifest(runner, tmp_path):
+    source = tmp_path / "input" / "export.csv"
+    source.parent.mkdir()
+    source.write_text(
+        'id\tnote\tcode\n1909415473667125248\t"one,two\nthree"\t0012\n2\tNA\t\n', encoding="utf-8"
+    )
+    manifest = tmp_path / "manifest.json"
+    runner.create_manifest([source], manifest)
+    data = json.loads(manifest.read_text())
+    data["samples"][0]["semantic_checks"] = [
+        {
+            "kind": "csv_table",
+            "delimiter": "\t",
+            "encoding": "utf-8-sig",
+            "row_count": 3,
+            "column_count": 3,
+            "headers": ["id", "note", "code"],
+        }
+    ]
+    manifest.write_text(json.dumps(data))
+    return manifest
+
+
+def test_csv_cli_verifies_source_cells_and_preserves_artifacts(runner, csv_manifest, tmp_path):
+    import gzip
+
+    output = tmp_path / "report"
+    assert (
+        runner.main(
+            ["run", "--manifest", str(csv_manifest), "--output-dir", str(output), "--compress"]
+        )
+        == 0
+    )
+    summary = json.loads((output / "summary.json").read_text())
+    assert summary["samples"][0]["source_comparison"]["differences"] == []
+    assert summary["semantic_check_count"] == 3
+    parsed = json.load(gzip.open(output / "sample-001" / "parsed.json.gz", "rt"))
+    assert parsed["pages"][0]["tables"][0]["rows"][1][0] == "1909415473667125248"
+    assert summary["production_ready"] is False
+
+
+@pytest.mark.parametrize("corruption", ["value", "extra_column", "extra_row"])
+def test_csv_corruption_returns_failure_even_with_successful_parse(
+    runner, csv_manifest, tmp_path, monkeypatch, corruption
+):
+    original = ParseService.parse_result
+
+    def corrupt(self, path, **kwargs):
+        parsed = original(self, path, **kwargs)
+        rows = parsed.pages[0].tables[0]["rows"]
+        if corruption == "value":
+            rows[1][0] = "1909415473667125200"
+        elif corruption == "extra_column":
+            rows[1].append("invented")
+        else:
+            rows.append(["invented", "", ""])
+        return parsed
+
+    monkeypatch.setattr(ParseService, "parse_result", corrupt)
+    output = tmp_path / "report"
+    assert runner.main(["run", "--manifest", str(csv_manifest), "--output-dir", str(output)]) == 1
+    result = json.loads((output / "summary.json").read_text())["samples"][0]
+    assert result["source_comparison"]["status"] == "failed"
+    assert result["source_unchanged"]
+
+
+def test_explicit_header_paths_allow_blank_columns_and_scope_by_header_row(runner, tmp_path):
+    source = tmp_path / "input.xlsx"
+    book = openpyxl.Workbook()
+    sheet = book.active
+    sheet.title = "Data"
+    for values in [
+        ["序号", None, "Amount"],
+        [1, None, 12],
+        [],
+        ["序号", None, "Amount"],
+        [2, None, 14],
+    ]:
+        sheet.append(values)
+    from openpyxl.styles import PatternFill
+
+    for number in (1, 4):
+        for cell in sheet[number]:
+            cell.fill = PatternFill("solid", fgColor="336699")
+    book.save(source)
+    checks = [
+        {"kind": "header_path", "sheet": "Data", "column": "B", "header_row": 4, "expected": []}
+    ]
+    parsed = ParseService().parse_result(source)
+    assert runner.check_semantics(source, parsed, checks)[0]["status"] == "passed"
+    parsed.structure.sheets[0].blocks[-1].logical_table.columns[1].path = ["invented"]
+    assert runner.check_semantics(source, parsed, checks)[0]["status"] == "failed"
+
+
+def test_business_record_check_uses_annotations_not_only_parser_rows(
+    runner, workbook, tmp_path, monkeypatch
+):
+    manifest = tmp_path / "manifest.json"
+    runner.create_manifest([workbook], manifest)
+    data = json.loads(manifest.read_text())
+    data["samples"][0]["semantic_checks"] = [
+        {"kind": "row_role", "sheet": "Data", "source_range": "A2:B2", "expected": "data"}
+    ]
+    manifest.write_text(json.dumps(data))
+    original = ParseService.parse_result
+
+    def lose_row(self, path, **kwargs):
+        parsed = original(self, path, **kwargs)
+        table = next(b.logical_table for b in parsed.structure.sheets[0].blocks if b.logical_table)
+        table.rows = [row for row in table.rows if row.source_ref.range != "A2:B2"]
+        return parsed
+
+    monkeypatch.setattr(ParseService, "parse_result", lose_row)
+    summary = runner.run(manifest, tmp_path / "report")
+    assert summary["status"] == "failed"
+    assert summary["samples"][0]["business_records"]["missing"] == ["Data!A2:B2"]
+
+
+def test_drawing_count_is_an_explicit_semantic_gate(runner, workbook):
+    parsed = ParseService().parse_result(workbook)
+    checks = [{"kind": "drawing_count", "sheet": "Data", "expected": 1}]
+    assert runner.check_semantics(workbook, parsed, checks)[0]["status"] == "failed"
+
+
+@pytest.mark.parametrize(
+    "field,value", [("delimiter", ""), ("row_count", True), ("headers", ["wrong"])]
+)
+def test_invalid_csv_truth_is_rejected_before_creating_report(
+    runner, csv_manifest, tmp_path, field, value
+):
+    manifest = json.loads(csv_manifest.read_text())
+    manifest["samples"][0]["semantic_checks"][0][field] = value
+    csv_manifest.write_text(json.dumps(manifest))
+    with pytest.raises(SystemExit) as exc:
+        runner.main(
+            ["run", "--manifest", str(csv_manifest), "--output-dir", str(tmp_path / "report")]
+        )
+    assert exc.value.code == 2
+    assert not (tmp_path / "report").exists()
+
+
+def test_unannotated_csv_cannot_silently_pass(runner, csv_manifest, tmp_path):
+    manifest = json.loads(csv_manifest.read_text())
+    manifest["samples"][0]["semantic_checks"] = []
+    csv_manifest.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="explicit csv_table"):
+        runner.run(csv_manifest, tmp_path / "report")

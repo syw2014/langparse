@@ -8,18 +8,23 @@ are opened read-only. No cloud engine or workbook model is enabled by this runne
 from __future__ import annotations
 
 import argparse
+import csv
+import gzip
 import hashlib
 import html
 import json
 import os
 import re
 import subprocess
+import sys
 import time
-from collections import Counter
-from dataclasses import asdict
+from collections import Counter, defaultdict
+from dataclasses import asdict, fields, is_dataclass
 from importlib.metadata import PackageNotFoundError, version
+from itertools import zip_longest
 from pathlib import Path
 
+import langparse
 from langparse import __version__
 from langparse.services.parse_service import ParseService
 from langparse.workbooks.modeling import WorkbookDisambiguation
@@ -29,10 +34,19 @@ def _digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _json_default(value):
+    # Do not deep-copy a large snapshot and both chunk profiles with asdict.
+    if is_dataclass(value):
+        return {field.name: getattr(value, field.name) for field in fields(value)}
+    return str(value)
+
+
 def _write_json(path, value):
-    Path(path).write_text(
-        json.dumps(value, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8"
-    )
+    path = Path(path)
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "wt", encoding="utf-8") as stream:
+        json.dump(value, stream, ensure_ascii=False, indent=2, default=_json_default)
+        stream.write("\n")
 
 
 def _unique_fields(pairs):
@@ -50,8 +64,8 @@ def create_manifest(paths, destination):
     samples = []
     for index, path in enumerate(paths, 1):
         path = Path(path).resolve()
-        if path.suffix.lower() not in {".xlsx", ".xlsm", ".pdf"}:
-            raise ValueError("Only OOXML workbooks and PDFs are supported")
+        if path.suffix.lower() not in {".xlsx", ".xlsm", ".pdf", ".csv"}:
+            raise ValueError("Only OOXML workbooks, CSV and PDFs are supported")
         samples.append(
             {
                 "id": f"sample-{index:03}",
@@ -102,7 +116,7 @@ def _load_manifest(path):
         if not isinstance(sample["path"], str) or not sample["path"]:
             raise ValueError("Sample path must be a nonempty string")
         source = (path.parent / sample["path"]).resolve()
-        if source in paths or source.suffix.lower() not in {".xlsx", ".xlsm", ".pdf"}:
+        if source in paths or source.suffix.lower() not in {".xlsx", ".xlsm", ".pdf", ".csv"}:
             raise ValueError("Unsupported or duplicate source")
         if not isinstance(sample["sha256"], str) or not re.fullmatch(
             r"[0-9a-f]{64}", sample["sha256"]
@@ -112,6 +126,8 @@ def _load_manifest(path):
             raise ValueError("semantic_checks must be a list")
         for check in sample["semantic_checks"]:
             _validate_check(check, source.suffix.lower())
+        if source.suffix.lower() == ".csv" and len(sample["semantic_checks"]) != 1:
+            raise ValueError("CSV requires exactly one explicit csv_table annotation")
         ids.add(sample["id"])
         paths.add(source)
     return data
@@ -123,13 +139,30 @@ def _validate_check(check, suffix):
     kind = check.get("kind")
     fields = {
         "header": {"kind", "sheet", "column", "source_cells"},
+        "header_path": {"kind", "sheet", "column", "header_row", "expected"},
+        "drawing_count": {"kind", "sheet", "expected"},
+        "csv_table": {"kind", "delimiter", "encoding", "row_count", "column_count", "headers"},
         "row_role": {"kind", "sheet", "source_range", "expected"},
         "pdf_text": {"kind", "page", "text"},
         "pdf_table": {"kind", "page", "minimum"},
     }
     if kind not in fields or set(check) != fields[kind]:
         raise ValueError("Invalid semantic check fields")
-    if kind in {"pdf_text", "pdf_table"}:
+    if kind == "csv_table":
+        if (
+            suffix != ".csv"
+            or check["delimiter"] not in {",", "\t", ";", "|"}
+            or check["encoding"] not in {"utf-8", "utf-8-sig", "gb18030", "utf-16"}
+            or any(
+                type(check[key]) is not int or check[key] < 1
+                for key in ("row_count", "column_count")
+            )
+            or not isinstance(check["headers"], list)
+            or len(check["headers"]) != check["column_count"]
+            or any(not isinstance(value, str) for value in check["headers"])
+        ):
+            raise ValueError("Invalid CSV source annotation")
+    elif kind in {"pdf_text", "pdf_table"}:
         if suffix != ".pdf" or type(check["page"]) is not int or check["page"] < 1:
             raise ValueError("Invalid PDF page check")
         if kind == "pdf_text" and (not isinstance(check["text"], str) or not check["text"].strip()):
@@ -137,11 +170,24 @@ def _validate_check(check, suffix):
         if kind == "pdf_table" and (type(check["minimum"]) is not int or check["minimum"] < 1):
             raise ValueError("Invalid PDF table check")
     else:
-        if suffix == ".pdf" or not isinstance(check["sheet"], str) or not check["sheet"]:
+        if suffix in {".pdf", ".csv"} or not isinstance(check["sheet"], str) or not check["sheet"]:
             raise ValueError("Invalid workbook check")
-        if kind == "header":
+        if kind == "drawing_count":
+            if type(check["expected"]) is not int or check["expected"] < 0:
+                raise ValueError("Invalid drawing count")
+            return
+        if kind in {"header", "header_path"}:
             if not isinstance(check["column"], str) or not re.fullmatch("[A-Z]+", check["column"]):
                 raise ValueError("Invalid header column")
+            if kind == "header_path":
+                if (
+                    type(check["header_row"]) is not int
+                    or check["header_row"] < 1
+                    or not isinstance(check["expected"], list)
+                    or any(not isinstance(v, str) or not v.strip() for v in check["expected"])
+                ):
+                    raise ValueError("Invalid header path")
+                return
             if (
                 not isinstance(check["source_cells"], list)
                 or not check["source_cells"]
@@ -299,68 +345,171 @@ def check_chunks(parsed, chunks):
     }
 
 
+def _semantic_result(check, expected, actual):
+    return {
+        "check": check,
+        "expected": expected,
+        "actual": actual,
+        "status": "passed" if expected == actual else "failed",
+    }
+
+
+def compare_csv(path, parsed, annotation):
+    """Use the explicitly reviewed delimiter, independent of parser sniffing."""
+    with Path(path).open(encoding=annotation["encoding"], newline="") as stream:
+        expected = list(csv.reader(stream, delimiter=annotation["delimiter"], strict=True))
+    if not expected or any(len(row) != annotation["column_count"] for row in expected):
+        raise ValueError("Source CSV does not match the annotated rectangular schema")
+    actual = [row for page in parsed.pages for table in page.tables for row in table["rows"]]
+    differences = []
+    for row_number, (left, right) in enumerate(zip_longest(expected, actual, fillvalue=[]), 1):
+        for column, (wanted, got) in enumerate(zip_longest(left, right), 1):
+            if wanted != got:
+                differences.append(
+                    {"row": row_number, "column": column, "expected": wanted, "actual": got}
+                )
+    semantic = [
+        _semantic_result(
+            {"kind": "csv_row_count", "location": Path(path).name},
+            annotation["row_count"],
+            len(actual),
+        ),
+        _semantic_result(
+            {"kind": "csv_headers", "location": Path(path).name},
+            annotation["headers"],
+            actual[0] if actual else [],
+        ),
+        _semantic_result(
+            {"kind": "csv_exact_cells", "location": Path(path).name}, 0, len(differences)
+        ),
+    ]
+    return {
+        "status": "failed"
+        if differences or any(c["status"] == "failed" for c in semantic)
+        else "passed",
+        "source_rows": len(expected),
+        "source_columns": annotation["column_count"],
+        "differences": differences,
+        "semantic_checks": semantic,
+    }
+
+
 def check_semantics(path, parsed, checks):
     """Only evaluate explicit, source-reviewed annotations. Never derive truth from output."""
     import openpyxl
+    from openpyxl.utils import range_boundaries
 
+    if Path(path).suffix.lower() == ".csv":
+        return compare_csv(path, parsed, checks[0])["semantic_checks"]
     book = (
         openpyxl.load_workbook(path, data_only=False)
-        if Path(path).suffix.lower() != ".pdf"
+        if any(c["kind"] == "header" for c in checks)
         else None
     )
+    tables_by_sheet = defaultdict(list)
+    rows_by_ref = defaultdict(list)
+    if parsed.structure is not None:
+        for sheet in parsed.structure.sheets:
+            for block in sheet.blocks:
+                if block.logical_table:
+                    tables_by_sheet[sheet.name].append(block.logical_table)
+                    for row in block.logical_table.rows:
+                        rows_by_ref[row.source_ref.key].append(row.role)
     results = []
     try:
         for check in checks:
             kind = check["kind"]
             if kind == "pdf_text":
-                expected = check["text"]
-                actual = "\n".join(
+                text = "\n".join(
                     p.markdown_content for p in parsed.pages if p.page_number == check["page"]
                 )
-                passed = "".join(expected.split()) in "".join(actual.split())
-                actual = "found" if passed else "not_found"
-            elif kind == "pdf_table":
-                expected = check["minimum"]
+                found = "".join(check["text"].split()) in "".join(text.split())
+                results.append(
+                    {
+                        "check": check,
+                        "expected": check["text"],
+                        "actual": "found" if found else "not_found",
+                        "status": "passed" if found else "failed",
+                    }
+                )
+                continue
+            if kind == "pdf_table":
                 actual = sum(len(p.tables) for p in parsed.pages if p.page_number == check["page"])
-                passed = actual >= expected
-            else:
-                tables = [
-                    b.logical_table
-                    for s in parsed.structure.sheets
+                results.append(
+                    {
+                        "check": check,
+                        "expected": check["minimum"],
+                        "actual": actual,
+                        "status": "passed" if actual >= check["minimum"] else "failed",
+                    }
+                )
+                continue
+            if kind == "drawing_count":
+                actual = [
+                    len(s.objects)
+                    for s in parsed.structure.snapshot.sheets
                     if s.name == check["sheet"]
-                    for b in s.blocks
-                    if b.logical_table
                 ]
+                results.append(_semantic_result(check, [check["expected"]], actual))
+                continue
+            tables = tables_by_sheet[check["sheet"]]
+            if kind in {"header", "header_path"}:
                 if kind == "header":
                     values = [book[check["sheet"]][c].value for c in check["source_cells"]]
                     if any(v is None or not str(v).strip() for v in values):
                         raise ValueError("Header truth references an empty source cell")
                     expected = [str(v) for v in values]
-                    actual = [
-                        c.path for t in tables for c in t.columns if c.coordinate == check["column"]
-                    ]
-                    passed = actual == [expected]
                 else:
                     expected = check["expected"]
-                    actual = [
-                        r.role
+                    tables = [
+                        t
                         for t in tables
-                        for r in t.rows
-                        if r.source_ref.range == check["source_range"]
+                        if any(
+                            range_boundaries(ref.range)[1]
+                            <= check["header_row"]
+                            <= range_boundaries(ref.range)[3]
+                            for ref in t.source_refs
+                        )
                     ]
-                    passed = actual == [expected]
-            results.append(
-                {
-                    "check": check,
-                    "expected": expected,
-                    "actual": actual,
-                    "status": "passed" if passed else "failed",
-                }
-            )
+                actual = [
+                    c.path for t in tables for c in t.columns if c.coordinate == check["column"]
+                ]
+                result = _semantic_result(check, [expected], actual)
+                # Preserve the original single-header report shape.
+                result["expected"] = expected
+                results.append(result)
+            else:
+                actual = rows_by_ref[f"{check['sheet']}!{check['source_range']}"]
+                result = _semantic_result(check, [check["expected"]], actual)
+                result["expected"] = check["expected"]
+                results.append(result)
     finally:
         if book is not None:
             book.close()
     return results
+
+
+def check_business_records(checks, chunks):
+    expected = {
+        f"{c['sheet']}!{c['source_range']}"
+        for c in checks
+        if c["kind"] == "row_role" and c["expected"] in {"data", "total"}
+    }
+    actual = Counter(
+        ref
+        for chunk in chunks
+        for record in chunk.structured_payload.get("records", [])
+        for ref in record.get("source_refs", [])
+    )
+    missing = sorted(expected - actual.keys())
+    duplicates = sorted(ref for ref in expected if actual[ref] > 1)
+    return {
+        "expected_rows": len(expected),
+        "present_once": sum(actual[ref] == 1 for ref in expected),
+        "missing": missing,
+        "duplicates": duplicates,
+        "status": "failed" if missing or duplicates else "passed",
+    }
 
 
 def check_pdf(source_pages, parsed):
@@ -420,7 +569,7 @@ def _semantic_review(checks):
         location = (
             f"{check['sheet']}: {check.get('column', check.get('source_range', ''))}"
             if "sheet" in check
-            else f"PDF 第 {check['page']} 页"
+            else check.get("location", f"PDF 第 {check.get('page', '')} 页")
         )
         rows.append(
             "<tr>"
@@ -468,12 +617,13 @@ def _workbook_review(path, parsed):
             ir = next((s for s in parsed.structure.sheets if s.name == sheet.title), None)
             blocks = ir.blocks if ir else []
             tables = [b.logical_table for b in blocks if b.logical_table]
-            roles = {}
+            roles = defaultdict(list)
             for table in tables:
                 for row in table.rows:
-                    roles.setdefault(row.source_ref.range, []).append(row.role)
+                    roles[row.metadata["row_number"]].append(f"{row.source_ref.range}: {row.role}")
             headers = [{"column": c.coordinate, "path": c.path} for t in tables for c in t.columns]
             rows = []
+            preview_count = 0
             for row in sheet:
                 if not any(c.value is not None for c in row):
                     continue
@@ -481,16 +631,16 @@ def _workbook_review(path, parsed):
                     f"<b>{c.coordinate}</b> {_text(c.value)}" for c in row if c.value is not None
                 )
                 row_number = row[0].row
-                row_roles = [
-                    f"{ref}: {', '.join(values)}"
-                    for ref, values in roles.items()
-                    if re.match(rf"^[A-Z]+{row_number}:", ref)
-                ]
+                row_roles = roles[row_number]
                 rows.append(
                     f"<tr><td>{row_number}</td><td>{values}</td><td>{_text('; '.join(row_roles))}</td></tr>"
                 )
+                preview_count += 1
+                if preview_count >= 200:
+                    break
             sections.append(
                 f'<details id="sheet-{index}"><summary>Sheet {index}: {_text(sheet.title)}</summary>'
+                "<p>源文件预览最多展示前 200 个非空行；完整解析与差异见 JSON 产物。</p>"
                 f"<h3>当前表头（待对照源文件复核）</h3><pre>{_text(json.dumps(headers, ensure_ascii=False, indent=2))}</pre>"
                 '<div class="scroll"><table><tr><th>源行</th><th>源文件单元格</th><th>当前解析行角色</th></tr>'
                 + "".join(rows)
@@ -516,6 +666,8 @@ def _provenance():
             dependencies[name] = None
     return {
         "parser_version": __version__,
+        "parser_module": str(Path(langparse.__file__).resolve()),
+        "python_executable": sys.executable,
         "runner_sha256": _digest(Path(__file__)),
         "git_head": git("rev-parse", "HEAD"),
         "git_status": git("status", "--porcelain"),
@@ -523,7 +675,7 @@ def _provenance():
     }
 
 
-def run(manifest_path, output_dir, *, pdf_engine="simple"):
+def run(manifest_path, output_dir, *, pdf_engine="simple", compress=False):
     if pdf_engine not in {"simple", "deepdoc"}:
         raise ValueError("Choose a local PDF engine: simple or deepdoc")
     manifest_path, output_dir = Path(manifest_path).resolve(), Path(output_dir).resolve()
@@ -578,15 +730,29 @@ def run(manifest_path, output_dir, *, pdf_engine="simple"):
                     f"<pre>{_text(p.markdown_content)}</pre></div>"
                     for p in parsed.pages
                 )
+            elif source.suffix.lower() == ".csv":
+                parsed = service.parse_result(source)
+                result["source_comparison"] = compare_csv(
+                    source, parsed, sample["semantic_checks"][0]
+                )
+                body = (
+                    "<h2>分隔文本解析预览</h2><pre>"
+                    + _text(parsed.markdown_content[:20000])
+                    + "</pre>"
+                )
             else:
                 parsed = service.parse_result(
                     source,
-                    chunk=True,
+                    chunk=False,
                     chunk_profile="retrieval",
                     workbook_disambiguation=WorkbookDisambiguation.off(),
                 )
                 result["source_comparison"] = compare_workbook(source, parsed)
+                parsed.chunks = service.chunk_result(parsed, chunk_profile="retrieval")
                 analysis = service.chunk_result(parsed, chunk_profile="analysis")
+                result["business_records"] = check_business_records(
+                    sample["semantic_checks"], analysis
+                )
                 result["chunks"] = {
                     "retrieval": check_chunks(parsed, parsed.chunks),
                     "analysis": check_chunks(parsed, analysis),
@@ -597,8 +763,37 @@ def run(manifest_path, output_dir, *, pdf_engine="simple"):
                 result["diagnostics"] = asdict(parsed.diagnostics)
                 result["no_model_calls"] = not parsed.diagnostics.model_calls
                 body = _workbook_review(source, parsed)
-                _write_json(output / "analysis-chunks.json", [asdict(c) for c in analysis])
-            semantic = check_semantics(source, parsed, sample["semantic_checks"])
+                _write_json(
+                    output / ("analysis-chunks.json.gz" if compress else "analysis-chunks.json"),
+                    analysis,
+                )
+                del analysis
+            semantic = (
+                result["source_comparison"]["semantic_checks"]
+                if source.suffix.lower() == ".csv"
+                else check_semantics(source, parsed, sample["semantic_checks"])
+            )
+            if "business_records" in result and sample["semantic_checks"]:
+                records = result["business_records"]
+                semantic.extend(
+                    [
+                        _semantic_result(
+                            {"kind": "business_records_missing", "location": source.name},
+                            [],
+                            records["missing"],
+                        ),
+                        _semantic_result(
+                            {"kind": "business_records_duplicate", "location": source.name},
+                            [],
+                            records["duplicates"],
+                        ),
+                        _semantic_result(
+                            {"kind": "no_model_calls", "location": source.name},
+                            True,
+                            result["no_model_calls"],
+                        ),
+                    ]
+                )
             result["semantic_checks"] = semantic
             result["semantic_scope"] = "partial_source_annotations" if semantic else "unlabelled"
             failed = result["source_comparison"]["status"] != "passed" or any(
@@ -612,7 +807,7 @@ def run(manifest_path, output_dir, *, pdf_engine="simple"):
                     or bool(parsed.diagnostics.errors)
                 )
             result["status"] = "failed" if failed else "passed"
-            _write_json(output / "parsed.json", asdict(parsed))
+            _write_json(output / ("parsed.json.gz" if compress else "parsed.json"), parsed)
             (output / "parsed.md").write_text(parsed.markdown_content, encoding="utf-8")
             heading = "<p>仅限本地复核。源文件由独立读取路径展示；解析输出不作为正确答案。</p>"
             heading += _semantic_review(semantic)
@@ -680,13 +875,18 @@ def main(argv=None):
     execute = commands.add_parser("run", help="Run all pinned sources and retain review artifacts")
     execute.add_argument("--manifest", type=Path, required=True)
     execute.add_argument("--output-dir", type=Path, required=True)
+    execute.add_argument(
+        "--compress", action="store_true", help="Gzip full parsed/chunk JSON artifacts"
+    )
     execute.add_argument("--pdf-engine", choices=("simple", "deepdoc"), default="simple")
     args = parser.parse_args(argv)
     try:
         if args.command == "init":
             create_manifest(args.paths, args.manifest)
             return 0
-        result = run(args.manifest, args.output_dir, pdf_engine=args.pdf_engine)
+        result = run(
+            args.manifest, args.output_dir, pdf_engine=args.pdf_engine, compress=args.compress
+        )
         print(f"{result['status']}: {args.output_dir / 'index.html'}")
         return 0 if result["status"] == "passed" else 1
     except (ValueError, OSError) as exc:

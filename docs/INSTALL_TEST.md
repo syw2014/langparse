@@ -42,7 +42,7 @@ pip install --pre "langparse[all]==0.1.0rc1"
 
 - `pdf`: PDF 解析支持 (pdfplumber)
 - `docx`: Word 文档解析支持 (python-docx)
-- `excel`: Excel 解析支持 (pandas, openpyxl)
+- `excel`: Excel/CSV 解析支持 (pandas, openpyxl, tabulate, Pillow)
 - `ocr`: OCR 支持 (rapidocr_onnxruntime)
 - `mineru`: 仅安装本地 MinerU API/编排基础包；远程 API 不需要，本地推理后端按部署选择官方 extra
 - `all`: 安装所有可选依赖
@@ -188,3 +188,14 @@ uv pip uninstall langparse
 # 或
 pip uninstall langparse
 ```
+
+
+## 干净 wheel 验证
+
+`tests.yml` 的 Python 3.10–3.13 矩阵，以及 PyPI 发布前置任务，会构建并在独立环境只安装
+wheel 的 `[excel]` extra，随后运行 `scripts/verify_installed_excel.py`。脚本核验导入路径，
+覆盖 CSV 文本值、Excel 图片对象、retrieval/analysis 分块和两种格式的 CLI 输出。
+CSV 使用 retrieval；analysis profile 仍仅支持 WorkbookIR。
+
+不要用开发环境已安装的额外依赖代替此项验证。本地重现时，使用新环境的 Python 从仓库外
+运行该脚本的绝对路径。实际发布仍需选择新版本并触发发布工作流；本次本地构建不会更新 PyPI。

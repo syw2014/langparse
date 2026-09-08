@@ -105,8 +105,8 @@ uv run --no-sync python -m scripts.verify_real_samples init \
 
 ```bash
 uv run --no-sync pytest -q tests/test_real_sample_regression.py
-uv run --no-sync ruff check langparse tests scripts/verify_real_samples.py
-uv run --no-sync ruff format --check langparse tests scripts/verify_real_samples.py
+uv run --no-sync ruff check langparse tests scripts/verify_*.py
+uv run --no-sync ruff format --check langparse tests scripts/verify_*.py
 ```
 
 测试使用合成临时文件覆盖事实损坏、分块损坏、源文件漂移、扫描件降级、语义失败退出码和
@@ -135,3 +135,42 @@ workbook quality 基准通过；旧预算 135 项语义断言通过，236 条业
 该集合已参与修复，后续属于回归集。图片工作簿只验证已标注明细、源事实和绘图对象数量，
 不覆盖图片内语义及 WPS DISPIMG 视觉内容；额外的 `sales_data_sample.csv` 是 14 字节
 的下载错误页，仍作为无效输入保留，未计入通过。DeepDoc 模型侧问题继续由 Issue #12 跟踪。
+
+
+## 正式 Golden 验收入口（2026-09-08）
+
+本机冻结标注已经迁移到 `samples/golden-acceptance.local.json`。迁移直接复制首次源标注，
+不调用解析器生成答案；旧标注和首次报告保持不变。CSV 原 `expected_rows=64` 指数据行，
+正式 `row_count=65` 包含一行表头。转换记录与两个清单哈希保存在
+`reports/golden-acceptance/2026-09-07/formal-migration-v2.json`。
+额外的下载错误页明确排除并保留原因；不作为有效业务样本通过。
+
+```bash
+uv run --no-sync python -m scripts.verify_real_samples run \
+  --manifest samples/golden-acceptance.local.json \
+  --output-dir reports/golden-acceptance/2026-09-08/run-next \
+  --compress
+```
+
+正式命令检查失败返回 1、配置错误返回 2，可直接作为本地发布前置门。
+私有样本不上传公共 CI；CI 运行相同检查器的合成回归测试及干净 wheel 安装检查。
+原先位于报告目录中的逐文件脚本只保留为历史证据，不再作为推荐入口。
+
+清单仍兼容 schema_version=1 的原有标注，新增以下类型：
+
+```json
+{"kind":"header_path","sheet":"Data","column":"B","header_row":4,"expected":[]}
+{"kind":"drawing_count","sheet":"Data","expected":2}
+{"kind":"csv_table","delimiter":"\t","encoding":"utf-8-sig","row_count":65,"column_count":2,"headers":["id","note"]}
+```
+
+`header_path` 直接保存审阅过的列层级，空列表表示空列名；`header_row` 定位包含该源行的表。
+CSV 必须提供且只提供一个 `csv_table` 标注：`row_count` 包含表头，`column_count` 对每行
+都适用。分隔符由标注指定，检查器独立读取源 CSV，核对引号内换行、空值、长 ID、前导零、
+意外增加的列和行，不复用解析器的分隔符推断。
+
+所有 `row_role` 中的 data/total 源范围还会直接与 analysis records 对照，避免解析器和
+分块器同时遗漏同一行而自洽通过。`--compress` 输出 `parsed.json.gz` 和
+`analysis-chunks.json.gz`；未启用时保留原 JSON 文件名。结构完整写入产物，HTML 源预览
+最多显示前 200 个非空行，CSV 解析预览最多 20,000 字符。摘要仍是普通 `summary.json`，
+并记录实际导入的包路径和 Python 路径，便于区分源码与安装包验收。

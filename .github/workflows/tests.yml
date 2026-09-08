@@ -43,6 +43,16 @@ jobs:
       - name: Run tests
         run: uv run pytest -q --cov=langparse --cov-report=term-missing --cov-report=xml
 
+      - name: Verify an installed wheel with Excel extras only
+        run: |
+          uv build --wheel --out-dir "$RUNNER_TEMP/wheel-dist"
+          uv venv --python ${{ matrix.python-version }} "$RUNNER_TEMP/wheel-smoke"
+          for wheel_file in "$RUNNER_TEMP"/wheel-dist/*.whl; do
+            uv pip install --python "$RUNNER_TEMP/wheel-smoke/bin/python" "${wheel_file}[excel]"
+          done
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheel-smoke/bin/python" "$GITHUB_WORKSPACE/scripts/verify_installed_excel.py"
+
       - name: Upload coverage
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -68,7 +78,7 @@ jobs:
         run: uv sync --extra dev --locked
 
       - name: Lint
-        run: uv run ruff check langparse tests scripts/verify_real_samples.py
+        run: uv run ruff check langparse tests scripts/verify_*.py
 
       - name: Check formatting
-        run: uv run ruff format --check langparse tests scripts/verify_real_samples.py
+        run: uv run ruff format --check langparse tests scripts/verify_*.py

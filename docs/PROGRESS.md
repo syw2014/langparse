@@ -2,9 +2,9 @@
 
 **版本**: 0.1.0rc1（已发布 PyPI）
 **必需依赖**: 无（按格式安装 extras）
-**最后更新**: 2026-09-06
-**测试**: 792 passed，1 skipped；Ruff（`langparse tests scripts/verify_real_samples.py`）lint
-`All checks passed!`，format `140 files already formatted`
+**最后更新**: 2026-09-08
+**测试**: 813 passed，1 skipped；Ruff（`langparse tests scripts/verify_*.py`）lint
+`All checks passed!`，format `143 files already formatted`
 
 > 本文档在 2026-07-30 按代码现状重写，并在 2026-09-02 依据实际业务价值
 > 重新明确产品定位：通用文档能力解决“易用、好用”，Excel 结构理解形成主要差异。
@@ -65,7 +65,23 @@ Excel 则不止提取文本，而是尽可能保留事实、恢复业务结构�
 | Benchmark | 可用 | 通用解析 benchmark 提供结构阈值 + 保真度（文本编辑距离 / 表格 TEDS）；工作簿歧义 benchmark 评估模型消歧；整份工作簿 quality benchmark 以 13 份公开 tuning fixture 评估 Block、表头、行角色、表单/矩阵、续接、source refs、fallback 和对象覆盖，并提供不可变报告与非回归门 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
-"792 passed，1 skipped" 指本次本地完整测试结果，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+"813 passed，1 skipped" 指本次本地完整测试结果，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+
+### Golden 验收与安装包收尾（2026-09-08）
+
+6 份有效真实 Excel/CSV 已按冻结源标注完成修复复验，10,833 项检查零失败，10,640 条
+Excel 业务行完整且无重复。9,558 条数据的大表解析阶段约 21 秒。样本已参与修复，后续作为
+回归集；图片内语义和 DISPIMG 视觉内容仍不在本次验收范围。
+
+正式验收入口统一到 `scripts/verify_real_samples.py`：支持固定分隔符的 CSV 逐单元格对照、
+按表头行定位的列路径、绘图对象数量及独立业务行完整性检查；失败退出码为 1，配置错误为 2。
+大文件可使用 `--compress`，流式写入完整 JSON；HTML 只预览前 200 个非空行。
+标注迁移与命令见 [真实样本回归文档](REAL_SAMPLE_REGRESSION.md)。
+
+干净 wheel 环境暴露的 `[excel]` 依赖缺口已修复：显式声明 tabulate 和 Pillow，避免 CSV
+Markdown 报错和图片对象缺失。测试矩阵和发布工作流均增加仅安装 `[excel]` 的 wheel
+检查，覆盖 API、两套 workbook 分块及 CLI；发布流程验证将要上传的同一个 wheel。
+当前仍为 0.1.0rc1 开发代码，以上未发布修复不代表 PyPI 上的旧包已更新。
 
 ### 真实样本本地回归（2026-09-06）
 
@@ -141,12 +157,12 @@ langparse/
 
 ### 当前下一阶段优先级
 
-1. **P0（公开基础已完成，私有 holdout 待补）：建立 Excel 真实业务 Golden Set 与效果门**
+1. **P0（公开基准与真实样本回归已完成，生产效果认证待补）：完善 Excel Golden Set 与效果门**
    ——`benchmark-workbook-quality` 已用 13 份人工标注公开 tuning fixture 覆盖多表 Sheet、
    相邻原生表、视觉分区、表单旁注、矩阵、重复打印页、跨 Sheet 延续、隐藏区域、公式、
    命名区域和图表事实，并以版本化 manifest、
-   多维结构指标、真值 digest、不可变报告与 CLI 非零退出码阻止回归。仍需扩充代表性私有
-   holdout，并对真实业务分布建立放行阈值；公开合成 seed 不等于生产效果证明。公式、
+   多维结构指标、真值 digest、不可变报告与 CLI 非零退出码阻止回归。已补充 6 份私有真实样本并冻结标注，发现的问题修复后全部通过回归。对外声明生产效果前，
+   仍需在未参与调参的代表性业务数据上验证放行阈值；公开合成 seed 不等于生产效果证明。公式、
    命名区域和 Sheet 可见性目前只是 seed 中的语料锚点，尚未纳入 v1 指标，由 #9 补齐。
 2. **P0：补齐更丰富的工作簿事实和结构**——优先评估富信息 `.xls/.xlsb`、图片/图表
    语义 Block、命名区域及外部引用等真实业务缺口，保持事实层与语义层分离。

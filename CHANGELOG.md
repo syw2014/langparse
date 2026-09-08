@@ -7,6 +7,8 @@ the pre-release development history.
 
 ## [Unreleased]
 
+## [0.1.0rc2] - 2026-09-08
+
 ### Added
 
 - Extend the real-sample runner with explicit CSV truth, scoped header paths,

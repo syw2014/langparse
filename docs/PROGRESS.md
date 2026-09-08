@@ -1,6 +1,6 @@
 # LangParse 研发进度
 
-**版本**: 0.1.0rc1（已发布 PyPI）
+**版本**: 0.1.0rc2（候选版）
 **必需依赖**: 无（按格式安装 extras）
 **最后更新**: 2026-09-08
 **测试**: 813 passed，1 skipped；Ruff（`langparse tests scripts/verify_*.py`）lint
@@ -81,7 +81,7 @@ Excel 业务行完整且无重复。9,558 条数据的大表解析阶段约 21 �
 干净 wheel 环境暴露的 `[excel]` 依赖缺口已修复：显式声明 tabulate 和 Pillow，避免 CSV
 Markdown 报错和图片对象缺失。测试矩阵和发布工作流均增加仅安装 `[excel]` 的 wheel
 检查，覆盖 API、两套 workbook 分块及 CLI；发布流程验证将要上传的同一个 wheel。
-当前仍为 0.1.0rc1 开发代码，以上未发布修复不代表 PyPI 上的旧包已更新。
+本轮修复纳入 0.1.0rc2 候选版，通过既定 GitHub Release → PyPI 工作流发布。
 
 ### 真实样本本地回归（2026-09-06）
 

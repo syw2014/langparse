@@ -33,7 +33,7 @@ PDF 和 Word 能力让 LangParse 覆盖完整文档管道；Excel 是项目主�
 
 ## 项目状态
 
-首个公开候选版本为 `0.1.0rc1`。多格式解析、OOXML 工作簿结构化、语义分块、
+当前公开候选版本为 `0.1.0rc2`。多格式解析、OOXML 工作簿结构化、语义分块、
 批处理、质量检查和 CI 已可用。项目仍处于 pre-1.0；各模块的真实完成度和已知缺口
 以 [docs/PROGRESS.md](docs/PROGRESS.md) 为准。
 
@@ -77,7 +77,7 @@ flowchart LR
 安装当前候选版本：
 
 ```bash
-pip install --pre "langparse==0.1.0rc1"
+pip install --pre "langparse==0.1.0rc2"
 ```
 
 只安装实际需要的可选能力：

@@ -6,36 +6,36 @@
 
 ```bash
 # 安装基础版本
-uv pip install dist/langparse-0.1.0rc1-py3-none-any.whl
+uv pip install dist/langparse-0.1.0rc2-py3-none-any.whl
 
 # 安装 MinerU 可选依赖
-uv pip install "dist/langparse-0.1.0rc1-py3-none-any.whl[mineru]"
+uv pip install "dist/langparse-0.1.0rc2-py3-none-any.whl[mineru]"
 
 # 或安装带所有可选依赖的完整版本
-uv pip install "dist/langparse-0.1.0rc1-py3-none-any.whl[all]"
+uv pip install "dist/langparse-0.1.0rc2-py3-none-any.whl[all]"
 
 # 或只安装特定功能的依赖
-uv pip install "dist/langparse-0.1.0rc1-py3-none-any.whl[pdf,docx]"
+uv pip install "dist/langparse-0.1.0rc2-py3-none-any.whl[pdf,docx]"
 ```
 
 ### 方法 2: 使用标准 pip
 
 ```bash
 # 安装基础版本
-pip install dist/langparse-0.1.0rc1-py3-none-any.whl
+pip install dist/langparse-0.1.0rc2-py3-none-any.whl
 
 # 安装 MinerU 可选依赖
-pip install "dist/langparse-0.1.0rc1-py3-none-any.whl[mineru]"
+pip install "dist/langparse-0.1.0rc2-py3-none-any.whl[mineru]"
 
 # 或安装完整版本
-pip install "dist/langparse-0.1.0rc1-py3-none-any.whl[all]"
+pip install "dist/langparse-0.1.0rc2-py3-none-any.whl[all]"
 ```
 
 ## 从发布包安装
 
 ```bash
-pip install --pre "langparse==0.1.0rc1"
-pip install --pre "langparse[all]==0.1.0rc1"
+pip install --pre "langparse==0.1.0rc2"
+pip install --pre "langparse[all]==0.1.0rc2"
 ```
 
 ## 可选依赖说明
@@ -172,7 +172,7 @@ source test-env/bin/activate  # Linux/Mac
 # 或 test-env\Scripts\activate  # Windows
 
 # 安装包
-uv pip install dist/langparse-0.1.0rc1-py3-none-any.whl[all]
+uv pip install dist/langparse-0.1.0rc2-py3-none-any.whl[all]
 
 # 运行测试
 python examples/verify_install.py

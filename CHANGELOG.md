@@ -7,6 +7,13 @@ the pre-release development history.
 
 ## [Unreleased]
 
+### Added
+
+- Optional immutable progress events for parsing and concurrent batches, with
+  PDF page/engine progress, Excel stages, callback failure isolation, and CLI
+  `--progress` output on stderr. Unknown progress remains unspecified; no new
+  core dependencies or persisted task service.
+
 ## [0.1.0rc2] - 2026-09-08
 
 ### Added

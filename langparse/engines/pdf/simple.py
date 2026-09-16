@@ -10,6 +10,7 @@ from langparse.engines.pdf.ocr import (
     needs_ocr,
     ocr_page_text,
 )
+from langparse.progress import ProgressCallback, ProgressReporter
 
 
 class BasePDFEngine(BaseEngine):
@@ -49,7 +50,10 @@ class SimplePDFEngine(BasePDFEngine):
         # guarantee -- correctness over throughput on an already slow path.
         self._ocr_lock = threading.Lock()
 
-    def process(self, file_path: Path, **kwargs) -> Iterator[PageResult]:
+    def process(
+        self, file_path: Path, *, progress_callback: ProgressCallback | None = None, **kwargs
+    ) -> Iterator[PageResult]:
+        reporter = ProgressReporter(str(file_path), progress_callback)
         try:
             import pdfplumber
         except ImportError:
@@ -72,6 +76,9 @@ class SimplePDFEngine(BasePDFEngine):
                 if table_markdown:
                     markdown_content = "\n\n".join([text, "\n".join(table_markdown)]).strip()
 
+                reporter.emit(
+                    "parsing", completed_units=i + 1, total_units=len(pdf.pages), unit="pages"
+                )
                 yield PageResult(
                     page_number=i + 1,
                     markdown_content=markdown_content,

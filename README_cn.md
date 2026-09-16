@@ -466,6 +466,57 @@ langparse benchmark samples/public.example.json --engine mineru --output-dir rep
 
 benchmark 报告会记录成功率、耗时、页数/秒、表格数量、OCR 指标、多列顺序告警、页眉页脚过滤数量，以及图像/图表 metadata 覆盖情况。
 
+### 解析进度（未发布）
+
+`AutoParser`、`ParseService` 和 `PDFParser` 的解析调用支持可选的
+`progress_callback`。回调接收不可变的 `ProgressEvent`，默认不输出进度、不增加依赖。
+
+```python
+from langparse import AutoParser, ProgressEvent
+from langparse.services.batch_service import BatchParseService
+
+def on_progress(event: ProgressEvent):
+    print(event.source, event.phase, event.state, event.percent)
+
+result = AutoParser.parse_result("budget.xlsx", progress_callback=on_progress)
+batch = BatchParseService().run(
+    "docs/", output_dir="out", progress_callback=on_progress,
+)
+```
+
+事件字段为 `source`、`phase`、`state`、`completed_units`、`total_units`、`unit`、
+`percent` 和 `message`。`percent` 是当前阶段的 0–100 百分比，未知时为 `None`，
+不表示剩余时间。文件结束以 `phase="file"` 且 `state="completed"/"failed"` 为准；
+成功返回的结果仍可能带有 `partial` 质量诊断。`file` 完成涵盖解析及请求的分块，
+不涵盖调用方后续导出/落盘。
+
+- Simple PDF：报告 `parsing` 阶段已处理/总页数，`unit="pages"`。
+- DeepDoc：转发内部解析进度；其百分比来自引擎阶段权重或页面批次，达到 100 后仍需
+  渲染结果。首次模型准备、等待解析锁期间只报告准备状态。
+- MinerU：报告服务准备、远程解析等待、结果组装阶段；远端内部进度未知。
+- Excel：报告事实提取 `extracting`、结构装配 `assembling`（包含可选模型消歧）、
+  渲染 `rendering`；CSV/旧版 Excel 为提取、渲染两阶段。
+  直接调用 `ExcelParser.parse_result(..., progress_callback=...)` 也能获得这些阶段；
+  统一的 `file` 生命周期由 `AutoParser`/`ParseService` 提供。
+- 批处理：`phase="batch"`、`source=""`、`unit="files"`；按实际完成顺序通知，
+  返回结果仍按既有的文件路径排序排列。成功、失败、跳过都计入已完成数量。
+  每项处理完毕另发 `batch_item`，包含该文件的 `source` 和
+  `completed`/`failed`/`skipped` 状态，涵盖该项输出写入。
+  汇总 `completed` 表示批次处理及报告写入结束，逐项结果仍可能失败；异常退出报告
+  `failed`。空批次为 0/0，百分比未知。
+
+回调同步执行，应保持简短。批处理会串行调用同一次运行的回调，但执行线程可能不同；
+GUI/异步应用应转交自己的事件循环。同一回调用于多个独立运行时，由调用方协调线程。
+普通回调异常仅通过标准日志记录异常类型，不改变解析结果。该接口不提供后台任务、
+持久化任务 ID、取消、心跳或 HTTP 查询；应用可用事件维护自己的任务状态。
+
+CLI 加 `--progress` 后逐行写入 stderr，stdout 继续输出 Markdown/JSON：
+
+```bash
+langparse parse budget.xlsx --format json --progress > result.json
+langparse parse docs/ --batch --output-dir out --progress
+```
+
 ## 🛠️ 本地开发与测试
 
 LangParse 使用 [`uv`](https://github.com/astral-sh/uv) 管理环境和依赖。仓库内的 `.venv` 由 uv 管理，**不含 `pip`**，因此请统一通过 `uv run` 运行命令（直接用 shell 里的 `pip`/`python` 可能指向其他解释器，例如 Anaconda）。

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from langparse import __version__
 from langparse.errors import classify_exception
+from langparse.progress import ProgressEvent
 from langparse.services.batch_service import BatchParseService
 from langparse.services.benchmark_service import BenchmarkService
 from langparse.services.parse_service import ParseService
@@ -50,6 +51,7 @@ def build_parser():
     parse_cmd.add_argument("--max-workers", type=int, default=None)
     parse_cmd.add_argument("--skip-existing", action="store_true")
     parse_cmd.add_argument("--metrics", action="store_true")
+    parse_cmd.add_argument("--progress", action="store_true", help="write progress to stderr")
     parse_cmd.add_argument(
         "--chunk",
         action="store_true",
@@ -240,6 +242,8 @@ def _run(args, parser) -> int:
         if value is not None and value is not False
     }
     chunk_kwargs = {"chunk_profile": args.chunk_profile} if args.chunk else {}
+    if args.progress:
+        parse_kwargs["progress_callback"] = _print_progress
 
     if args.batch:
         # One implementation regardless of flags. Without --output-dir the run
@@ -280,6 +284,22 @@ def _run(args, parser) -> int:
         print(rendered)
 
     return 0
+
+
+def _print_progress(event: ProgressEvent) -> None:
+    counts = ""
+    if event.completed_units is not None:
+        total = event.total_units if event.total_units is not None else "?"
+        counts = f" {event.completed_units}/{total} {event.unit or ''}"
+    percent = f" {event.percent:.0f}%" if event.percent is not None else ""
+    # Escape embedded line breaks/control characters from untrusted filenames/messages.
+    source = repr(event.source) if event.source else "batch"
+    message = f" {event.message!r}" if event.message else ""
+    print(
+        f"langparse: {source} {event.phase} {event.state}{counts}{percent}{message}",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

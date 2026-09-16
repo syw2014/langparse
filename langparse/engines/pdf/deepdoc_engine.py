@@ -6,6 +6,7 @@ from typing import Any
 from langparse.core.engine import PageResult
 from langparse.engines.pdf.simple import BasePDFEngine
 from langparse.logging import get_logger
+from langparse.progress import ProgressCallback, ProgressReporter
 from langparse.types import ParsedDocumentResult
 
 logger = get_logger(__name__)
@@ -97,7 +98,15 @@ class DeepDocEngine(BasePDFEngine):
             logger.warning("Skipping OCR-applied classification for %s: %s", file_path, exc)
             return {}
 
-    def process_document(self, file_path: Path, **kwargs: Any) -> ParsedDocumentResult:
+    def process_document(
+        self,
+        file_path: Path,
+        *,
+        progress_callback: ProgressCallback | None = None,
+        **kwargs: Any,
+    ) -> ParsedDocumentResult:
+        reporter = ProgressReporter(str(file_path), progress_callback)
+        reporter.emit("preparing", message="Preparing DeepDoc parser")
         try:
             from langparse.engines.pdf.deepdoc.rendering import render_pages
         except ImportError as exc:
@@ -108,8 +117,19 @@ class DeepDocEngine(BasePDFEngine):
         with self._parser_lock:
             if self._parser is None:
                 self._parser = self._build_parser()
-            boxes = self._parser.parse_into_bboxes(str(file_path))
+            if progress_callback is None:
+                boxes = self._parser.parse_into_bboxes(str(file_path))
+            else:
+                last_percent = 0.0
 
+                def on_progress(progress, message=""):
+                    nonlocal last_percent
+                    last_percent = max(last_percent, min(100.0, max(0.0, progress * 100)))
+                    reporter.emit("parsing", percent=last_percent, message=message)
+
+                boxes = self._parser.parse_into_bboxes(str(file_path), callback=on_progress)
+
+        reporter.emit("rendering")
         ocr_pages = self._classify_ocr_pages(file_path)
         pages = render_pages(boxes, ocr_pages=ocr_pages)
         return ParsedDocumentResult(
@@ -126,7 +146,11 @@ class DeepDocEngine(BasePDFEngine):
             },
         )
 
-    def process(self, file_path: Path, **kwargs) -> Iterator[PageResult]:
+    def process(
+        self, file_path: Path, *, progress_callback: ProgressCallback | None = None, **kwargs
+    ) -> Iterator[PageResult]:
+        if progress_callback is not None:
+            kwargs["progress_callback"] = progress_callback
         parsed = self.process_document(file_path, **kwargs)
         for page in parsed.pages:
             yield PageResult(

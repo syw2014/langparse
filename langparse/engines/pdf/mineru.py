@@ -6,6 +6,7 @@ from langparse.core.engine import PageResult
 from langparse.engines.pdf.mineru_client import MinerUClient
 from langparse.engines.pdf.mineru_service import MinerUServiceManager
 from langparse.engines.pdf.simple import BasePDFEngine
+from langparse.progress import ProgressCallback, ProgressReporter
 from langparse.types import ParsedDocumentResult, ParsedElement, ParsedPageResult
 
 _SENSITIVE_OPTION_KEYS = frozenset(
@@ -151,16 +152,35 @@ class MinerUEngine(BasePDFEngine):
     def _create_service_manager(self) -> MinerUServiceManager:
         return MinerUServiceManager(**self._build_service_config())
 
-    def _run_mineru(self, file_path: Path, runtime_config: dict[str, Any]) -> list[dict[str, Any]]:
+    def _run_mineru(
+        self,
+        file_path: Path,
+        runtime_config: dict[str, Any],
+        progress_callback: ProgressCallback | None = None,
+    ) -> list[dict[str, Any]]:
+        reporter = ProgressReporter(str(file_path), progress_callback)
         manager = self._create_service_manager()
         with manager.running_service() as base_url:
             client = self._create_client(base_url)
+            reporter.emit("parsing", message="Waiting for MinerU response")
             return client.parse_file(file_path, runtime_config)
 
-    def process_document(self, file_path: Path, **kwargs: Any) -> ParsedDocumentResult:
+    def process_document(
+        self,
+        file_path: Path,
+        *,
+        progress_callback: ProgressCallback | None = None,
+        **kwargs: Any,
+    ) -> ParsedDocumentResult:
+        reporter = ProgressReporter(str(file_path), progress_callback)
+        reporter.emit("preparing", message="Preparing MinerU service")
         self._ensure_runtime()
         runtime_config = self._build_runtime_config(**kwargs)
-        raw_pages = self._run_mineru(file_path, runtime_config)
+        if progress_callback is None:
+            raw_pages = self._run_mineru(file_path, runtime_config)
+        else:
+            raw_pages = self._run_mineru(file_path, runtime_config, progress_callback)
+        reporter.emit("rendering")
         pages = [
             ParsedPageResult(
                 page_number=item["page_number"],
@@ -221,7 +241,11 @@ class MinerUEngine(BasePDFEngine):
             },
         )
 
-    def process(self, file_path: Path, **kwargs) -> Iterator[PageResult]:
+    def process(
+        self, file_path: Path, *, progress_callback: ProgressCallback | None = None, **kwargs
+    ) -> Iterator[PageResult]:
+        if progress_callback is not None:
+            kwargs["progress_callback"] = progress_callback
         parsed = self.process_document(file_path, **kwargs)
         for page in parsed.pages:
             yield PageResult(

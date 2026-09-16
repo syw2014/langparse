@@ -62,6 +62,7 @@ Excel 则不止提取文本，而是尽可能保留事实、恢复业务结构�
 | PDF 解析（vision_llm / paddle） | 未实现 | 已移出 `ENGINE_MAP`，选用时立即报错而非解析时才失败 |
 | 语义分块 | 可用 | 块扫描器 + 尺寸装箱，见 `chunkers/blocks.py` |
 | 批处理 / 指标 / 质检 | 可用 | 全格式生效 |
+| 解析进度（未发布） | 已实现，待本轮验证 | 可选统一回调，Simple 页数、DeepDoc 内部阶段、MinerU 等待状态、Excel 阶段、批次实时完成数；CLI stderr；不含持久化任务查询 |
 | Benchmark | 可用 | 通用解析 benchmark 提供结构阈值 + 保真度（文本编辑距离 / 表格 TEDS）；工作簿歧义 benchmark 评估模型消歧；整份工作簿 quality benchmark 以 13 份公开 tuning fixture 评估 Block、表头、行角色、表单/矩阵、续接、source refs、fallback 和对象覆盖，并提供不可变报告与非回归门 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 

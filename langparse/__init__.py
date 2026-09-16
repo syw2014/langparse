@@ -11,6 +11,7 @@ from langparse.parsers.docx_parser import DocxParser
 from langparse.parsers.excel_parser import ExcelParser
 from langparse.parsers.markdown_parser import MarkdownParser
 from langparse.parsers.pdf_parser import PDFParser
+from langparse.progress import ProgressCallback, ProgressEvent
 from langparse.types import (
     Chunk,
     Document,
@@ -35,6 +36,8 @@ __all__ = [
     "ExcelParser",
     "SemanticChunker",
     "ParseMetrics",
+    "ProgressCallback",
+    "ProgressEvent",
     "BatchItemResult",
     "BatchRunResult",
 ]

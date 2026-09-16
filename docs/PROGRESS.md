@@ -62,11 +62,20 @@ Excel 则不止提取文本，而是尽可能保留事实、恢复业务结构�
 | PDF 解析（vision_llm / paddle） | 未实现 | 已移出 `ENGINE_MAP`，选用时立即报错而非解析时才失败 |
 | 语义分块 | 可用 | 块扫描器 + 尺寸装箱，见 `chunkers/blocks.py` |
 | 批处理 / 指标 / 质检 | 可用 | 全格式生效 |
-| 解析进度（未发布） | 已实现，待本轮验证 | 可选统一回调，Simple 页数、DeepDoc 内部阶段、MinerU 等待状态、Excel 阶段、批次实时完成数；CLI stderr；不含持久化任务查询 |
+| 解析进度（未发布） | 已实现并验证 | 可选统一回调，Simple 页数、DeepDoc 内部阶段、MinerU 等待状态、Excel 阶段、批次实时完成数及逐项状态；CLI stderr；不含持久化任务查询 |
 | Benchmark | 可用 | 通用解析 benchmark 提供结构阈值 + 保真度（文本编辑距离 / 表格 TEDS）；工作簿歧义 benchmark 评估模型消歧；整份工作簿 quality benchmark 以 13 份公开 tuning fixture 评估 Block、表头、行角色、表单/矩阵、续接、source refs、fallback 和对象覆盖，并提供不可变报告与非回归门 |
 | 测试 CI | 可用 | `tests.yml`：Python 3.10–3.13 矩阵 + coverage + ruff |
 
 "813 passed，1 skipped" 指本次本地完整测试结果，不等同于覆盖率。CI 会产出 coverage 报告，但**尚未设置覆盖率门槛**。
+
+### 解析进度验证（2026-09-16）
+
+统一进度回调与 CLI `--progress` 已完成。全量测试 839 passed、1 skipped；
+包含回调故障隔离、并发通知及最终排序、失败/跳过/输出失败、阶段百分比与参数隔离测试。
+仓库公开 Excel 样本已实际验证单文件分块、两文件并发批处理和 CLI stdout JSON /
+stderr 进度分离。PDF 本轮通过模拟引擎测试，不代表重新验证模型推理或远程 MinerU 服务。
+`ruff check langparse tests` 和对应格式检查通过；仓库级检查仍有未改动的 examples /
+下载脚本中的 60 项 lint 问题及全局 17 个格式问题。该能力尚未发布。
 
 ### Golden 验收与安装包收尾（2026-09-08）
 

@@ -579,7 +579,8 @@ def _finalize_workbook(
     snapshot: WorkbookSnapshot,
     workbook_ir: WorkbookIR,
 ) -> tuple[ParseDiagnostics, tuple[str, ...]]:
-    _, diagnostics = assemble_baseline(snapshot)
+    baseline, diagnostics = assemble_baseline(snapshot)
+    workbook_ir.lineage = baseline.lineage
     block_counts: Counter[str] = Counter()
     ambiguous_regions = []
     region_diagnostics = []
@@ -949,6 +950,10 @@ def assemble_baseline(snapshot: WorkbookSnapshot) -> tuple[WorkbookIR, ParseDiag
         snapshot=snapshot,
         metadata={"snapshot": snapshot.metadata},
     )
+    from langparse.workbooks.lineage import build_lineage
+
+    workbook_ir.lineage = build_lineage(snapshot)
+    diagnostics.reference_diagnostics = [asdict(item) for item in workbook_ir.lineage.diagnostics]
     return workbook_ir, diagnostics
 
 

@@ -68,3 +68,34 @@ def test_local_names_structured_rows_and_explicit_degradation(tmp_path):
     assert ("dynamic_reference", "C2") in diagnostics
     assert ("invalid_reference", "C3") in diagnostics
     assert ("unsupported_reference", "C4") in diagnostics
+
+
+def test_lineage_reaches_parsed_result_json_and_analysis_chunks(tmp_path):
+    import json
+
+    from langparse.parsers.excel_parser import ExcelParser
+    from langparse.services.parse_service import ParseService
+    from langparse.workbooks.assembly import assemble_baseline
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Data"
+    sheet.append(["Amount", "Result"])
+    sheet.append([10, "=A2*2"])
+    sheet.append([20, "=A3*2"])
+    sheet.add_table(Table(displayName="Records", ref="A1:B3"))
+    path = tmp_path / "consume.xlsx"
+    book.save(path)
+    parsed = ExcelParser().parse_result(path)
+    assert (
+        parsed.structure.lineage.dependencies_of(SourceRef("Data", "B2"))[0].target.key == "Data!A2"
+    )
+    baseline, _ = assemble_baseline(parsed.structure.snapshot)
+    assert baseline.lineage.dependencies_of(SourceRef("Data", "B3"))[0].target.key == "Data!A3"
+    service = ParseService()
+    chunks = service.chunk_result(parsed, chunk_profile="analysis")
+    dependencies = [edge for chunk in chunks for edge in chunk.structured_payload["dependencies"]]
+    assert {edge["dependent"]["range"] for edge in dependencies} == {"B2", "B3"}
+    payload = json.loads(service.render_output(parsed, "json", chunks))
+    assert payload["structure"]["lineage"]["edges"][0]["status"] == "resolved"
+    assert payload["structure"]["snapshot"]["reference_facts"]["tables"][0]["name"] == "Records"

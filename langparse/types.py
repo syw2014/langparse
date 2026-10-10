@@ -77,6 +77,7 @@ class ParseDiagnostics:
     continuation_candidates: list[StructuredData] = field(default_factory=list)
     region_diagnostics: list[StructuredData] = field(default_factory=list)
     object_coverage_ratio: float = 1.0
+    reference_diagnostics: list[StructuredData] = field(default_factory=list)
 
 
 @dataclass

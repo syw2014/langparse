@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from langparse.types import ParsedStructure, StructuredData
 from langparse.workbooks.reference_types import WorkbookReferenceFacts
+
+if TYPE_CHECKING:
+    from langparse.workbooks.lineage import WorkbookLineage
 
 
 def stable_id(prefix: str, *parts: str) -> str:
@@ -251,3 +254,4 @@ class WorkbookIR(ParsedStructure):
     snapshot: WorkbookSnapshot | None = None
     metadata: StructuredData = field(default_factory=dict)
     table_continuations: list[TableContinuation] = field(default_factory=list)
+    lineage: WorkbookLineage | None = None

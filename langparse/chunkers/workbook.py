@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
 
 from openpyxl.utils import get_column_letter, range_boundaries
 
@@ -18,6 +19,7 @@ from langparse.workbooks.types import (
     LogicalTable,
     MatrixBlock,
     MatrixHeader,
+    SourceRef,
     TableContinuation,
     TextBlock,
     TextLine,
@@ -113,6 +115,18 @@ class WorkbookStructuralChunker:
                 sheet_snapshot.visibility if sheet_snapshot is not None else sheet_ir.visibility
             )
             chunk.metadata["hidden_row_numbers"] = sorted(referenced_rows & hidden_rows)
+            if self.policy.analysis_records:
+                lineage = workbook_ir.lineage
+                dependencies = []
+                for source in chunk.metadata["source_ranges"]:
+                    name, cell_range = source.rsplit("!", 1)
+                    for edge in (
+                        lineage.dependencies_of(SourceRef(name, cell_range)) if lineage else []
+                    ):
+                        payload = asdict(edge)
+                        if payload not in dependencies:
+                            dependencies.append(payload)
+                chunk.structured_payload["dependencies"] = dependencies
 
     def _validate_chunks(self, parsed: ParsedDocumentResult, chunks: list[Chunk]) -> None:
         workbook_ir = parsed.structure

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "facts": {
+    "sheets": [{"name": "Data", "visibility": "visible", "used_range": "A1:B2", "cell_count": 4, "merged_ranges": [], "cells": [{"coordinate": "B2", "source_ref": "Data!B2", "raw_value": "=A2*2", "formula": "=A2*2"}], "objects": []}],
+    "references": {"formulas": [{"source_ref": "Data!B2", "formula": "=A2*2", "references": [{"reference": "A2", "status": "resolved", "targets": ["Data!A2"], "external_workbook": null}]}], "defined_names": [], "tables": [], "external_references": [], "diagnostics": []}
+  },
+  "structures": {"blocks": [{"id": "block-1", "sheet": "Data", "kind": "logical_table", "source_refs": ["Data!A1:B2"], "confidence": 1.0, "diagnostics": [], "table": {"table_id": "table-1", "columns": [{"coordinate": "A", "path": ["Amount"]}, {"coordinate": "B", "path": ["Result"]}], "rows": [{"source_ref": "Data!A2:B2", "role": "data", "values": [10, "=A2*2"]}], "row_count": 2, "omitted_rows": 1, "source_refs": ["Data!A1:B2"]}}]},
+  "relations": {"dependencies": [{"dependent": "Data!B2", "target": "Data!A2", "reference": "A2", "status": "resolved", "source_refs": ["Data!B2", "Data!A2"], "external_workbook": null}], "continuations": []},
+  "diagnostics": {"status": "success"},
+  "provenance": {"source": "book.xlsx", "filename": "book.xlsx", "parser_version": "0.1.0rc2", "engine": "excel", "omissions": {"cells": false, "media_binary": true, "source_binary": true, "max_rows_per_block": 1}}
+}

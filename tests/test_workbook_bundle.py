@@ -78,3 +78,18 @@ def test_bundle_cli_matches_api_and_rejects_invalid_source(tmp_path, capsys):
     payload["structures"]["blocks"][0]["source_refs"] = ["Missing!A1"]
     with pytest.raises(ValueError, match="source"):
         WorkbookBundle.from_json(json.dumps(payload))
+
+
+def test_reads_frozen_v1_bundle_without_original_workbook():
+    from pathlib import Path
+
+    from langparse.workbooks.bundle import WorkbookBundle
+
+    path = Path(__file__).parent / "fixtures" / "workbook-bundle-v1.json"
+    bundle = WorkbookBundle.from_json(path.read_text())
+    assert bundle.tables(sheet="Data")[0]["omitted_rows"] == 1
+    assert bundle.cells(sheet="Data", source_range="B2")[0]["formula"] == "=A2*2"
+    assert (
+        bundle.relations(source_ref="Data!A2", direction="dependents")[0]["dependent"] == "Data!B2"
+    )
+    assert json.loads(bundle.to_json()) == json.loads(path.read_text())

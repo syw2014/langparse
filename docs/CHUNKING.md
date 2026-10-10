@@ -21,8 +21,10 @@ from langparse import FixedTokenChunker, Document
 
 # tokenizer 由调用方安装和配置；应确保切片解码符合其 Unicode/特殊 token 契约。
 chunker = FixedTokenChunker(
-    max_chunk_size=256, overlap=32,
-    encoder=tokenizer.encode, decoder=tokenizer.decode,
+    max_chunk_size=256,
+    overlap=32,
+    encoder=tokenizer.encode,
+    decoder=tokenizer.decode,
 )
 chunks = chunker.chunk(Document(content=text))
 ```
@@ -35,7 +37,9 @@ chunks = chunker.chunk(Document(content=text))
 from langparse import AutoParser, register_chunker, BaseChunker
 
 result = AutoParser.parse_result(
-    "report.md", chunk=True, chunk_strategy="sliding-window",
+    "report.md",
+    chunk=True,
+    chunk_strategy="sliding-window",
     chunk_options={"max_chunk_size": 1000, "overlap": 100},
 )
 

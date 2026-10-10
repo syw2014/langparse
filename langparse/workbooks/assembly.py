@@ -797,8 +797,12 @@ def validate_workbook_source_refs(
         if sheet.used_range or sheet.cells
     }
     refs = []
+    drawing_refs = []
     for sheet_ir in workbook_ir.sheets:
         for block in sheet_ir.blocks:
+            if block.kind in {"chart", "image"}:
+                drawing_refs.extend(block.source_refs)
+                continue
             refs.extend(block.source_refs)
             if block.logical_table is not None:
                 refs.extend(_logical_table_source_refs(block.logical_table))
@@ -828,7 +832,18 @@ def validate_workbook_source_refs(
 
     invalid = sorted({ref.key for ref in refs if not _valid_source_ref(ref, sheet_bounds)})
     invalid_count = sum(not _valid_source_ref(ref, sheet_bounds) for ref in refs)
-    ratio = (len(refs) - invalid_count) / len(refs) if refs else 1.0
+    if drawing_refs:
+        from langparse.workbooks.objects import validate_object_source
+
+        for ref in drawing_refs:
+            try:
+                validate_object_source(snapshot, ref.key)
+            except ValueError:
+                invalid_count += 1
+                invalid.append(ref.key)
+    count = len(refs) + len(drawing_refs)
+    ratio = (count - invalid_count) / count if count else 1.0
+    invalid = sorted(set(invalid))
     return ratio, invalid
 
 

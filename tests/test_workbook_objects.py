@@ -107,3 +107,16 @@ def test_object_chunk_rejects_unknown_sheet_source(tmp_path):
     chunks[0].metadata["source_ranges"] = ["Missing!A1"]
     with pytest.raises(ValueError, match="unknown sheet"):
         chunker._validate_chunks(parsed, chunks)
+
+
+def test_drawing_outside_used_cells_has_valid_public_source_refs(tmp_path):
+    from langparse.parsers.excel_parser import ExcelParser
+    from langparse.workbooks.assembly import validate_workbook_source_refs
+
+    workbook = Workbook()
+    workbook.active["A1"] = "Value"
+    workbook.active.add_chart(BarChart(), "D2")
+    path = tmp_path / "anchor.xlsx"
+    workbook.save(path)
+    parsed = ExcelParser().parse_result(path)
+    assert validate_workbook_source_refs(parsed.structure.snapshot, parsed.structure) == (1.0, [])

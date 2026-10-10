@@ -80,7 +80,7 @@ langparse parse docs/ --batch --output-dir out --progress
 
 ## Project status
 
-The latest GitHub release is `0.1.0`. Core multi-format parsing,
+The latest GitHub release is `0.1.1`. Core multi-format parsing,
 structured OOXML workbooks, semantic chunking, batch processing, quality checks,
 and CI are available today. LangParse remains pre-1.0; see
 [docs/PROGRESS.md](docs/PROGRESS.md) for the module-by-module source of truth and
@@ -135,7 +135,7 @@ views derived from it, not replacements for it.
 Install the current release:
 
 ```bash
-pip install "langparse==0.1.0"
+pip install "langparse==0.1.1"
 ```
 
 Install only the optional capabilities you need:

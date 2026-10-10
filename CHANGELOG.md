@@ -7,6 +7,14 @@ the pre-release development history.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-10
+
+### Changed
+
+- Use a dedicated PyPI description with runnable examples, optional-extra installation,
+  Workbook Bundle queries, and absolute documentation links.
+- Correct outdated release wording in the repository README; parsing behavior is unchanged.
+
 ## [0.1.0] - 2026-10-10
 
 ### Added

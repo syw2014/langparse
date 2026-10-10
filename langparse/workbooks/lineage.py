@@ -46,6 +46,8 @@ def build_lineage(snapshot: WorkbookSnapshot) -> WorkbookLineage:
     result = WorkbookLineage(diagnostics=list(facts.diagnostics))
     for formula in facts.formulas:
         for reference in formula.references:
+            if reference.status == "resolved" and not reference.targets:
+                continue
             for target in reference.targets or [None]:
                 result.edges.append(
                     DependencyEdge(

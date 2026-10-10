@@ -38,3 +38,33 @@ def test_reference_facts_and_lineage(tmp_path):
     assert lineage.dependencies_of(SourceRef("Other Sheet", "A1"))[0].target.key == "Data!B3"
     codes = {item.code for item in lineage.diagnostics}
     assert {"dynamic_reference", "unresolved_reference", "circular_reference"} <= codes
+
+
+def test_local_names_structured_rows_and_explicit_degradation(tmp_path):
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Data"
+    sheet.append(["Amount", "Result"])
+    sheet.append([10, "=Sales[@Amount]"])
+    sheet.append([20, "=Rate"])
+    sheet.add_table(Table(displayName="Sales", ref="A1:B3"))
+    book.defined_names.add(DefinedName("Rate", attr_text="'Data'!$A$2"))
+    sheet.defined_names.add(DefinedName("Rate", attr_text="'Data'!$A$3"))
+    book.defined_names.add(DefinedName("Moving", attr_text="OFFSET(Data!A2,0,0)"))
+    sheet["C1"] = "=SUM(Sales)"
+    sheet["C2"] = "=Moving"
+    sheet["C3"] = "=#REF!"
+    sheet["C4"] = "=SUM(A:A)"
+    sheet["C5"] = "=SUM(Sales[#Headers])"
+    path = tmp_path / "scopes.xlsx"
+    book.save(path)
+    snapshot = OOXMLWorkbookAdapter().snapshot(path)
+    lineage = build_lineage(snapshot)
+    assert lineage.dependencies_of(SourceRef("Data", "B2"))[0].target.key == "Data!A2:A2"
+    assert lineage.dependencies_of(SourceRef("Data", "B3"))[0].target.key == "Data!A3"
+    assert lineage.dependencies_of(SourceRef("Data", "C1"))[0].target.key == "Data!A2:B3"
+    assert lineage.dependencies_of(SourceRef("Data", "C5"))[0].target.key == "Data!A1:B1"
+    diagnostics = {(d.code, d.source_refs[0].range) for d in lineage.diagnostics}
+    assert ("dynamic_reference", "C2") in diagnostics
+    assert ("invalid_reference", "C3") in diagnostics
+    assert ("unsupported_reference", "C4") in diagnostics

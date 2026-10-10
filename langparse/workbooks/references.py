@@ -50,6 +50,10 @@ def extract_reference_facts(snapshot: WorkbookSnapshot) -> None:
                         facts.diagnostics.append(
                             ReferenceDiagnostic("dynamic_reference", token.value[:-1], [source])
                         )
+                if token.type == "OPERAND" and token.subtype == "ERROR":
+                    facts.diagnostics.append(
+                        ReferenceDiagnostic("invalid_reference", token.value, [source])
+                    )
                 if token.type != "OPERAND" or token.subtype != "RANGE":
                     continue
                 ref = _resolve(token.value, source, snapshot, set())
@@ -103,10 +107,18 @@ def _resolve(text, source, snapshot, visiting):
             return FormulaReference(text, "circular")
         # Names may contain constants or formulas. Only explicit range/name aliases resolve.
         definition = name.definition.lstrip("=")
+        if re.search(r"(?i)\b(?:INDIRECT|OFFSET)\s*\(", definition):
+            return FormulaReference(text, "dynamic")
+        if re.fullmatch(r"(?:[+-]?\d+(?:\.\d+)?|TRUE|FALSE|\".*\")", definition, re.I):
+            return FormulaReference(text, "resolved")
         resolved = _resolve(
             definition, SourceRef(canonical, source.range), snapshot, visiting | {key}
         )
         return FormulaReference(text, resolved.status, resolved.targets, resolved.external_workbook)
+    if any(t.name.casefold() == local.casefold() for t in snapshot.reference_facts.tables):
+        return _structured(text, local + "[#Data]", source, snapshot)
+    if re.fullmatch(r"\$?[A-Za-z]+:\$?[A-Za-z]+|\$?\d+:\$?\d+", local):
+        return FormulaReference(text, "unsupported")
     if "[" in local:
         return _structured(text, local, source, snapshot)
     return FormulaReference(text, "unresolved")

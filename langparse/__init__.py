@@ -3,7 +3,14 @@ from importlib.metadata import version as _distribution_version
 __version__ = _distribution_version("langparse")
 
 from langparse.autoparser import AutoParser
-from langparse.chunkers.semantic import SemanticChunker
+from langparse.chunkers import (
+    FixedTokenChunker,
+    SemanticChunker,
+    SlidingWindowChunker,
+    available_chunkers,
+    create_chunker,
+    register_chunker,
+)
 from langparse.core.chunker import BaseChunker
 from langparse.core.parser import BaseParser
 from langparse.metrics import BatchItemResult, BatchRunResult, ParseMetrics
@@ -35,6 +42,11 @@ __all__ = [
     "DocxParser",
     "ExcelParser",
     "SemanticChunker",
+    "FixedTokenChunker",
+    "SlidingWindowChunker",
+    "available_chunkers",
+    "create_chunker",
+    "register_chunker",
     "ParseMetrics",
     "ProgressCallback",
     "ProgressEvent",

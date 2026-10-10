@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
+from subprocess import TimeoutExpired
+from urllib.error import URLError
 
 
 class ErrorType(str, Enum):
@@ -42,7 +45,7 @@ def classify_exception(exc: BaseException) -> ClassifiedError:
         return ClassifiedError(ErrorType.ENGINE_UNAVAILABLE, message)
     if "unable to start local mineru-api" in lowered:
         return ClassifiedError(ErrorType.ENGINE_UNAVAILABLE, message)
-    if "timed out" in lowered or "timeout" in lowered:
+    if _is_timeout(exc) or re.search(r"\btimed out\b", lowered):
         return ClassifiedError(ErrorType.ENGINE_TIMEOUT, message)
     if "ocr" in lowered and "unavailable" in lowered:
         return ClassifiedError(ErrorType.OCR_UNAVAILABLE, message)
@@ -50,3 +53,18 @@ def classify_exception(exc: BaseException) -> ClassifiedError:
         return ClassifiedError(ErrorType.TABLE_EXTRACTION_FAILED, message)
 
     return ClassifiedError(ErrorType.PARSE_FAILED, message)
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    """Recognize standard timeout types through explicit backend wrappers."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, (TimeoutError, TimeoutExpired)):
+            return True
+        if isinstance(current, URLError) and isinstance(current.reason, BaseException):
+            current = current.reason
+        else:
+            current = current.__cause__
+    return False

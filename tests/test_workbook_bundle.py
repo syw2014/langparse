@@ -93,3 +93,13 @@ def test_reads_frozen_v1_bundle_without_original_workbook():
         bundle.relations(source_ref="Data!A2", direction="dependents")[0]["dependent"] == "Data!B2"
     )
     assert json.loads(bundle.to_json()) == json.loads(path.read_text())
+
+
+def test_future_extensions_do_not_reinterpret_reserved_reference_names(tmp_path):
+    from langparse.workbooks.bundle import WorkbookBundle
+
+    payload = WorkbookBundle.from_result(_parsed(tmp_path)).to_dict()
+    payload["future_extension"] = {"target": {"opaque": True}}
+    payload["structures"]["blocks"][0]["future_extension"] = {"source_refs": ["opaque"]}
+    loaded = WorkbookBundle.from_json(json.dumps(payload))
+    assert loaded.to_dict() == payload

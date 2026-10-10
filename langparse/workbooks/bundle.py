@@ -89,6 +89,40 @@ class WorkbookBundle:
             elif value is not None or not nullable:
                 source(value)
 
+        containers = {
+            "facts",
+            "structures",
+            "relations",
+            "diagnostics",
+            "blocks",
+            "sheets",
+            "references",
+            "formulas",
+            "defined_names",
+            "tables",
+            "external_references",
+            "reference_diagnostics",
+            "dependencies",
+            "continuations",
+            "object",
+            "objects",
+            "series",
+            "cells",
+            "table",
+            "form",
+            "matrix",
+            "text",
+            "columns",
+            "rows",
+            "fragments",
+            "sections",
+            "fields",
+            "free_text",
+            "lines",
+            "row_headers",
+            "column_headers",
+        }
+
         def refs(value):
             if isinstance(value, dict):
                 for key, item in value.items():
@@ -98,7 +132,7 @@ class WorkbookBundle:
                         if not isinstance(item, list):
                             raise ValueError("Workbook bundle source refs must be an array")
                         sources(item, nullable=key == "value_source_refs")
-                    else:
+                    elif key in containers:
                         refs(item)
             elif isinstance(value, list):
                 for item in value:

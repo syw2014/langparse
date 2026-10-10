@@ -59,6 +59,18 @@ class WorkbookBundle:
         ):
             if not isinstance(payload[group].get(key), list):
                 raise ValueError(f"Workbook bundle {group}.{key} must be an array")
+
+        def query_fields(record, required):
+            if not isinstance(record, dict) or not required <= record.keys():
+                raise ValueError("Workbook bundle record is missing a query field")
+
+        for block in payload["structures"]["blocks"]:
+            query_fields(block, {"sheet", "kind"})
+            if not all(isinstance(block[key], str) for key in ("sheet", "kind")):
+                raise ValueError("Workbook bundle block query fields must be strings")
+        for edge in payload["relations"]["dependencies"]:
+            query_fields(edge, {"dependent", "target"})
+
         sheet_names = set()
         for sheet in payload["facts"]["sheets"]:
             if not isinstance(sheet, dict) or not isinstance(sheet.get("name"), str):
@@ -66,8 +78,13 @@ class WorkbookBundle:
             if sheet["name"] in sheet_names:
                 raise ValueError("Duplicate workbook bundle sheet")
             sheet_names.add(sheet["name"])
-            if sheet.get("cells") is not None and not isinstance(sheet["cells"], list):
+            query_fields(sheet, {"cells"})
+            if sheet["cells"] is not None and not isinstance(sheet["cells"], list):
                 raise ValueError("Workbook bundle cells must be an array or null")
+            for cell in sheet["cells"] or []:
+                query_fields(cell, {"coordinate"})
+                if not isinstance(cell["coordinate"], str):
+                    raise ValueError("Workbook bundle cell coordinate must be a string")
 
         def source(value):
             if not isinstance(value, str) or "!" not in value:

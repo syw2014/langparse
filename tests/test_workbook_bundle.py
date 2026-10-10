@@ -113,3 +113,26 @@ def test_bundle_rejects_invalid_excel_reference_bounds(tmp_path, cell_range):
     payload["structures"]["blocks"][0]["source_refs"] = [f"Data!{cell_range}"]
     with pytest.raises(ValueError, match="source range"):
         WorkbookBundle.from_json(json.dumps(payload))
+
+
+@pytest.mark.parametrize(
+    "missing", ["cells", "block_sheet", "block_kind", "edge_target", "cell_coordinate"]
+)
+def test_bundle_rejects_missing_query_fields(missing):
+    from pathlib import Path
+
+    from langparse.workbooks.bundle import WorkbookBundle
+
+    payload = json.loads(
+        (Path(__file__).parent / "fixtures" / "workbook-bundle-v1.json").read_text()
+    )
+    group, key = {
+        "cells": (payload["facts"]["sheets"][0], "cells"),
+        "block_sheet": (payload["structures"]["blocks"][0], "sheet"),
+        "block_kind": (payload["structures"]["blocks"][0], "kind"),
+        "edge_target": (payload["relations"]["dependencies"][0], "target"),
+        "cell_coordinate": (payload["facts"]["sheets"][0]["cells"][0], "coordinate"),
+    }[missing]
+    del group[key]
+    with pytest.raises(ValueError, match="query field"):
+        WorkbookBundle.from_json(json.dumps(payload))

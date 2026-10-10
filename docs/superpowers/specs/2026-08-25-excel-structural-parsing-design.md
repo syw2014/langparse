@@ -490,7 +490,7 @@ result = AutoParser.parse_result(
     model_mode="auto",
 )
 
-result.structure      # WorkbookIR / 完整结构化事实
+result.structure  # WorkbookIR / 完整结构化事实
 result.markdown_content
 result.chunks
 result.diagnostics

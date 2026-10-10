@@ -76,6 +76,8 @@ class ParseDiagnostics:
     timings_by_stage: dict[str, float] = field(default_factory=dict)
     continuation_candidates: list[StructuredData] = field(default_factory=list)
     region_diagnostics: list[StructuredData] = field(default_factory=list)
+    object_coverage_ratio: float | None = 1.0
+    reference_diagnostics: list[StructuredData] = field(default_factory=list)
 
 
 @dataclass

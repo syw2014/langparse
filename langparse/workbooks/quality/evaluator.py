@@ -6,10 +6,12 @@ from dataclasses import dataclass, fields, is_dataclass
 from typing import Any
 
 from langparse.types import ParsedDocumentResult
+from langparse.workbooks.quality.bundle import evaluate_bundle_contract
+from langparse.workbooks.quality.facts import evaluate_fact_truth
 from langparse.workbooks.quality.schema import WorkbookExpectation
 from langparse.workbooks.types import SourceRef, WorkbookIR
 
-WORKBOOK_QUALITY_METRIC_SCHEMA_VERSION = 1
+WORKBOOK_QUALITY_METRIC_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,15 @@ class WorkbookQualityMetrics:
     object_fact_precision: float | None
     object_fact_recall: float | None
     object_semantic_recall: float | None
+    formula_accuracy: float | None = None
+    named_range_accuracy: float | None = None
+    excel_table_accuracy: float | None = None
+    visibility_accuracy: float | None = None
+    dependency_precision: float | None = None
+    dependency_recall: float | None = None
+    bundle_source_ref_completeness: float = 0.0
+    bundle_structure_recall: float = 0.0
+    bundle_roundtrip_stability: float = 0.0
 
 
 def evaluate_workbook_result(
@@ -48,6 +59,7 @@ def evaluate_workbook_result(
         (sheet.name, _block_range(block), block.kind)
         for sheet in workbook.sheets
         for block in sheet.blocks
+        if block.kind not in {"chart", "image"}
     ]
     block_precision, block_recall = _precision_recall(expected_blocks, observed_blocks)
 
@@ -153,7 +165,9 @@ def evaluate_workbook_result(
         observed_semantic_objects,
     )
 
-    block_count = sum(len(sheet.blocks) for sheet in workbook.sheets)
+    block_count = sum(
+        block.kind not in {"chart", "image"} for sheet in workbook.sheets for block in sheet.blocks
+    )
     fallback_count = sum(
         block.kind == "unclassified" or not block.source_refs
         for sheet in workbook.sheets
@@ -178,6 +192,8 @@ def evaluate_workbook_result(
         object_fact_precision=object_fact_precision,
         object_fact_recall=object_fact_recall,
         object_semantic_recall=object_semantic_recall,
+        **evaluate_fact_truth(expectation.facts, workbook),
+        **evaluate_bundle_contract(expectation, parsed),
     )
 
 

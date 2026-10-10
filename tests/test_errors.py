@@ -27,3 +27,34 @@ def test_classify_unknown_runtime_error_as_parse_failed():
 
     assert error.error_type == ErrorType.PARSE_FAILED
     assert "unexpected parser crash" in error.message
+
+
+def test_timeout_types_do_not_require_message_keywords():
+    from subprocess import TimeoutExpired
+    from urllib.error import URLError
+
+    for exc in (TimeoutError(), TimeoutExpired("worker", 1), URLError(TimeoutError())):
+        assert classify_exception(exc).error_type == ErrorType.ENGINE_TIMEOUT
+
+
+def test_timeout_configuration_or_filename_is_not_execution_timeout():
+    for exc in (ValueError("invalid timeout option"), RuntimeError("timeout.pdf is corrupt")):
+        assert classify_exception(exc).error_type == ErrorType.PARSE_FAILED
+
+
+def test_wrapped_timeout_preserves_outer_error_message():
+    try:
+        try:
+            raise TimeoutError()
+        except TimeoutError as inner:
+            raise RuntimeError("PDF request failed") from inner
+    except RuntimeError as exc:
+        result = classify_exception(exc)
+    assert result.error_type == ErrorType.ENGINE_TIMEOUT
+    assert result.message == "PDF request failed"
+
+
+def test_backend_text_timeout_fallback_remains_supported():
+    assert (
+        classify_exception(RuntimeError("request timed out")).error_type == ErrorType.ENGINE_TIMEOUT
+    )

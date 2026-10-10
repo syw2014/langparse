@@ -7,6 +7,26 @@ the pre-release development history.
 
 ## [Unreleased]
 
+### Added
+
+- Workbook reference facts and conservative dependency queries; chart/image semantic blocks
+  with source evidence and partial-result diagnostics.
+- Versioned Workbook Bundle v1, queries, `workbook-json` CLI export and frozen compatibility fixture.
+- Fixed-token and sliding-window chunkers, registry and CLI options; repository Agent Skill.
+- Optional formula/name/table/visibility/dependency truth metrics and Bundle contract metrics.
+
+### Fixed
+
+- Classify typed timeout causes without misclassifying invalid timeout options.
+- Preserve drawing-reader loss and unresolved chart source diagnostics; unify repository Ruff gates.
+
+### Added
+
+- Optional immutable progress events for parsing and concurrent batches, with
+  PDF page/engine progress, Excel stages, callback failure isolation, and CLI
+  `--progress` output on stderr. Unknown progress remains unspecified; no new
+  core dependencies or persisted task service.
+
 ## [0.1.0rc2] - 2026-09-08
 
 ### Added

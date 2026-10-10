@@ -4,14 +4,16 @@ import json
 import os
 import time
 from collections.abc import Iterable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import RLock
 
 from langparse.errors import classify_exception
 from langparse.metrics import BatchItemResult, BatchRunResult, collect_parse_metrics
 from langparse.parsers.registry import is_supported
+from langparse.progress import ProgressCallback, ProgressReporter
 from langparse.services.output_paths import resolve_output_paths
 from langparse.services.parse_service import ParseService
 from langparse.workbooks.modeling import WorkbookDisambiguation
@@ -37,6 +39,63 @@ class BatchParseService:
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        progress_callback: ProgressCallback | None = None,
+        **kwargs,
+    ) -> BatchRunResult:
+        """Parse a batch, serializing optional callbacks across worker threads."""
+        callback_lock = RLock()
+
+        def notify(event):
+            with callback_lock:
+                progress_callback(event)
+
+        callback = notify if progress_callback is not None else None
+        reporter = ProgressReporter("", callback)
+        counts = {"completed_units": 0, "total_units": None}
+        try:
+            return self._run(
+                inputs,
+                engine_name,
+                output_dir,
+                fmt,
+                max_workers,
+                skip_existing,
+                fail_fast,
+                collect_metrics,
+                chunk,
+                chunk_profile,
+                workbook_disambiguation,
+                model,
+                api_key,
+                base_url,
+                callback,
+                reporter,
+                counts,
+                **kwargs,
+            )
+        except Exception:
+            reporter.emit("batch", state="failed", unit="files", **counts)
+            raise
+
+    def _run(
+        self,
+        inputs,
+        engine_name,
+        output_dir,
+        fmt,
+        max_workers,
+        skip_existing,
+        fail_fast,
+        collect_metrics,
+        chunk,
+        chunk_profile,
+        workbook_disambiguation,
+        model,
+        api_key,
+        base_url,
+        progress_callback,
+        reporter,
+        counts,
         **kwargs,
     ) -> BatchRunResult:
         # No output directory means render to memory and let the caller print;
@@ -46,6 +105,8 @@ class BatchParseService:
             output_dir.mkdir(parents=True, exist_ok=True)
 
         paths = self.expand_inputs(inputs)
+        counts["total_units"] = len(paths)
+        reporter.emit("batch", unit="files", **counts)
         worker_count = max_workers or min(4, os.cpu_count() or 1)
 
         # Resolved up front, single-threaded: collision handling relies on shared
@@ -65,9 +126,13 @@ class BatchParseService:
                 "base_url",
                 "workbook_disambiguation",
                 "disambiguation",
+                "chunk_strategy",
+                "chunk_options",
             )
         }
         engine = self.parse_service.create_engine(engine_name, **engine_kwargs)
+        if progress_callback is not None:
+            kwargs["progress_callback"] = progress_callback
 
         job_args = [
             (
@@ -89,14 +154,34 @@ class BatchParseService:
             for path, output_path in zip(paths, output_paths, strict=True)
         ]
 
+        completion_lock = RLock()
+
+        def run_one(args):
+            state = "failed"
+            try:
+                result = self._run_one(*args, **kwargs)
+                state = {"success": "completed", "failed": "failed", "skipped": "skipped"}[
+                    result[0].status
+                ]
+                return result
+            finally:
+                with completion_lock:
+                    ProgressReporter(args[0], progress_callback).emit("batch_item", state=state)
+                    counts["completed_units"] += 1
+                    reporter.emit("batch", unit="files", **counts)
+
         if worker_count == 1:
-            results = [self._run_one(*args, **kwargs) for args in job_args]
+            results = [run_one(args) for args in job_args]
         else:
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                futures = [executor.submit(self._run_one, *args, **kwargs) for args in job_args]
-                # Indexed rather than as_completed: input order is what pairs
-                # rendered output with the source the caller asked for.
-                results = [future.result() for future in futures]
+                futures = [executor.submit(run_one, args) for args in job_args]
+                if progress_callback is None:
+                    results = [future.result() for future in futures]
+                else:
+                    indices = {future: index for index, future in enumerate(futures)}
+                    results = [None] * len(futures)
+                    for future in as_completed(futures):
+                        results[indices[future]] = future.result()
 
         items = [item for item, _ in results]
         result = BatchRunResult(
@@ -107,6 +192,7 @@ class BatchParseService:
         if output_dir is not None:
             self._write_jsonl(output_dir / "batch-results.jsonl", items)
             self._write_json(output_dir / "batch-summary.json", result.summary)
+        reporter.emit("batch", state="completed", unit="files", **counts)
         return result
 
     def expand_inputs(self, inputs) -> list[Path]:

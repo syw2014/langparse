@@ -79,17 +79,21 @@ def compatibility_pages(
 def _render_sheet_markdown(sheet: SheetSnapshot, sheet_ir: SheetIR | None) -> str:
     heading = f"## Sheet: {sheet.name}"
     source_range = _source_range(sheet, sheet_ir)
-    if source_range is None:
-        return f"{heading}\n\n_Empty sheet._"
     if sheet_ir is not None and sheet_ir.blocks:
         rendered = [_render_block(sheet, block) for block in sheet_ir.blocks]
         return "\n\n".join([heading, *rendered])
+    if source_range is None:
+        return f"{heading}\n\n_Empty sheet._"
     columns, _, data_rows = _sheet_grid(sheet, source_range)
     source_comment = f"<!-- source_range: {sheet.name}!{source_range} -->"
     return f"{heading}\n\n{source_comment}\n\n{_render_grid(columns, data_rows)}"
 
 
 def _render_block(sheet: SheetSnapshot, block: WorkbookBlock) -> str:
+    if block.kind in {"chart", "image"}:
+        from langparse.workbooks.objects import render_object
+
+        return render_object(block)
     if block.logical_table is not None:
         return _render_logical_table(block.logical_table)
     if block.form is not None:
@@ -174,8 +178,10 @@ def _group_rows_by_section(rows: list[LogicalRow]) -> list[tuple[list[str], list
 def _source_range(sheet: SheetSnapshot, sheet_ir: SheetIR | None) -> str | None:
     if sheet.used_range is not None:
         return sheet.used_range
-    if sheet_ir is not None and sheet_ir.blocks and sheet_ir.blocks[0].source_refs:
-        return sheet_ir.blocks[0].source_refs[0].range
+    if sheet_ir is not None:
+        for block in sheet_ir.blocks:
+            if block.kind not in {"chart", "image"} and block.source_refs:
+                return block.source_refs[0].range
     return None
 
 

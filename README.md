@@ -33,6 +33,51 @@ where LangParse goes deliberately deeper.
 
 ---
 
+## Parsing progress (unreleased)
+
+Pass `progress_callback` to `AutoParser`, `ParseService`, `PDFParser`, or
+`BatchParseService.run`. The callback receives immutable `ProgressEvent` objects:
+
+```python
+from langparse import AutoParser
+
+result = AutoParser.parse_result(
+    "budget.xlsx",
+    progress_callback=lambda event: print(event.phase, event.state, event.percent),
+)
+```
+
+Events contain `source`, `phase`, `state`, `completed_units`, `total_units`, `unit`,
+`percent`, and `message`. Percent is phase-local (0–100), not an ETA; unknown
+values remain `None`. Only a `file` event with `completed`/`failed` marks the end
+of parsing and requested chunking, before any caller-side export. A completed
+parse can still have partial quality diagnostics.
+
+Simple PDF reports page counts; DeepDoc forwards its internal weighted-stage or
+page-batch progress; MinerU reports preparation, remote parsing, and rendering
+without an internal percentage. Excel reports extraction, assembly (including
+optional model disambiguation), and rendering. Direct `ExcelParser` calls also
+emit those stages; the facade/service supplies the file lifecycle.
+
+Batch events use `phase="batch"`, `source=""`, and `unit="files"`. Notifications
+follow completion order while returned results retain the batch's sorted file order. Success,
+failure, and skip all count as finished files. Batch completion follows report
+writing and does not mean every file succeeded. Each `batch_item` event names
+the source and reports `completed`/`failed`/`skipped` after that item's output
+write. Empty batches report 0/0 with
+unknown percent. Ordinary callback exceptions are logged by type and isolated
+from parsing. Callbacks are synchronous: keep them brief. One batch serializes
+its callbacks, which can run on different threads; callers coordinate callbacks
+shared across independent runs. There is no task store, background execution,
+cancellation, heartbeat, or HTTP query endpoint.
+
+CLI `--progress` writes line-oriented updates to stderr, leaving stdout intact:
+
+```bash
+langparse parse budget.xlsx --format json --progress > result.json
+langparse parse docs/ --batch --output-dir out --progress
+```
+
 ## Project status
 
 The current release candidate is `0.1.0rc2`. Core multi-format parsing,
@@ -657,3 +702,9 @@ See [CHANGELOG.md](CHANGELOG.md) ([中文](CHANGELOG_cn.md)) for release notes a
 
 ## License
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
+
+### 新增能力（Unreleased）
+
+- [Workbook Bundle 与查询](docs/WORKBOOK_BUNDLE.md)
+- [分块策略与 CLI](docs/CHUNKING.md)
+- [Agent Skill 与接入示例](SKILLS.md)

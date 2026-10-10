@@ -579,7 +579,8 @@ def _finalize_workbook(
     snapshot: WorkbookSnapshot,
     workbook_ir: WorkbookIR,
 ) -> tuple[ParseDiagnostics, tuple[str, ...]]:
-    _, diagnostics = assemble_baseline(snapshot)
+    baseline, diagnostics = assemble_baseline(snapshot)
+    workbook_ir.lineage = baseline.lineage
     block_counts: Counter[str] = Counter()
     ambiguous_regions = []
     region_diagnostics = []
@@ -796,8 +797,12 @@ def validate_workbook_source_refs(
         if sheet.used_range or sheet.cells
     }
     refs = []
+    drawing_refs = []
     for sheet_ir in workbook_ir.sheets:
         for block in sheet_ir.blocks:
+            if block.kind in {"chart", "image"}:
+                drawing_refs.extend(block.source_refs)
+                continue
             refs.extend(block.source_refs)
             if block.logical_table is not None:
                 refs.extend(_logical_table_source_refs(block.logical_table))
@@ -827,7 +832,18 @@ def validate_workbook_source_refs(
 
     invalid = sorted({ref.key for ref in refs if not _valid_source_ref(ref, sheet_bounds)})
     invalid_count = sum(not _valid_source_ref(ref, sheet_bounds) for ref in refs)
-    ratio = (len(refs) - invalid_count) / len(refs) if refs else 1.0
+    if drawing_refs:
+        from langparse.workbooks.objects import validate_object_source
+
+        for ref in drawing_refs:
+            try:
+                validate_object_source(snapshot, ref.key)
+            except ValueError:
+                invalid_count += 1
+                invalid.append(ref.key)
+    count = len(refs) + len(drawing_refs)
+    ratio = (count - invalid_count) / count if count else 1.0
+    invalid = sorted(set(invalid))
     return ratio, invalid
 
 
@@ -949,6 +965,10 @@ def assemble_baseline(snapshot: WorkbookSnapshot) -> tuple[WorkbookIR, ParseDiag
         snapshot=snapshot,
         metadata={"snapshot": snapshot.metadata},
     )
+    from langparse.workbooks.lineage import build_lineage
+
+    workbook_ir.lineage = build_lineage(snapshot)
+    diagnostics.reference_diagnostics = [asdict(item) for item in workbook_ir.lineage.diagnostics]
     return workbook_ir, diagnostics
 
 

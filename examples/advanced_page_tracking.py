@@ -1,8 +1,10 @@
-import sys
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from langparse import MarkdownParser, SemanticChunker, Document
+from langparse import Document, SemanticChunker
+
 
 def main():
     # Simulate a document with page markers
@@ -24,18 +26,19 @@ This section is still on page 2.
 But this paragraph flows into page 3.
 The chunker should detect that this section spans page 2 and 3.
 """
-    
+
     print("--- Simulating PDF Content with Page Markers ---")
     doc = Document(content=simulated_content, metadata={"source": "manual_test.pdf"})
-    
+
     chunker = SemanticChunker()
     chunks = chunker.chunk(doc)
-    
+
     for i, chunk in enumerate(chunks):
-        print(f"\n[Chunk {i+1}]")
+        print(f"\n[Chunk {i + 1}]")
         print(f"Header: {chunk.metadata.get('header')}")
         print(f"Pages: {chunk.metadata.get('page_numbers')}")
         print(f"Content Preview: {chunk.content.strip()[:50]}...")
+
 
 if __name__ == "__main__":
     main()

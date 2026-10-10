@@ -320,8 +320,7 @@ def test_analysis_table_payload_has_source_linked_schema_and_records(tmp_path):
     chunk = next(
         item
         for item in WorkbookStructuralChunker(profile="analysis").chunk(parsed)
-        if item.metadata["chunk_type"] == "table_rows"
-        and item.metadata["sheet_name"] == "Visible"
+        if item.metadata["chunk_type"] == "table_rows" and item.metadata["sheet_name"] == "Visible"
     )
 
     payload = chunk.structured_payload
@@ -688,8 +687,7 @@ Text payload 保留 `lines`，analysis 条件下增加：
 
 ```python
 payload["records"] = [
-    {"text": line.text, "source_refs": [ref.key for ref in line.source_refs]}
-    for line in lines
+    {"text": line.text, "source_refs": [ref.key for ref in line.source_refs]} for line in lines
 ]
 ```
 
@@ -832,9 +830,7 @@ def test_chunk_false_ignores_profile_and_does_not_forward_it_to_engine(tmp_path)
 增加：
 
 ```python
-def test_parse_result_preserves_workbook_when_chunker_fails(
-    sample_excel_file, monkeypatch
-):
+def test_parse_result_preserves_workbook_when_chunker_fails(sample_excel_file, monkeypatch):
     def fail_chunk(self, parsed):
         raise RuntimeError("sensitive cell value must not be copied")
 
@@ -851,9 +847,7 @@ def test_parse_result_preserves_workbook_when_chunker_fails(
     assert parsed.chunks == []
     assert parsed.diagnostics is not None
     assert parsed.diagnostics.status == "partial"
-    assert parsed.diagnostics.errors == [
-        "Chunking profile 'retrieval' failed (RuntimeError)."
-    ]
+    assert parsed.diagnostics.errors == ["Chunking profile 'retrieval' failed (RuntimeError)."]
     assert "sensitive cell value" not in str(parsed.diagnostics.errors)
     assert service.render_output(parsed, "markdown", chunks=[]) == parsed.markdown_content
 
@@ -936,8 +930,7 @@ def _populate_chunks(
         if parsed.diagnostics.status != "failed":
             parsed.diagnostics.status = "partial"
         parsed.diagnostics.unsupported_features.append(
-            f"Chunking profile '{policy.name.value}' is not supported for engine "
-            f"'{parsed.engine}'."
+            f"Chunking profile '{policy.name.value}' is not supported for engine '{parsed.engine}'."
         )
         parsed.chunks = []
     except Exception as exc:  # noqa: BLE001 - chunk stage boundary preserves parse result
@@ -1054,9 +1047,7 @@ def test_cli_single_parse_forwards_profile_only_as_chunk_option(monkeypatch):
 
     monkeypatch.setattr("langparse.cli.ParseService", FakeService)
 
-    assert main(
-        ["parse", "book.xlsx", "--chunk", "--chunk-profile", "analysis"]
-    ) == 0
+    assert main(["parse", "book.xlsx", "--chunk", "--chunk-profile", "analysis"]) == 0
     assert calls == [
         (
             "book.xlsx",
@@ -1077,9 +1068,7 @@ def test_cli_batch_forwards_profile_outside_engine_kwargs(monkeypatch):
 
     monkeypatch.setattr("langparse.cli.BatchParseService", FakeBatchService)
 
-    assert main(
-        ["parse", "books", "--batch", "--chunk", "--chunk-profile", "analysis"]
-    ) == 0
+    assert main(["parse", "books", "--batch", "--chunk", "--chunk-profile", "analysis"]) == 0
     assert calls[0][1]["chunk"] is True
     assert calls[0][1]["chunk_profile"] == "analysis"
 ```
@@ -1210,9 +1199,7 @@ analysis_row_ids = [
 assert len(analysis_row_ids) == 228
 assert len(analysis_row_ids) == len(set(analysis_row_ids))
 assert set(analysis_row_ids) == set(logical_row_ids)
-assert sum(
-    chunk.metadata["chunk_type"] == "table_rows" for chunk in analysis_chunks
-) <= sum(
+assert sum(chunk.metadata["chunk_type"] == "table_rows" for chunk in analysis_chunks) <= sum(
     chunk.metadata["chunk_type"] == "table_rows" for chunk in retrieval_chunks
 )
 assert all(

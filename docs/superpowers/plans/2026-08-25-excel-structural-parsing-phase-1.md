@@ -350,8 +350,7 @@ class WorkbookAdapter(Protocol):
 
 
 class OOXMLWorkbookAdapter:
-    def snapshot(self, path: str | Path) -> WorkbookSnapshot:
-        ...
+    def snapshot(self, path: str | Path) -> WorkbookSnapshot: ...
 ```
 
 Load twice with openpyxl: `data_only=False` for formulas and `data_only=True` for cached values. Use `keep_vba=path.suffix.lower() == ".xlsm"`; never execute macros. Iterate through the worksheet dimensions, skipping cells that are empty and have no style, formula, comment, or hyperlink. Build a style fingerprint from font/fill/border/alignment/number format using deterministic JSON + SHA-256.
@@ -495,7 +494,11 @@ def test_renderer_uses_coordinates_not_unnamed_headers():
     assert "Unnamed:" not in markdown
 
     pages = compatibility_pages(snapshot, ir)
-    assert pages[0].metadata == {"part_kind": "sheet", "sheet_name": "Cover", "source_range": "A1:C2"}
+    assert pages[0].metadata == {
+        "part_kind": "sheet",
+        "sheet_name": "Cover",
+        "source_range": "A1:C2",
+    }
     assert pages[0].tables[0]["rows"][0] == ["A", "B", "C"]
 ```
 

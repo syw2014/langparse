@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import warnings as python_warnings
+from dataclasses import asdict
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any, Protocol
@@ -11,6 +13,12 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import get_column_letter, range_boundaries
 
+from langparse.workbooks.reference_types import (
+    DefinedNameFact,
+    ExcelTableFact,
+    WorkbookReferenceFacts,
+)
+from langparse.workbooks.references import extract_reference_facts
 from langparse.workbooks.types import (
     CellSnapshot,
     RegionAnchor,
@@ -37,18 +45,45 @@ class OOXMLWorkbookAdapter:
         value_stream = workbook_path.open("rb")
         warnings: list[str] = []
         try:
-            formula_book = load_workbook(
-                formula_stream,
-                data_only=False,
-                keep_vba=keep_vba,
-                read_only=False,
-            )
-            value_book = load_workbook(
-                value_stream,
-                data_only=True,
-                keep_vba=keep_vba,
-                read_only=False,
-            )
+            with python_warnings.catch_warnings(record=True) as emitted:
+                python_warnings.simplefilter("always")
+                formula_book = load_workbook(
+                    formula_stream,
+                    data_only=False,
+                    keep_vba=keep_vba,
+                    read_only=False,
+                )
+                value_book = load_workbook(
+                    value_stream,
+                    data_only=True,
+                    keep_vba=keep_vba,
+                    read_only=False,
+                )
+            read_warnings = list(dict.fromkeys(str(item.message) for item in emitted))
+            warnings.extend(read_warnings)
+            drawing_read_errors = [
+                message for message in read_warnings if _drawing_read_loss(message)
+            ]
+            reference_facts = WorkbookReferenceFacts()
+            for owner, scope in [
+                (formula_book, None),
+                *[(s, s.title) for s in formula_book.worksheets],
+            ]:
+                reference_facts.defined_names.extend(
+                    DefinedNameFact(name, definition.attr_text or "", scope)
+                    for name, definition in sorted(owner.defined_names.items())
+                )
+            for sheet in formula_book.worksheets:
+                reference_facts.tables.extend(
+                    ExcelTableFact(
+                        table.name,
+                        SourceRef(sheet.title, table.ref),
+                        [column.name for column in table.tableColumns],
+                        table.headerRowCount if table.headerRowCount is not None else 1,
+                        table.totalsRowCount or 0,
+                    )
+                    for table in sorted(sheet.tables.values(), key=lambda t: t.name)
+                )
             defined_name_anchors = _defined_name_region_anchors(
                 formula_book,
                 warnings,
@@ -88,12 +123,20 @@ class OOXMLWorkbookAdapter:
             formula_stream.close()
             value_stream.close()
 
-        return WorkbookSnapshot(
+        snapshot = WorkbookSnapshot(
             source=str(workbook_path),
             filename=workbook_path.name,
             sheets=sheets,
-            metadata={"format": workbook_path.suffix.lower(), "warnings": warnings},
+            reference_facts=reference_facts,
+            metadata={
+                "format": workbook_path.suffix.lower(),
+                "warnings": warnings,
+                "drawing_read_errors": drawing_read_errors,
+            },
         )
+
+        extract_reference_facts(snapshot)
+        return snapshot
 
     def _snapshot_sheet(
         self,
@@ -178,24 +221,10 @@ class OOXMLWorkbookAdapter:
                         CellSnapshot(coordinate=coordinate, merge_anchor=anchor),
                     ).merge_anchor = anchor
 
-        objects = []
-        for chart in formula_sheet._charts:
-            objects.append(
-                {
-                    "kind": "chart",
-                    "anchor": _object_anchor(chart, formula_sheet.title, warnings),
-                    "title": _chart_title(chart),
-                }
-            )
-        for image in formula_sheet._images:
-            objects.append(
-                {
-                    "kind": "image",
-                    "anchor": _object_anchor(image, formula_sheet.title, warnings),
-                    "width": getattr(image, "width", None),
-                    "height": getattr(image, "height", None),
-                }
-            )
+        from langparse.workbooks.objects import extract_objects
+
+        objects = [asdict(obj) for obj in extract_objects(formula_sheet)]
+        warnings.extend(note for obj in objects for note in obj["diagnostics"])
 
         region_anchors = [
             RegionAnchor(
@@ -434,3 +463,12 @@ def _chart_title(chart: Any) -> str | None:
     if title is None:
         return None
     return str(title)
+
+
+def _drawing_read_loss(message: str) -> bool:
+    lowered = message.lower()
+    return (
+        "drawingml support is incomplete" in lowered
+        or "unable to read chart" in lowered
+        or ("image" in lowered and ("removed" in lowered or "dropped" in lowered))
+    )

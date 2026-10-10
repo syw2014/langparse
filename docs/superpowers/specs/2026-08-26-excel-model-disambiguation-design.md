@@ -222,9 +222,7 @@ Phase 4A 不增加 CLI provider flag；Phase 4B 在真实 Adapter 可用后再�
 @dataclass(frozen=True)
 class RegionChoice:
     choice_id: str
-    kind: Literal[
-        "logical_table", "form", "matrix", "text", "unclassified"
-    ]
+    kind: Literal["logical_table", "form", "matrix", "text", "unclassified"]
     local_score: float
     reason_codes: tuple[str, ...]
 
@@ -423,9 +421,12 @@ failed；歧义仍留在 `ambiguous_regions`，调用结果记录在 `model_call
 ```python
 class WorkbookModelError(Exception): ...
 
+
 class WorkbookModelConfigurationError(WorkbookModelError, ValueError): ...
 
+
 class InvalidRegionAmbiguityCaseError(WorkbookModelError, ValueError): ...
+
 
 class RequiredWorkbookDisambiguationError(WorkbookModelError):
     case_ids: tuple[str, ...]

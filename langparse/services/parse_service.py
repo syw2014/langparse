@@ -9,6 +9,7 @@ from langparse.chunkers.profiles import (
     ChunkProfileNotSupportedError,
     resolve_workbook_chunk_policy,
 )
+from langparse.chunkers.registry import create_chunker
 from langparse.config import settings
 from langparse.core.rendering import document_from_result
 from langparse.engines.pdf.deepdoc_engine import DeepDocEngine
@@ -21,6 +22,7 @@ from langparse.parsers.registry import (
     parser_kind_for,
     unsupported_extension_error,
 )
+from langparse.progress import ProgressCallback, ProgressReporter
 from langparse.services.output_paths import (
     output_filename,
     resolve_output_path,
@@ -60,8 +62,12 @@ class ParseService:
         chunker=None,
         *,
         chunk_profile: str | None = None,
+        chunk_strategy: str | None = None,
+        chunk_options: dict | None = None,
     ) -> list[Chunk]:
         """Chunk a parse result from its richest available representation."""
+        if chunker is not None and (chunk_strategy is not None or chunk_options is not None):
+            raise ValueError("custom chunker and chunk_strategy/options are mutually exclusive")
         if chunker is not None and chunk_profile is not None:
             raise ValueError("custom chunker and chunk_profile are mutually exclusive")
 
@@ -70,6 +76,7 @@ class ParseService:
                 return chunker.chunk(parsed)
             return chunker.chunk(document_from_result(parsed))
 
+        selected = create_chunker(chunk_strategy or "semantic", **(chunk_options or {}))
         policy = resolve_workbook_chunk_policy(chunk_profile)
         if isinstance(parsed.structure, WorkbookIR):
             from langparse.chunkers.workbook import WorkbookStructuralChunker
@@ -79,10 +86,9 @@ class ParseService:
         if policy.name.value == "analysis":
             raise ChunkProfileNotSupportedError("analysis chunk profile requires WorkbookIR")
 
-        from langparse.chunkers.semantic import SemanticChunker
-
-        chunks = SemanticChunker().chunk(document_from_result(parsed))
+        chunks = selected.chunk(document_from_result(parsed))
         for chunk in chunks:
+            chunk.metadata["chunk_strategy"] = chunk_strategy or "semantic"
             chunk.metadata["chunk_profile"] = policy.name.value
             chunk.metadata["chunk_profile_version"] = policy.version
         return chunks
@@ -99,6 +105,10 @@ class ParseService:
             if not chunks:
                 return parsed.markdown_content
             return "\n\n---\n\n".join(chunk.content for chunk in chunks)
+        if fmt == "workbook-json":
+            from langparse.workbooks.bundle import WorkbookBundle
+
+            return WorkbookBundle.from_result(parsed).to_json()
         if fmt == "json":
             payload = asdict(parsed)
             if chunks is not None:
@@ -114,6 +124,8 @@ class ParseService:
         engine=None,
         chunk=False,
         chunk_profile: str | None = None,
+        chunk_strategy: str | None = None,
+        chunk_options: dict | None = None,
         workbook_disambiguation: WorkbookDisambiguation | None = None,
         **kwargs,
     ) -> str:
@@ -123,6 +135,8 @@ class ParseService:
             engine=engine,
             chunk=chunk,
             chunk_profile=chunk_profile,
+            chunk_strategy=chunk_strategy,
+            chunk_options=chunk_options,
             workbook_disambiguation=workbook_disambiguation,
             **kwargs,
         )
@@ -136,7 +150,10 @@ class ParseService:
         engine=None,
         chunk=False,
         chunk_profile: str | None = None,
+        chunk_strategy: str | None = None,
+        chunk_options: dict | None = None,
         workbook_disambiguation: WorkbookDisambiguation | None = None,
+        progress_callback: ProgressCallback | None = None,
         **kwargs,
     ) -> list[tuple[Path, str]]:
         # `chunk` is named explicitly rather than left in **kwargs: kwargs also
@@ -159,7 +176,14 @@ class ParseService:
                         engine=active_engine,
                         chunk=chunk,
                         chunk_profile=chunk_profile,
+                        chunk_strategy=chunk_strategy,
+                        chunk_options=chunk_options,
                         workbook_disambiguation=workbook_disambiguation,
+                        **(
+                            {"progress_callback": progress_callback}
+                            if progress_callback is not None
+                            else {}
+                        ),
                         model=model,
                         api_key=api_key,
                         base_url=base_url,
@@ -214,10 +238,13 @@ class ParseService:
         engine=None,
         chunk=False,
         chunk_profile: str | None = None,
+        chunk_strategy: str | None = None,
+        chunk_options: dict | None = None,
         workbook_disambiguation: str | WorkbookDisambiguation | None = None,
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        progress_callback: ProgressCallback | None = None,
         **kwargs,
     ):
         """
@@ -226,43 +253,55 @@ class ParseService:
         This is the one place extension routing happens; everything else reads
         the mapping from `langparse.parsers.registry`.
         """
-        if chunk:
-            resolve_workbook_chunk_policy(chunk_profile)
-
         path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"File not found: {path}")
-
-        kind = parser_kind_for(path)
-        if kind is None:
-            raise unsupported_extension_error(path)
-        if kind == "pdf":
-            parsed = self._collect_pdf_document_result(
-                path,
-                engine_name=engine_name,
-                engine=engine,
-                **kwargs,
-            )
-        else:
-            parsed = self._parser_for_kind(
-                kind,
-                workbook_disambiguation,
-                model=model,
-                api_key=api_key,
-                base_url=base_url,
-            ).parse_result(path, **kwargs)
-        if chunk:
-            self._populate_chunks(parsed, chunk_profile)
+        reporter = ProgressReporter(path, progress_callback)
+        with reporter.operation("file"):
+            if chunk:
+                resolve_workbook_chunk_policy(chunk_profile)
+                create_chunker(chunk_strategy or "semantic", **(chunk_options or {}))
+            if not path.exists():
+                raise FileNotFoundError(f"File not found: {path}")
+            kind = parser_kind_for(path)
+            if kind is None:
+                raise unsupported_extension_error(path)
+            reporter.emit("parsing")
+            if progress_callback is not None:
+                kwargs["progress_callback"] = progress_callback
+            if kind == "pdf":
+                parsed = self._collect_pdf_document_result(
+                    path,
+                    engine_name=engine_name,
+                    engine=engine,
+                    **kwargs,
+                )
+            else:
+                parsed = self._parser_for_kind(
+                    kind,
+                    workbook_disambiguation,
+                    model=model,
+                    api_key=api_key,
+                    base_url=base_url,
+                ).parse_result(path, **kwargs)
+            if chunk:
+                reporter.emit("chunking")
+                self._populate_chunks(parsed, chunk_profile, chunk_strategy, chunk_options)
         return parsed
 
     def _populate_chunks(
         self,
         parsed: ParsedDocumentResult,
         chunk_profile: str | None,
+        chunk_strategy: str | None = None,
+        chunk_options: dict | None = None,
     ) -> None:
         policy = resolve_workbook_chunk_policy(chunk_profile)
         try:
-            parsed.chunks = self.chunk_result(parsed, chunk_profile=policy.name.value)
+            parsed.chunks = self.chunk_result(
+                parsed,
+                chunk_profile=policy.name.value,
+                chunk_strategy=chunk_strategy,
+                chunk_options=chunk_options,
+            )
         except ChunkProfileNotSupportedError:
             if parsed.diagnostics is None:
                 parsed.diagnostics = ParseDiagnostics()
@@ -324,10 +363,16 @@ class ParseService:
         return self.parse_file(file_path, engine_name=engine_name, engine=engine, **kwargs)
 
     def parse_batch(self, inputs, engine_name="simple", engine=None, **kwargs):
+        progress_callback = kwargs.pop("progress_callback", None)
         workbook_disambiguation = kwargs.pop("workbook_disambiguation", None)
         model = kwargs.pop("model", None)
         api_key = kwargs.pop("api_key", None)
         base_url = kwargs.pop("base_url", None)
+        chunk_kwargs = {
+            key: kwargs.pop(key)
+            for key in ("chunk", "chunk_profile", "chunk_strategy", "chunk_options")
+            if key in kwargs
+        }
         documents = []
         active_engine = engine or self._create_engine(engine_name, **kwargs)
         for file_path in self.expand_inputs(inputs):
@@ -337,15 +382,23 @@ class ParseService:
                     engine_name=engine_name,
                     engine=active_engine,
                     workbook_disambiguation=workbook_disambiguation,
+                    **(
+                        {"progress_callback": progress_callback}
+                        if progress_callback is not None
+                        else {}
+                    ),
                     model=model,
                     api_key=api_key,
                     base_url=base_url,
+                    **chunk_kwargs,
                     **kwargs,
                 )
             )
         return documents
 
-    def _collect_pdf_document_result(self, file_path, engine_name="simple", engine=None, **kwargs):
+    def _collect_pdf_document_result(
+        self, file_path, engine_name="simple", engine=None, progress_callback=None, **kwargs
+    ):
         file_path = Path(file_path)
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
@@ -363,6 +416,8 @@ class ParseService:
             )
         }
         active_engine = engine or self._create_engine(engine_name, **engine_kwargs)
+        if progress_callback is not None:
+            kwargs["progress_callback"] = progress_callback
         if hasattr(active_engine, "process_document"):
             process_document = active_engine.process_document
             if not callable(process_document):

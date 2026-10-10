@@ -3,6 +3,7 @@ from pathlib import Path
 
 from langparse.core.parser import BaseParser
 from langparse.parsers.sniff import looks_like_ole_binary, looks_like_zip_ooxml
+from langparse.progress import ProgressCallback, ProgressReporter
 from langparse.types import ParsedDocumentResult, ParsedElement, ParseDiagnostics, ParsedPageResult
 from langparse.workbooks.modeling import (
     RequiredWorkbookDisambiguationError,
@@ -64,11 +65,14 @@ class ExcelParser(BaseParser):
                 WorkbookDisambiguation.off() if disambiguation is None else disambiguation
             )
 
-    def parse_result(self, file_path: str | Path, **kwargs) -> ParsedDocumentResult:
+    def parse_result(
+        self, file_path: str | Path, *, progress_callback: ProgressCallback | None = None, **kwargs
+    ) -> ParsedDocumentResult:
         path = self._resolve_existing_path(file_path)
+        reporter = ProgressReporter(path, progress_callback)
 
         if looks_like_zip_ooxml(path):
-            return self._parse_ooxml(path)
+            return self._parse_ooxml(path, reporter)
 
         try:
             import pandas as pd
@@ -82,6 +86,7 @@ class ExcelParser(BaseParser):
         # otherwise be handed to the wrong pandas reader. Content decides:
         # a real workbook is either a ZIP-OOXML or legacy-OLE container;
         # anything else is read as delimited text regardless of its label.
+        reporter.emit("extracting")
         is_legacy_workbook = looks_like_ole_binary(path)
         if is_legacy_workbook:
             sheets = pd.read_excel(path, sheet_name=None)
@@ -105,6 +110,7 @@ class ExcelParser(BaseParser):
                 )
             }
 
+        reporter.emit("rendering")
         pages = [
             self._page_for_sheet(index + 1, sheet_name, frame)
             for index, (sheet_name, frame) in enumerate(sheets.items())
@@ -132,7 +138,7 @@ class ExcelParser(BaseParser):
             ),
         )
 
-    def _parse_ooxml(self, path: Path) -> ParsedDocumentResult:
+    def _parse_ooxml(self, path: Path, reporter: ProgressReporter) -> ParsedDocumentResult:
         try:
             from langparse.workbooks.adapters import OOXMLWorkbookAdapter
             from langparse.workbooks.assembly import assemble_baseline, assemble_workbook
@@ -146,7 +152,9 @@ class ExcelParser(BaseParser):
                 "Install with `pip install langparse[excel]`."
             ) from None
 
+        reporter.emit("extracting")
         snapshot = OOXMLWorkbookAdapter().snapshot(path)
+        reporter.emit("assembling")
         try:
             structure, diagnostics = assemble_workbook(
                 snapshot,
@@ -160,6 +168,10 @@ class ExcelParser(BaseParser):
             diagnostics.warnings.append(
                 f"Semantic workbook assembly failed; retained raw-grid fallback: {type(exc).__name__}"
             )
+        from langparse.workbooks.objects import attach_objects
+
+        attach_objects(snapshot, structure, diagnostics)
+        reporter.emit("rendering")
         pages = compatibility_pages(snapshot, structure)
         markdown = render_workbook_markdown(snapshot, structure)
         return ParsedDocumentResult(

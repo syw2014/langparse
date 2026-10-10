@@ -313,7 +313,9 @@ def test_process_document_rolls_up_ocr_metadata_across_mixed_pages(tmp_path, mon
         monkeypatch,
         [
             _FakePdfplumberPage(),  # page 1: born-digital
-            _FakePdfplumberPage(text="", images=[{"x0": 0, "x1": 595, "top": 0, "bottom": 842}]),  # page 2: scanned
+            _FakePdfplumberPage(
+                text="", images=[{"x0": 0, "x1": 595, "top": 0, "bottom": 842}]
+            ),  # page 2: scanned
         ],
     )
     fake_parser = _FakeParser(

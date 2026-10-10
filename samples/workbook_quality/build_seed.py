@@ -604,6 +604,24 @@ def _formula_and_hidden_sheet() -> tuple[Workbook, dict]:
         ],
         required_source_refs=["Data!A1:C3", "Lookup!A1:B2"],
     )
+    expected["facts"] = {
+        "formulas": [
+            {"source_ref": "Data!C2", "formula": "=B2*2"},
+            {"source_ref": "Data!C3", "formula": "=B3*2"},
+        ],
+        "defined_names": [
+            {"name": "RateInputs", "definition": "'Data'!$B$2:$B$3", "scope_sheet": None}
+        ],
+        "tables": [],
+        "sheet_visibility": [
+            {"sheet": "Data", "state": "visible"},
+            {"sheet": "Lookup", "state": "hidden"},
+        ],
+        "dependencies": [
+            {"dependent": "Data!C2", "target": "Data!B2", "status": "resolved", "reference": "B2"},
+            {"dependent": "Data!C3", "target": "Data!B3", "status": "resolved", "reference": "B3"},
+        ],
+    }
     return workbook, expected
 
 
@@ -632,7 +650,7 @@ def main() -> None:
     manifest = {
         "schema_version": 1,
         "dataset_id": "workbook-quality-seed",
-        "dataset_version": "1",
+        "dataset_version": "2",
         "split": "tuning",
         "source_root": "fixtures",
         "quality_gate": {
@@ -648,9 +666,18 @@ def main() -> None:
                 "source_ref_completeness": 1.0,
                 "source_ref_validity_ratio": 1.0,
                 "cell_coverage_ratio": 1.0,
+                "bundle_source_ref_completeness": 1.0,
+                "bundle_structure_recall": 1.0,
+                "bundle_roundtrip_stability": 1.0,
                 "object_fact_precision": 1.0,
                 "object_fact_recall": 1.0,
-                "object_semantic_recall": 0.0,
+                "object_semantic_recall": 1.0,
+                "formula_accuracy": 1.0,
+                "named_range_accuracy": 1.0,
+                "excel_table_accuracy": 1.0,
+                "visibility_accuracy": 1.0,
+                "dependency_precision": 1.0,
+                "dependency_recall": 1.0,
             },
             "maximum": {"fallback_rate": 0.1},
         },

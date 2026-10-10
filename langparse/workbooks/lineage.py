@@ -70,11 +70,21 @@ def build_lineage(snapshot: WorkbookSnapshot) -> WorkbookLineage:
     # Iterative DFS avoids recursion limits on long formula chains.
     nodes = {f.source_ref.key: f.source_ref for f in facts.formulas}
     adjacency = {key: [] for key in nodes}
+    single_cells = {
+        (ref.sheet_name.casefold(), ref.range.replace("$", "").upper()): key
+        for key, ref in nodes.items()
+    }
     for edge in result.edges:
         if edge.target:
-            adjacency[edge.dependent.key].extend(
-                key for key, ref in nodes.items() if overlaps(edge.target, ref)
-            )
+            target_range = edge.target.range.replace("$", "").upper()
+            if ":" not in target_range:
+                key = single_cells.get((edge.target.sheet_name.casefold(), target_range))
+                if key is not None:
+                    adjacency[edge.dependent.key].append(key)
+            else:
+                adjacency[edge.dependent.key].extend(
+                    key for key, ref in nodes.items() if overlaps(edge.target, ref)
+                )
     visited, active, reported = set(), set(), set()
     for start in nodes:
         if start in visited:

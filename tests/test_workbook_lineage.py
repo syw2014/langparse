@@ -99,3 +99,43 @@ def test_lineage_reaches_parsed_result_json_and_analysis_chunks(tmp_path):
     payload = json.loads(service.render_output(parsed, "json", chunks))
     assert payload["structure"]["lineage"]["edges"][0]["status"] == "resolved"
     assert payload["structure"]["snapshot"]["reference_facts"]["tables"][0]["name"] == "Records"
+
+
+def test_quoted_sheet_apostrophe_is_retained(tmp_path):
+    book = Workbook()
+    book.active.title = "O'"
+    book.active["A1"] = 2
+    other = book.create_sheet("'Start")
+    other["B1"] = "='O'''!A1"
+    book.active["B1"] = "='''Start'!B1"
+    path = tmp_path / "quoted.xlsx"
+    book.save(path)
+    lineage = build_lineage(OOXMLWorkbookAdapter().snapshot(path))
+    assert lineage.dependencies_of(SourceRef("'Start", "B1"))[0].target == SourceRef("O'", "A1")
+    assert lineage.dependencies_of(SourceRef("O'", "B1"))[0].target == SourceRef("'Start", "B1")
+
+
+def test_single_cell_lineage_avoids_formula_cross_product(tmp_path, monkeypatch):
+    import langparse.workbooks.lineage as module
+
+    book = Workbook()
+    for row in range(1, 31):
+        book.active.cell(row, 1, row)
+        book.active.cell(row, 2, f"=A{row}")
+    book.active["C1"] = "=C2"
+    book.active["C2"] = "=C1"
+    path = tmp_path / "linear.xlsx"
+    book.save(path)
+    snapshot = OOXMLWorkbookAdapter().snapshot(path)
+    calls = []
+    original = module.overlaps
+
+    def tracked(first, second):
+        calls.append((first, second))
+        return original(first, second)
+
+    monkeypatch.setattr(module, "overlaps", tracked)
+    lineage = module.build_lineage(snapshot)
+    assert len(lineage.edges) == 32
+    assert any(d.code == "circular_reference" for d in lineage.diagnostics)
+    assert not calls

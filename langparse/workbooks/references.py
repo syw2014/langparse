@@ -72,7 +72,10 @@ def _resolve(text, source, snapshot, visiting):
     sheet_name, local = source.sheet_name, text
     if "!" in text:
         qualifier, local = text.rsplit("!", 1)
-        sheet_name = qualifier.strip("'").replace("''", "'")
+        sheet_name = (
+            qualifier[1:-1] if qualifier.startswith("'") and qualifier.endswith("'") else qualifier
+        )
+        sheet_name = sheet_name.replace("''", "'")
         external = re.search(r"\[([^]]+)\]", sheet_name)
         if external:
             return FormulaReference(text, "external", external_workbook=external.group(1))

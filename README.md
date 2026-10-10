@@ -84,7 +84,8 @@ The current release candidate is `0.1.0rc2`. Core multi-format parsing,
 structured OOXML workbooks, semantic chunking, batch processing, quality checks,
 and CI are available today. LangParse remains pre-1.0; see
 [docs/PROGRESS.md](docs/PROGRESS.md) for the module-by-module source of truth and
-known gaps.
+known gaps. Source version `0.1.0` is being prepared; see the
+[release scope](docs/RELEASE_0.1.0.md).
 
 ## Why LangParse?
 
@@ -703,7 +704,7 @@ See [CHANGELOG.md](CHANGELOG.md) ([中文](CHANGELOG_cn.md)) for release notes a
 ## License
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
 
-### 新增能力（Unreleased）
+### v0.1.0 capabilities (pending release)
 
 - [Workbook Bundle 与查询](docs/WORKBOOK_BUNDLE.md)
 - [分块策略与 CLI](docs/CHUNKING.md)

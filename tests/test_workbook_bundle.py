@@ -103,3 +103,13 @@ def test_future_extensions_do_not_reinterpret_reserved_reference_names(tmp_path)
     payload["structures"]["blocks"][0]["future_extension"] = {"source_refs": ["opaque"]}
     loaded = WorkbookBundle.from_json(json.dumps(payload))
     assert loaded.to_dict() == payload
+
+
+@pytest.mark.parametrize("cell_range", ["A1:B2:C3", "XFE1", "A1048577", "B2:A1"])
+def test_bundle_rejects_invalid_excel_reference_bounds(tmp_path, cell_range):
+    from langparse.workbooks.bundle import WorkbookBundle
+
+    payload = WorkbookBundle.from_result(_parsed(tmp_path)).to_dict()
+    payload["structures"]["blocks"][0]["source_refs"] = [f"Data!{cell_range}"]
+    with pytest.raises(ValueError, match="source range"):
+        WorkbookBundle.from_json(json.dumps(payload))

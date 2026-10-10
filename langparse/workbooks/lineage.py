@@ -8,7 +8,11 @@ from langparse.workbooks.types import SourceRef, WorkbookSnapshot
 
 
 def _bounds(value):
+    if not isinstance(value, str):
+        raise ValueError("Expected a finite A1 range")
     parts = value.replace("$", "").upper().split(":")
+    if len(parts) not in {1, 2}:
+        raise ValueError(f"Expected finite A1 range, got {value!r}")
     result = []
     for part in (parts[0], parts[-1]):
         match = re.fullmatch(r"([A-Z]+)([1-9][0-9]*)", part)
@@ -18,7 +22,11 @@ def _bounds(value):
         for char in match[1]:
             column = column * 26 + ord(char) - 64
         result.append((column, int(match[2])))
-    return (*result[0], *result[1])
+    left, top = result[0]
+    right, bottom = result[1]
+    if not (1 <= left <= right <= 16384 and 1 <= top <= bottom <= 1048576):
+        raise ValueError(f"Range is outside Excel bounds: {value!r}")
+    return left, top, right, bottom
 
 
 def overlaps(first: SourceRef, second: SourceRef) -> bool:

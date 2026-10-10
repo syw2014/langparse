@@ -176,9 +176,7 @@ marker:
 ```python
 if len(page_markers) == 1:
     context_row, page_number, total_pages = page_markers[0]
-    header_rows = _header_rows_after(
-        sheet, context_row, context_row + 1, max_row, min_col, max_col
-    )
+    header_rows = _header_rows_after(sheet, context_row, context_row + 1, max_row, min_col, max_col)
     return [
         TableFragment(
             fragment_id=stable_id("fragment", candidate.source_ref.key, str(page_number)),
@@ -482,9 +480,7 @@ After assigning `diagnostics.ambiguous_regions`, add:
 try:
     groups, candidates = link_table_continuations(snapshot, workbook_ir)
 except Exception as exc:
-    diagnostics.warnings.append(
-        f"cross_sheet_continuation_fallback:{type(exc).__name__}"
-    )
+    diagnostics.warnings.append(f"cross_sheet_continuation_fallback:{type(exc).__name__}")
 else:
     workbook_ir.table_continuations = groups
     diagnostics.continuation_candidates = candidates
@@ -539,9 +535,7 @@ has:
 assert chunk.metadata["continuation_id"] == group.continuation_id
 assert chunk.metadata["continuation_role"] in {"head", "tail"}
 assert chunk.metadata["continuation_member_table_ids"] == group.member_table_ids
-assert chunk.metadata["continuation_source_ranges"] == [
-    ref.key for ref in group.source_refs
-]
+assert chunk.metadata["continuation_source_ranges"] == [ref.key for ref in group.source_refs]
 ```
 
 Also assert an unrelated table chunk has none of the four continuation keys.
@@ -560,8 +554,7 @@ For members, append a second comment:
 ```python
 if table.continuation_id is not None:
     parts.append(
-        "<!-- continuation_id: "
-        f"{table.continuation_id}; role: {table.continuation_role} -->"
+        f"<!-- continuation_id: {table.continuation_id}; role: {table.continuation_role} -->"
     )
 ```
 
@@ -625,14 +618,10 @@ assert [row.values[0] for row in group.logical_table.rows if row.role == "data"]
     "Alpha",
     "Beta",
 ]
-assert [item["status"] for item in parsed.diagnostics.continuation_candidates] == [
-    "accepted"
-]
+assert [item["status"] for item in parsed.diagnostics.continuation_candidates] == ["accepted"]
 chunks = WorkbookStructuralChunker().chunk(parsed)
 assert len(chunks) == 2
-assert {chunk.metadata["continuation_id"] for chunk in chunks} == {
-    group.continuation_id
-}
+assert {chunk.metadata["continuation_id"] for chunk in chunks} == {group.continuation_id}
 ```
 
 - [ ] **Step 2: Extend the private workbook regression before changing docs**
@@ -641,10 +630,7 @@ In the existing skipped private test, add exact Phase 2B2 assertions:
 
 ```python
 assert len(parsed.structure.table_continuations) == 0
-assert not any(
-    item["status"] == "accepted"
-    for item in parsed.diagnostics.continuation_candidates
-)
+assert not any(item["status"] == "accepted" for item in parsed.diagnostics.continuation_candidates)
 assert len(chunks) == 43
 ```
 

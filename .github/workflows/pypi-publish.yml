@@ -44,8 +44,8 @@ jobs:
 
       - name: Run static checks
         run: |
-          uv run ruff check langparse tests scripts/verify_*.py
-          uv run ruff format --check langparse tests scripts/verify_*.py
+          uv run ruff check .
+          uv run ruff format --check .
 
       - name: Audit all published extras
         run: |

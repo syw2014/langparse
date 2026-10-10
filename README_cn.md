@@ -475,12 +475,16 @@ benchmark 报告会记录成功率、耗时、页数/秒、表格数量、OCR �
 from langparse import AutoParser, ProgressEvent
 from langparse.services.batch_service import BatchParseService
 
+
 def on_progress(event: ProgressEvent):
     print(event.source, event.phase, event.state, event.percent)
 
+
 result = AutoParser.parse_result("budget.xlsx", progress_callback=on_progress)
 batch = BatchParseService().run(
-    "docs/", output_dir="out", progress_callback=on_progress,
+    "docs/",
+    output_dir="out",
+    progress_callback=on_progress,
 )
 ```
 

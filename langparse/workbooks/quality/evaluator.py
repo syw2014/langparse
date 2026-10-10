@@ -6,10 +6,11 @@ from dataclasses import dataclass, fields, is_dataclass
 from typing import Any
 
 from langparse.types import ParsedDocumentResult
+from langparse.workbooks.quality.facts import evaluate_fact_truth
 from langparse.workbooks.quality.schema import WorkbookExpectation
 from langparse.workbooks.types import SourceRef, WorkbookIR
 
-WORKBOOK_QUALITY_METRIC_SCHEMA_VERSION = 1
+WORKBOOK_QUALITY_METRIC_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,12 @@ class WorkbookQualityMetrics:
     object_fact_precision: float | None
     object_fact_recall: float | None
     object_semantic_recall: float | None
+    formula_accuracy: float | None = None
+    named_range_accuracy: float | None = None
+    excel_table_accuracy: float | None = None
+    visibility_accuracy: float | None = None
+    dependency_precision: float | None = None
+    dependency_recall: float | None = None
 
 
 def evaluate_workbook_result(
@@ -181,6 +188,7 @@ def evaluate_workbook_result(
         object_fact_precision=object_fact_precision,
         object_fact_recall=object_fact_recall,
         object_semantic_recall=object_semantic_recall,
+        **evaluate_fact_truth(expectation.facts, workbook),
     )
 
 

@@ -88,7 +88,7 @@ def test_runs_workbook_quality_benchmark_end_to_end(tmp_path: Path):
     )
 
     assert report.summary["status"] == "passed"
-    assert report.summary["metric_schema_version"] == 1
+    assert report.summary["metric_schema_version"] == 2
     assert report.summary["metrics"]["block_recall"] == 1.0
     assert report.summary["metrics"]["fallback_rate"] == 0.0
     assert report.output_path.joinpath("workbook-quality-results.jsonl").is_file()

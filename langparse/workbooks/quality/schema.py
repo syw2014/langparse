@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-_QUALITY_METRICS = frozenset(
+from langparse.workbooks.quality.facts import FACT_METRICS, WorkbookFactTruth, load_fact_truth
+
+_QUALITY_METRICS = FACT_METRICS | frozenset(
     {
         "block_precision",
         "block_recall",
@@ -101,6 +103,7 @@ class WorkbookExpectation:
     continuations: tuple[tuple[str, ...], ...]
     required_source_refs: tuple[str, ...]
     objects: tuple[ObjectTruth, ...]
+    facts: WorkbookFactTruth | None = None
 
 
 @dataclass(frozen=True)
@@ -268,7 +271,8 @@ def _load_sample(source_root: Path, data: dict[str, Any]) -> WorkbookQualitySamp
 def _load_expectation(data: dict[str, Any]) -> WorkbookExpectation:
     _require_keys(
         data,
-        {"sheets", "continuations", "required_source_refs", "objects"},
+        {"sheets", "continuations", "required_source_refs", "objects"}
+        | ({"facts"} if isinstance(data, dict) and "facts" in data else set()),
         "Expectation",
     )
     sheets_data = _require_list(data["sheets"], "Expectation sheets")
@@ -333,11 +337,16 @@ def _load_expectation(data: dict[str, Any]) -> WorkbookExpectation:
         raise WorkbookQualityManifestError("Duplicate required_source_ref")
     if any(_source_ref_sheet(ref) not in sheet_names for ref in required_source_refs):
         raise WorkbookQualityManifestError("Required source ref must identify an expected sheet")
+    try:
+        facts = load_fact_truth(data["facts"], set(sheet_names)) if "facts" in data else None
+    except (ValueError, TypeError) as exc:
+        raise WorkbookQualityManifestError(str(exc)) from exc
     return WorkbookExpectation(
         sheets=sheets,
         continuations=tuple(continuations),
         required_source_refs=required_source_refs,
         objects=objects,
+        facts=facts,
     )
 
 

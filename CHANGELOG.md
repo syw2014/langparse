@@ -7,6 +7,8 @@ the pre-release development history.
 
 ## [Unreleased]
 
+## [0.1.0] - Pending release
+
 ### Added
 
 - Workbook reference facts and conservative dependency queries; chart/image semantic blocks
@@ -14,18 +16,22 @@ the pre-release development history.
 - Versioned Workbook Bundle v1, queries, `workbook-json` CLI export and frozen compatibility fixture.
 - Fixed-token and sliding-window chunkers, registry and CLI options; repository Agent Skill.
 - Optional formula/name/table/visibility/dependency truth metrics and Bundle contract metrics.
+- Optional immutable progress events for PDF, Excel and concurrent batches; CLI `--progress`
+  writes to stderr, with callback failure isolation and no new core dependencies.
 
 ### Fixed
 
 - Classify typed timeout causes without misclassifying invalid timeout options.
 - Preserve drawing-reader loss and unresolved chart source diagnostics; unify repository Ruff gates.
+- Preserve quoted Sheet names, avoid quadratic scans for direct formula dependencies, and reject
+  Bundle inputs missing query fields.
 
-### Added
+### Release scope
 
-- Optional immutable progress events for parsing and concurrent batches, with
-  PDF page/engine progress, Excel stages, callback failure isolation, and CLI
-  `--progress` output on stderr. Unknown progress remains unspecified; no new
-  core dependencies or persisted task service.
+- Core runtime dependencies remain empty. Format/model support is installed through extras.
+- Rich Excel results cover OOXML; formulas are retained without evaluation or external-file access.
+- Existing real samples provide regression evidence; independent business holdout remains open.
+- See [v0.1.0 release scope](docs/RELEASE_0.1.0.md) for supported paths and known limits.
 
 ## [0.1.0rc2] - 2026-09-08
 

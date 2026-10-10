@@ -64,14 +64,24 @@ def _formula(value: Any) -> str | None:
     return None
 
 
-def _source(formula: str, diagnostics: list[str]) -> SourceRef | None:
+def _source(formula: str, diagnostics: list[str], sheet_names: dict[str, str]) -> SourceRef | None:
     # External, union and dynamic expressions remain explicit raw facts.
     match = re.fullmatch(
         r"(?:'((?:[^']|'')+)'|([^'!]+))!(\$?[A-Z]+\$?[1-9][0-9]*(?::\$?[A-Z]+\$?[1-9][0-9]*)?)",
         formula,
     )
     if match and "[" not in formula:
-        return SourceRef((match[1] or match[2]).replace("''", "'"), match[3].replace("$", ""))
+        from langparse.workbooks.lineage import _bounds
+
+        name = (match[1] or match[2]).replace("''", "'")
+        cell_range = match[3].replace("$", "")
+        try:
+            _bounds(cell_range)
+        except ValueError:
+            pass
+        else:
+            if name.casefold() in sheet_names:
+                return SourceRef(sheet_names[name.casefold()], cell_range)
     diagnostics.append(f"unresolved_chart_reference: {formula}")
     return None
 
@@ -79,6 +89,7 @@ def _source(formula: str, diagnostics: list[str]) -> SourceRef | None:
 def extract_objects(sheet: Any) -> list[DrawingFact]:
     from openpyxl.utils import get_column_letter
 
+    sheet_names = {name.casefold(): name for name in sheet.parent.sheetnames}
     result = []
     for kind, objects in (("chart", sheet._charts), ("image", sheet._images)):
         for index, obj in enumerate(objects):
@@ -125,7 +136,7 @@ def extract_objects(sheet: Any) -> list[DrawingFact]:
                             item.y_values,
                         ):
                             if expression:
-                                ref = _source(expression, fact.diagnostics)
+                                ref = _source(expression, fact.diagnostics, sheet_names)
                                 if ref is not None:
                                     item.source_refs.append(ref)
                         fact.series.append(item)

@@ -145,3 +145,52 @@ def test_unreadable_embedded_image_cannot_silently_report_success(tmp_path):
     assert parsed.diagnostics.status == "partial"
     assert parsed.diagnostics.object_coverage_ratio is None
     assert any("image" in message for message in parsed.diagnostics.unsupported_features)
+
+
+def test_cross_sheet_hidden_chart_source_reaches_bundle(tmp_path):
+    from langparse.parsers.excel_parser import ExcelParser
+    from langparse.workbooks.bundle import WorkbookBundle
+
+    workbook = Workbook()
+    plot = workbook.active
+    plot.title = "Plot"
+    data = workbook.create_sheet("Hidden Data")
+    data.sheet_state = "hidden"
+    for row in [("Name", "Value"), ("A", 10), ("B", 20)]:
+        data.append(row)
+    chart = BarChart()
+    chart.add_data(Reference(data, min_col=2, min_row=1, max_row=3), titles_from_data=True)
+    chart.set_categories(Reference(data, min_col=1, min_row=2, max_row=3))
+    plot.add_chart(chart, "C4")
+    path = tmp_path / "cross-sheet.xlsx"
+    workbook.save(path)
+    bundle = WorkbookBundle.from_result(ExcelParser().parse_result(path))
+    chart_block = bundle.blocks(kind="chart")[0]
+    assert set(chart_block["source_refs"]) == {
+        "Plot!C4",
+        "Hidden Data!B1",
+        "Hidden Data!A2:A3",
+        "Hidden Data!B2:B3",
+    }
+    assert bundle.to_dict()["facts"]["sheets"][1]["visibility"] == "hidden"
+
+
+def test_unresolvable_chart_source_keeps_partial_export(tmp_path):
+    from langparse.parsers.excel_parser import ExcelParser
+    from langparse.workbooks.bundle import WorkbookBundle
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Name", "Value"])
+    sheet.append(["A", 10])
+    chart = BarChart()
+    chart.add_data(Reference(sheet, min_col=2, min_row=2, max_row=2))
+    chart.series[0].val.numRef.f = "Missing!B2:B3"
+    sheet.add_chart(chart, "D2")
+    path = tmp_path / "unknown-source.xlsx"
+    workbook.save(path)
+    parsed = ExcelParser().parse_result(path)
+    assert parsed.diagnostics.status == "partial"
+    bundle = WorkbookBundle.from_result(parsed)
+    assert bundle.blocks(kind="chart")[0]["object"]["series"][0]["values"] == "Missing!B2:B3"
+    assert bundle.diagnostics["warnings"]

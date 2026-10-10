@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/syw2014/langparse/blob/main/langparse/workbooks/bundle-v1.schema.json",
+  "title": "LangParse Workbook Bundle v1",
+  "type": "object",
+  "required": ["schema_version", "facts", "structures", "relations", "diagnostics", "provenance"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "facts": {
+      "type": "object",
+      "required": ["sheets", "references"],
+      "properties": {
+        "sheets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "visibility", "used_range", "cell_count", "cells", "objects"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "visibility": {"enum": ["visible", "hidden", "veryHidden"]},
+              "used_range": {"type": ["string", "null"]},
+              "cell_count": {"type": "integer", "minimum": 0},
+              "cells": {"type": ["array", "null"], "items": {"type": "object", "required": ["coordinate", "source_ref"], "properties": {"source_ref": {"$ref": "#/$defs/sourceRef"}}}},
+              "objects": {"type": "array", "items": {"type": "object"}}
+            }
+          }
+        },
+        "references": {"type": "object", "required": ["formulas", "defined_names", "tables", "external_references", "diagnostics"]}
+      }
+    },
+    "structures": {
+      "type": "object", "required": ["blocks"],
+      "properties": {
+        "blocks": {"type": "array", "items": {
+          "type": "object", "required": ["id", "sheet", "kind", "source_refs", "confidence", "diagnostics"],
+          "properties": {
+            "id": {"type": "string"}, "sheet": {"type": "string"},
+            "kind": {"enum": ["logical_table", "form", "matrix", "text", "unclassified", "chart", "image"]},
+            "source_refs": {"type": "array", "items": {"$ref": "#/$defs/sourceRef"}},
+            "confidence": {"type": "number"}, "diagnostics": {"type": "array"},
+            "table": {"type": "object", "required": ["table_id", "columns", "rows", "row_count", "omitted_rows", "source_refs"], "properties": {"rows": {"type": "array"}, "row_count": {"type": "integer", "minimum": 0}, "omitted_rows": {"type": "integer", "minimum": 0}}}
+          }
+        }}
+      }
+    },
+    "relations": {
+      "type": "object", "required": ["dependencies", "continuations"],
+      "properties": {
+        "dependencies": {"type": "array", "items": {
+          "type": "object", "required": ["dependent", "target", "status", "reference", "source_refs"],
+          "properties": {
+            "dependent": {"$ref": "#/$defs/sourceRef"},
+            "target": {"anyOf": [{"$ref": "#/$defs/sourceRef"}, {"type": "null"}]},
+            "status": {"enum": ["resolved", "external", "unresolved", "unsupported", "dynamic", "circular"]},
+            "reference": {"type": "string"}, "source_refs": {"type": "array", "items": {"$ref": "#/$defs/sourceRef"}}
+          }
+        }},
+        "continuations": {"type": "array", "items": {"type": "object", "required": ["id", "member_table_ids", "source_refs"]}}
+      }
+    },
+    "diagnostics": {"type": "object"},
+    "provenance": {
+      "type": "object", "required": ["source", "filename", "parser_version", "engine", "omissions"],
+      "properties": {"omissions": {"type": "object", "required": ["cells", "media_binary", "source_binary", "max_rows_per_block"], "properties": {
+        "cells": {"type": "boolean"}, "media_binary": {"const": true}, "source_binary": {"const": true},
+        "max_rows_per_block": {"type": ["integer", "null"], "minimum": 1}
+      }}}
+    }
+  },
+  "$defs": {"sourceRef": {"type": "string", "pattern": "^.+![A-Z]+[1-9][0-9]*(?::[A-Z]+[1-9][0-9]*)?$"}}
+}

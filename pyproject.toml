@@ -96,6 +96,7 @@ include = ["langparse*"]
 [tool.setuptools.package-data]
 # Ships the marker so downstream type checkers honour our annotations.
 langparse = ["py.typed"]
+"langparse.workbooks" = ["bundle-v1.schema.json"]
 
 [tool.ruff]
 line-length = 100

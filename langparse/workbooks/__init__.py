@@ -33,6 +33,8 @@ from langparse.workbooks.types import (
 )
 
 _LAZY_EXPORTS = {
+    "WorkbookBundle": ("langparse.workbooks.bundle", "WorkbookBundle"),
+    "WorkbookLineage": ("langparse.workbooks.lineage", "WorkbookLineage"),
     "OOXMLWorkbookAdapter": ("langparse.workbooks.adapters", "OOXMLWorkbookAdapter"),
     "WorkbookAdapter": ("langparse.workbooks.adapters", "WorkbookAdapter"),
     "assemble_baseline": ("langparse.workbooks.assembly", "assemble_baseline"),
@@ -62,6 +64,8 @@ def __getattr__(name: str):
 
 
 __all__ = [
+    "WorkbookBundle",
+    "WorkbookLineage",
     "CandidateRegion",
     "CellSnapshot",
     "FormBlock",

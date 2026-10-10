@@ -120,3 +120,28 @@ def test_drawing_outside_used_cells_has_valid_public_source_refs(tmp_path):
     workbook.save(path)
     parsed = ExcelParser().parse_result(path)
     assert validate_workbook_source_refs(parsed.structure.snapshot, parsed.structure) == (1.0, [])
+
+
+def test_unreadable_embedded_image_cannot_silently_report_success(tmp_path):
+    import zipfile
+
+    from langparse.parsers.excel_parser import ExcelParser
+
+    image_path = tmp_path / "image.png"
+    PILImage.new("RGB", (8, 6), "white").save(image_path)
+    workbook = Workbook()
+    workbook.active["A1"] = "Data"
+    workbook.active.add_image(Image(image_path), "D2")
+    path = tmp_path / "broken-image.xlsx"
+    workbook.save(path)
+    with zipfile.ZipFile(path) as source:
+        entries = [(info, source.read(info.filename)) for info in source.infolist()]
+    with zipfile.ZipFile(path, "w") as target:
+        for info, content in entries:
+            target.writestr(
+                info, b"unreadable" if info.filename.startswith("xl/media/") else content
+            )
+    parsed = ExcelParser().parse_result(path)
+    assert parsed.diagnostics.status == "partial"
+    assert parsed.diagnostics.object_coverage_ratio is None
+    assert any("image" in message for message in parsed.diagnostics.unsupported_features)

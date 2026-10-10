@@ -178,6 +178,10 @@ def attach_objects(
             kind = obj["kind"]
             diagnostics.block_count_by_kind[kind] = diagnostics.block_count_by_kind.get(kind, 0) + 1
     diagnostics.object_coverage_ratio = covered / total if total else 1.0
+    if snapshot.metadata.get("drawing_read_errors"):
+        diagnostics.status = "partial"
+        diagnostics.object_coverage_ratio = None
+        diagnostics.unsupported_features.extend(snapshot.metadata["drawing_read_errors"])
 
 
 def render_object(block: WorkbookBlock) -> str:

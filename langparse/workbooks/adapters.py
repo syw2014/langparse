@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import warnings as python_warnings
 from dataclasses import asdict
 from datetime import date, datetime, time
 from pathlib import Path
@@ -44,18 +45,25 @@ class OOXMLWorkbookAdapter:
         value_stream = workbook_path.open("rb")
         warnings: list[str] = []
         try:
-            formula_book = load_workbook(
-                formula_stream,
-                data_only=False,
-                keep_vba=keep_vba,
-                read_only=False,
-            )
-            value_book = load_workbook(
-                value_stream,
-                data_only=True,
-                keep_vba=keep_vba,
-                read_only=False,
-            )
+            with python_warnings.catch_warnings(record=True) as emitted:
+                python_warnings.simplefilter("always")
+                formula_book = load_workbook(
+                    formula_stream,
+                    data_only=False,
+                    keep_vba=keep_vba,
+                    read_only=False,
+                )
+                value_book = load_workbook(
+                    value_stream,
+                    data_only=True,
+                    keep_vba=keep_vba,
+                    read_only=False,
+                )
+            read_warnings = list(dict.fromkeys(str(item.message) for item in emitted))
+            warnings.extend(read_warnings)
+            drawing_read_errors = [
+                message for message in read_warnings if _drawing_read_loss(message)
+            ]
             reference_facts = WorkbookReferenceFacts()
             for owner, scope in [
                 (formula_book, None),
@@ -120,7 +128,11 @@ class OOXMLWorkbookAdapter:
             filename=workbook_path.name,
             sheets=sheets,
             reference_facts=reference_facts,
-            metadata={"format": workbook_path.suffix.lower(), "warnings": warnings},
+            metadata={
+                "format": workbook_path.suffix.lower(),
+                "warnings": warnings,
+                "drawing_read_errors": drawing_read_errors,
+            },
         )
 
         extract_reference_facts(snapshot)
@@ -451,3 +463,12 @@ def _chart_title(chart: Any) -> str | None:
     if title is None:
         return None
     return str(title)
+
+
+def _drawing_read_loss(message: str) -> bool:
+    lowered = message.lower()
+    return (
+        "drawingml support is incomplete" in lowered
+        or "unable to read chart" in lowered
+        or ("image" in lowered and ("removed" in lowered or "dropped" in lowered))
+    )

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from langparse.types import ParsedStructure, StructuredData
+from langparse.workbooks.reference_types import WorkbookReferenceFacts
 
 
 def stable_id(prefix: str, *parts: str) -> str:
@@ -76,6 +77,8 @@ class WorkbookSnapshot:
     filename: str
     sheets: list[SheetSnapshot] = field(default_factory=list)
     metadata: StructuredData = field(default_factory=dict)
+
+    reference_facts: WorkbookReferenceFacts = field(default_factory=WorkbookReferenceFacts)
 
 
 @dataclass

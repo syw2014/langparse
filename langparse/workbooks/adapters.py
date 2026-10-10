@@ -11,6 +11,12 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import get_column_letter, range_boundaries
 
+from langparse.workbooks.reference_types import (
+    DefinedNameFact,
+    ExcelTableFact,
+    WorkbookReferenceFacts,
+)
+from langparse.workbooks.references import extract_reference_facts
 from langparse.workbooks.types import (
     CellSnapshot,
     RegionAnchor,
@@ -49,6 +55,26 @@ class OOXMLWorkbookAdapter:
                 keep_vba=keep_vba,
                 read_only=False,
             )
+            reference_facts = WorkbookReferenceFacts()
+            for owner, scope in [
+                (formula_book, None),
+                *[(s, s.title) for s in formula_book.worksheets],
+            ]:
+                reference_facts.defined_names.extend(
+                    DefinedNameFact(name, definition.attr_text or "", scope)
+                    for name, definition in sorted(owner.defined_names.items())
+                )
+            for sheet in formula_book.worksheets:
+                reference_facts.tables.extend(
+                    ExcelTableFact(
+                        table.name,
+                        SourceRef(sheet.title, table.ref),
+                        [column.name for column in table.tableColumns],
+                        table.headerRowCount if table.headerRowCount is not None else 1,
+                        table.totalsRowCount or 0,
+                    )
+                    for table in sorted(sheet.tables.values(), key=lambda t: t.name)
+                )
             defined_name_anchors = _defined_name_region_anchors(
                 formula_book,
                 warnings,
@@ -88,12 +114,16 @@ class OOXMLWorkbookAdapter:
             formula_stream.close()
             value_stream.close()
 
-        return WorkbookSnapshot(
+        snapshot = WorkbookSnapshot(
             source=str(workbook_path),
             filename=workbook_path.name,
             sheets=sheets,
+            reference_facts=reference_facts,
             metadata={"format": workbook_path.suffix.lower(), "warnings": warnings},
         )
+
+        extract_reference_facts(snapshot)
+        return snapshot
 
     def _snapshot_sheet(
         self,

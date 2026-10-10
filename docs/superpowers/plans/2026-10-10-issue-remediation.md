@@ -21,15 +21,19 @@
 
 ## 执行记录
 
-- [ ] T1 全仓 Ruff 清理与 CI 范围统一。文件：examples/*.py、scripts/download_mineru_models.py、文档代码块、.github/workflows/*.yml。验证：ruff check . / ruff format --check .。
-- [ ] T2 错误分类。文件：langparse/errors.py、tests/test_errors.py。先验证 TimeoutError('') 与 ValueError('invalid timeout option')，再保留现有后端兼容测试。
-- [ ] T3 更新 #6/#7/#4 追踪正文及进度文档，原验收内容和已有证据保留；不关闭仍有缺口的 Issue。
-- [ ] T4 #9 分切片实现引用事实、血缘查询、质量真值与端到端消费；逐切片记录边界和回归命令。
-- [ ] T5 #10 分切片实现图表/图片对象语义、渲染/chunks/覆盖指标。
-- [ ] T6 #11 版本化 Bundle、查询与 CLI 一致导出，补兼容与来源验证。
-- [ ] T7 #4 分块策略、注册表、CLI 选择；#5 Skill 与示例。
+- [x] T1 全仓 Ruff 清理与 CI 范围统一。文件：examples/*.py、scripts/download_mineru_models.py、文档代码块、.github/workflows/*.yml。验证：ruff check . / ruff format --check .。
+- [x] T2 错误分类。文件：langparse/errors.py、tests/test_errors.py。先验证 TimeoutError('') 与 ValueError('invalid timeout option')，再保留现有后端兼容测试。
+- [x] T3 更新 #6/#7/#4 追踪正文及进度文档，原验收内容和已有证据保留；不关闭仍有缺口的 Issue。
+- [x] T4 #9 分切片实现引用事实、血缘查询、质量真值与端到端消费；逐切片记录边界和回归命令。
+- [x] T5 #10 分切片实现图表/图片对象语义、渲染/chunks/覆盖指标。
+- [x] T6 #11 版本化 Bundle、查询与 CLI 一致导出，补兼容与来源验证。
+- [x] T7 #4 分块策略、注册表、CLI 选择；#5 Skill 与示例。
 - [ ] T8 组合回归、构建、独立审查，更新交付记录；发布和合并保留最终审批。
 
 ## 外部条件
 
 #7 需要未参与调参的私有 holdout 和独立预期。#12 保持暂缓。#2/#3 等明确业务需要再实施。尚未满足这些条件不伪造完成状态。
+
+## 收尾记录
+
+T8 采用模块与用例回归、Ruff、构建和已安装 wheel 冒烟；不运行全量测试。独立审查代理因账号额度限制未完成，不宣称已独立审查。合并与正式发布尚未执行。

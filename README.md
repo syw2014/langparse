@@ -702,3 +702,9 @@ See [CHANGELOG.md](CHANGELOG.md) ([中文](CHANGELOG_cn.md)) for release notes a
 
 ## License
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
+
+### 新增能力（Unreleased）
+
+- [Workbook Bundle 与查询](docs/WORKBOOK_BUNDLE.md)
+- [分块策略与 CLI](docs/CHUNKING.md)
+- [Agent Skill 与接入示例](SKILLS.md)

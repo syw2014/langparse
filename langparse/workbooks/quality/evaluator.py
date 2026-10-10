@@ -48,6 +48,7 @@ def evaluate_workbook_result(
         (sheet.name, _block_range(block), block.kind)
         for sheet in workbook.sheets
         for block in sheet.blocks
+        if block.kind not in {"chart", "image"}
     ]
     block_precision, block_recall = _precision_recall(expected_blocks, observed_blocks)
 
@@ -153,7 +154,9 @@ def evaluate_workbook_result(
         observed_semantic_objects,
     )
 
-    block_count = sum(len(sheet.blocks) for sheet in workbook.sheets)
+    block_count = sum(
+        block.kind not in {"chart", "image"} for sheet in workbook.sheets for block in sheet.blocks
+    )
     fallback_count = sum(
         block.kind == "unclassified" or not block.source_refs
         for sheet in workbook.sheets

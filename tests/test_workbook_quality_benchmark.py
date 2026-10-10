@@ -156,7 +156,7 @@ def test_public_workbook_quality_seed_covers_structural_region_anchors(tmp_path:
     assert report.summary["sample_count"] >= 13
     assert report.summary["status"] == "passed"
     assert report.summary["metrics"]["object_fact_recall"] == 1.0
-    assert report.summary["metrics"]["object_semantic_recall"] == 0.0
+    assert report.summary["metrics"]["object_semantic_recall"] == 1.0
 
 
 def test_public_workbook_quality_fixtures_have_deterministic_zip_timestamps():

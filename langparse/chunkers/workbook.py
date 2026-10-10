@@ -141,7 +141,12 @@ class WorkbookStructuralChunker:
         for chunk in chunks:
             source_ranges = chunk.metadata["source_ranges"]
             for source_range in source_ranges:
-                _source_range_is_valid(workbook_ir.snapshot, source_range)
+                if chunk.metadata["chunk_type"] in {"chart", "image"}:
+                    from langparse.workbooks.objects import validate_object_source
+
+                    validate_object_source(workbook_ir.snapshot, source_range)
+                else:
+                    _source_range_is_valid(workbook_ir.snapshot, source_range)
             if chunk.metadata["chunk_type"] != "table_rows":
                 continue
             payload = chunk.structured_payload
@@ -167,6 +172,29 @@ class WorkbookStructuralChunker:
         block: WorkbookBlock,
         chunk_index_offset: int,
     ) -> list[Chunk]:
+        if block.kind in {"chart", "image"}:
+            from langparse.workbooks.objects import render_object
+
+            content = render_object(block)
+            metadata = document_metadata(parsed)
+            metadata.update(
+                {
+                    "chunk_type": block.kind,
+                    "chunk_index": chunk_index_offset,
+                    "sheet_name": sheet_name,
+                    "sheet_ordinal": sheet_ordinal,
+                    "source_ranges": [ref.key for ref in block.source_refs],
+                    "object_id": block.block_id,
+                    "oversized": self.length_function(content) > self.max_chunk_size,
+                }
+            )
+            return [
+                Chunk(
+                    content=content,
+                    metadata=metadata,
+                    structured_payload={"object": block.metadata["object"]},
+                )
+            ]
         if block.logical_table is not None:
             return self._chunk_logical_table(
                 parsed,

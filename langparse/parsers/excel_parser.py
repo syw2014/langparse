@@ -168,6 +168,9 @@ class ExcelParser(BaseParser):
             diagnostics.warnings.append(
                 f"Semantic workbook assembly failed; retained raw-grid fallback: {type(exc).__name__}"
             )
+        from langparse.workbooks.objects import attach_objects
+
+        attach_objects(snapshot, structure, diagnostics)
         reporter.emit("rendering")
         pages = compatibility_pages(snapshot, structure)
         markdown = render_workbook_markdown(snapshot, structure)

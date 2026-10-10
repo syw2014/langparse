@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import asdict
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any, Protocol
@@ -208,24 +209,10 @@ class OOXMLWorkbookAdapter:
                         CellSnapshot(coordinate=coordinate, merge_anchor=anchor),
                     ).merge_anchor = anchor
 
-        objects = []
-        for chart in formula_sheet._charts:
-            objects.append(
-                {
-                    "kind": "chart",
-                    "anchor": _object_anchor(chart, formula_sheet.title, warnings),
-                    "title": _chart_title(chart),
-                }
-            )
-        for image in formula_sheet._images:
-            objects.append(
-                {
-                    "kind": "image",
-                    "anchor": _object_anchor(image, formula_sheet.title, warnings),
-                    "width": getattr(image, "width", None),
-                    "height": getattr(image, "height", None),
-                }
-            )
+        from langparse.workbooks.objects import extract_objects
+
+        objects = [asdict(obj) for obj in extract_objects(formula_sheet)]
+        warnings.extend(note for obj in objects for note in obj["diagnostics"])
 
         region_anchors = [
             RegionAnchor(

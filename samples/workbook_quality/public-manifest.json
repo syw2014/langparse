@@ -25,7 +25,10 @@
       "excel_table_accuracy": 1.0,
       "visibility_accuracy": 1.0,
       "dependency_precision": 1.0,
-      "dependency_recall": 1.0
+      "dependency_recall": 1.0,
+      "bundle_source_ref_completeness": 1.0,
+      "bundle_structure_recall": 1.0,
+      "bundle_roundtrip_stability": 1.0
     },
     "maximum": {
       "fallback_rate": 0.1

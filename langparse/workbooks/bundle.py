@@ -82,6 +82,13 @@ class WorkbookBundle:
             except ValueError as exc:
                 raise ValueError("Invalid workbook bundle source range") from exc
 
+        def sources(value, *, nullable=False):
+            if isinstance(value, list):
+                for item in value:
+                    sources(item, nullable=nullable)
+            elif value is not None or not nullable:
+                source(value)
+
         def refs(value):
             if isinstance(value, dict):
                 for key, item in value.items():
@@ -90,8 +97,7 @@ class WorkbookBundle:
                     elif key.endswith("source_refs"):
                         if not isinstance(item, list):
                             raise ValueError("Workbook bundle source refs must be an array")
-                        for ref in item:
-                            source(ref)
+                        sources(item, nullable=key == "value_source_refs")
                     else:
                         refs(item)
             elif isinstance(value, list):

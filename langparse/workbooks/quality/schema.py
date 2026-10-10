@@ -11,6 +11,9 @@ from langparse.workbooks.quality.facts import FACT_METRICS, WorkbookFactTruth, l
 
 _QUALITY_METRICS = FACT_METRICS | frozenset(
     {
+        "bundle_source_ref_completeness",
+        "bundle_structure_recall",
+        "bundle_roundtrip_stability",
         "block_precision",
         "block_recall",
         "header_path_accuracy",

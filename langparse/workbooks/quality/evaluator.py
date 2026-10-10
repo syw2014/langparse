@@ -6,6 +6,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from typing import Any
 
 from langparse.types import ParsedDocumentResult
+from langparse.workbooks.quality.bundle import evaluate_bundle_contract
 from langparse.workbooks.quality.facts import evaluate_fact_truth
 from langparse.workbooks.quality.schema import WorkbookExpectation
 from langparse.workbooks.types import SourceRef, WorkbookIR
@@ -36,6 +37,9 @@ class WorkbookQualityMetrics:
     visibility_accuracy: float | None = None
     dependency_precision: float | None = None
     dependency_recall: float | None = None
+    bundle_source_ref_completeness: float = 0.0
+    bundle_structure_recall: float = 0.0
+    bundle_roundtrip_stability: float = 0.0
 
 
 def evaluate_workbook_result(
@@ -189,6 +193,7 @@ def evaluate_workbook_result(
         object_fact_recall=object_fact_recall,
         object_semantic_recall=object_semantic_recall,
         **evaluate_fact_truth(expectation.facts, workbook),
+        **evaluate_bundle_contract(expectation, parsed),
     )
 
 

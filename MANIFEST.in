@@ -4,3 +4,4 @@ recursive-include skills/langparse *.md
 include examples/agent_ingestion.py
 recursive-include tests/fixtures *.json
 include docs/RELEASE_0.1.0.md
+include docs/PYPI.md

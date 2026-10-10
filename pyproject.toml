@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "langparse"
 version = "0.1.0"
 description = "A developer-friendly document parsing toolkit with precise, source-grounded Excel understanding."
-readme = "README.md"
+readme = "docs/PYPI.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

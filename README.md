@@ -33,7 +33,7 @@ where LangParse goes deliberately deeper.
 
 ---
 
-## Parsing progress (unreleased)
+## Parsing progress
 
 Pass `progress_callback` to `AutoParser`, `ParseService`, `PDFParser`, or
 `BatchParseService.run`. The callback receives immutable `ProgressEvent` objects:
@@ -132,7 +132,7 @@ views derived from it, not replacements for it.
 
 ## Installation
 
-Install the current release candidate:
+Install the current release:
 
 ```bash
 pip install "langparse==0.1.0"

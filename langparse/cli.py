@@ -45,7 +45,7 @@ def build_parser():
     parse_cmd.add_argument("--model-source", default=None)
     parse_cmd.add_argument("--auto-install-runtime", action="store_true")
     parse_cmd.add_argument("--runtime-package", default=None)
-    parse_cmd.add_argument("--format", default="markdown")
+    parse_cmd.add_argument("--format", default="markdown", help="markdown, json, or workbook-json")
     parse_cmd.add_argument("--batch", action="store_true")
     parse_cmd.add_argument("--output", default=None)
     parse_cmd.add_argument("--output-dir", default=None)

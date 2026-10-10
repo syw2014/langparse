@@ -105,6 +105,10 @@ class ParseService:
             if not chunks:
                 return parsed.markdown_content
             return "\n\n---\n\n".join(chunk.content for chunk in chunks)
+        if fmt == "workbook-json":
+            from langparse.workbooks.bundle import WorkbookBundle
+
+            return WorkbookBundle.from_result(parsed).to_json()
         if fmt == "json":
             payload = asdict(parsed)
             if chunks is not None:

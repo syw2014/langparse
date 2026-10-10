@@ -39,3 +39,7 @@
 T8 采用模块与用例回归、Ruff、构建和已安装 wheel 冒烟；不运行全量测试。独立审查代理因账号额度限制未完成，不宣称已独立审查。合并与正式发布尚未执行。
 
 最终验证：Ruff check 通过、216 files already formatted；wheel/sdist 构建通过；隔离环境零 extras 导入/CLI、Excel 六项安装冒烟与 Bundle Schema/血缘/往返通过。草稿 PR：https://github.com/syw2014/langparse/pull/13 。
+
+## PR 审查修复
+
+2026-10-10 三路独立审查已完成。修复 Bundle 缺查询字段的输入验证、含首尾单引号的 Sheet 引用，以及单格依赖的平方级节点扫描。Bundle 模块 15 passed，血缘模块 5 passed，并发失败进度用例 1 passed；修改文件 Ruff 通过。未新增本机全量测试，最新提交等待原有 CI 验证。

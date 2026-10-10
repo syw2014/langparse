@@ -33,10 +33,9 @@ PDF 和 Word 能力让 LangParse 覆盖完整文档管道；Excel 是项目主�
 
 ## 项目状态
 
-当前公开候选版本为 `0.1.0rc2`。多格式解析、OOXML 工作簿结构化、语义分块、
+当前 GitHub 正式版本为 `0.1.0`。多格式解析、OOXML 工作簿结构化、语义分块、
 批处理、质量检查和 CI 已可用。项目仍处于 pre-1.0；各模块的真实完成度和已知缺口
-以 [docs/PROGRESS.md](docs/PROGRESS.md) 为准。源码已准备 `0.1.0`，
-正式发布范围见 [发布说明](docs/RELEASE_0.1.0.md)。
+以 [docs/PROGRESS.md](docs/PROGRESS.md) 为准。正式发布范围见 [发布说明](docs/RELEASE_0.1.0.md)。
 
 ## 为什么选择 LangParse？
 
@@ -78,7 +77,7 @@ flowchart LR
 安装当前候选版本：
 
 ```bash
-pip install --pre "langparse==0.1.0rc2"
+pip install "langparse==0.1.0"
 ```
 
 只安装实际需要的可选能力：
@@ -467,7 +466,7 @@ langparse benchmark samples/public.example.json --engine mineru --output-dir rep
 
 benchmark 报告会记录成功率、耗时、页数/秒、表格数量、OCR 指标、多列顺序告警、页眉页脚过滤数量，以及图像/图表 metadata 覆盖情况。
 
-### 解析进度（v0.1.0 待发布）
+### 解析进度（v0.1.0）
 
 `AutoParser`、`ParseService` 和 `PDFParser` 的解析调用支持可选的
 `progress_callback`。回调接收不可变的 `ProgressEvent`，默认不输出进度、不增加依赖。

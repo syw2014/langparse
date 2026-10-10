@@ -7,7 +7,7 @@ the pre-release development history.
 
 ## [Unreleased]
 
-## [0.1.0] - Pending release
+## [0.1.0] - 2026-10-10
 
 ### Added
 
@@ -21,6 +21,7 @@ the pre-release development history.
 
 ### Fixed
 
+- Update five vulnerable optional dependencies and require pypdf >=6.19.0.
 - Classify typed timeout causes without misclassifying invalid timeout options.
 - Preserve drawing-reader loss and unresolved chart source diagnostics; unify repository Ruff gates.
 - Preserve quoted Sheet names, avoid quadratic scans for direct formula dependencies, and reject

@@ -80,11 +80,11 @@ langparse parse docs/ --batch --output-dir out --progress
 
 ## Project status
 
-The current release candidate is `0.1.0rc2`. Core multi-format parsing,
+The latest GitHub release is `0.1.0`. Core multi-format parsing,
 structured OOXML workbooks, semantic chunking, batch processing, quality checks,
 and CI are available today. LangParse remains pre-1.0; see
 [docs/PROGRESS.md](docs/PROGRESS.md) for the module-by-module source of truth and
-known gaps. Source version `0.1.0` is being prepared; see the
+known gaps. See the
 [release scope](docs/RELEASE_0.1.0.md).
 
 ## Why LangParse?
@@ -135,7 +135,7 @@ views derived from it, not replacements for it.
 Install the current release candidate:
 
 ```bash
-pip install --pre "langparse==0.1.0rc2"
+pip install "langparse==0.1.0"
 ```
 
 Install only the optional capabilities you need:
@@ -704,7 +704,7 @@ See [CHANGELOG.md](CHANGELOG.md) ([中文](CHANGELOG_cn.md)) for release notes a
 ## License
 This project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
 
-### v0.1.0 capabilities (pending release)
+### v0.1.0 capabilities
 
 - [Workbook Bundle 与查询](docs/WORKBOOK_BUNDLE.md)
 - [分块策略与 CLI](docs/CHUNKING.md)

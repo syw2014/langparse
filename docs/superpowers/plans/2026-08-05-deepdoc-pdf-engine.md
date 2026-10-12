@@ -354,7 +354,9 @@ def ensure_deepdoc_models(
         return str(target)
 
     if model_policy == "require_existing":
-        raise RuntimeError(f"deepdoc model_policy=require_existing but models are missing under {target}")
+        raise RuntimeError(
+            f"deepdoc model_policy=require_existing but models are missing under {target}"
+        )
 
     target.mkdir(parents=True, exist_ok=True)
     downloaded = download_models(target)
@@ -398,22 +400,12 @@ def test_simple_table_without_spans():
 
 
 def test_colspan_header_repeats_value_across_columns():
-    html = (
-        "<table>"
-        "<tr><th colspan='2'>Header</th></tr>"
-        "<tr><td>1</td><td>2</td></tr>"
-        "</table>"
-    )
+    html = "<table><tr><th colspan='2'>Header</th></tr><tr><td>1</td><td>2</td></tr></table>"
     assert html_table_to_rows(html) == [["Header", "Header"], ["1", "2"]]
 
 
 def test_rowspan_first_column_repeats_value_down_rows():
-    html = (
-        "<table>"
-        "<tr><td rowspan='2'>Group</td><td>1</td></tr>"
-        "<tr><td>2</td></tr>"
-        "</table>"
-    )
+    html = "<table><tr><td rowspan='2'>Group</td><td>1</td></tr><tr><td>2</td></tr></table>"
     assert html_table_to_rows(html) == [["Group", "1"], ["Group", "2"]]
 
 
@@ -648,7 +640,12 @@ from langparse.types import ParsedElement, ParsedPageResult
 
 
 def _bbox(box: dict) -> list[float]:
-    return [float(box.get("x0", 0.0)), float(box.get("top", 0.0)), float(box.get("x1", 0.0)), float(box.get("bottom", 0.0))]
+    return [
+        float(box.get("x0", 0.0)),
+        float(box.get("top", 0.0)),
+        float(box.get("x1", 0.0)),
+        float(box.get("bottom", 0.0)),
+    ]
 
 
 def _rows_to_markdown_table(rows: list[list[str]]) -> str:
@@ -683,14 +680,22 @@ def render_pages(boxes: list[dict]) -> list[ParsedPageResult]:
                 rows = html_table_to_rows(text)
                 tables.append({"rows": rows})
                 markdown_parts.append(_rows_to_markdown_table(rows))
-                elements.append(ParsedElement(kind="table", text=text, bbox=bbox, metadata={"layout_type": layout_type}))
+                elements.append(
+                    ParsedElement(
+                        kind="table", text=text, bbox=bbox, metadata={"layout_type": layout_type}
+                    )
+                )
                 continue
 
             if layout_type == "figure":
                 images.append({"caption": text, "bbox": bbox})
                 if text:
                     markdown_parts.append(f"*{text}*")
-                elements.append(ParsedElement(kind="figure", text=text, bbox=bbox, metadata={"layout_type": layout_type}))
+                elements.append(
+                    ParsedElement(
+                        kind="figure", text=text, bbox=bbox, metadata={"layout_type": layout_type}
+                    )
+                )
                 continue
 
             if not text:
@@ -698,7 +703,11 @@ def render_pages(boxes: list[dict]) -> list[ParsedPageResult]:
 
             markdown_parts.append(f"# {text}" if layout_type == "title" else text)
             plain_parts.append(text)
-            elements.append(ParsedElement(kind=layout_type, text=text, bbox=bbox, metadata={"layout_type": layout_type}))
+            elements.append(
+                ParsedElement(
+                    kind=layout_type, text=text, bbox=bbox, metadata={"layout_type": layout_type}
+                )
+            )
 
         pages.append(
             ParsedPageResult(
@@ -1117,21 +1126,24 @@ The remote DLA HTTP client branch (`DEEPDOC_URL`/`TENSORRT_DLA_SVR`) delegates t
 Old string (verified exact):
 
 ```python
-        dla_url = os.environ.get("DEEPDOC_URL") or os.environ.get("TENSORRT_DLA_SVR")
-        if dla_url:
-            from deepdoc.vision.dla_cli import DLAClient
+dla_url = os.environ.get("DEEPDOC_URL") or os.environ.get("TENSORRT_DLA_SVR")
+if dla_url:
+    from deepdoc.vision.dla_cli import DLAClient
 
-            self.client = DLAClient(dla_url)
-            env_used = "DEEPDOC_URL" if os.environ.get("DEEPDOC_URL") else "TENSORRT_DLA_SVR"
-            logging.info(f"LayoutRecognizer using remote DLA client at {dla_url} (via {env_used})")
-            return
+    self.client = DLAClient(dla_url)
+    env_used = "DEEPDOC_URL" if os.environ.get("DEEPDOC_URL") else "TENSORRT_DLA_SVR"
+    logging.info(f"LayoutRecognizer using remote DLA client at {dla_url} (via {env_used})")
+    return
 
-        try:
-            model_dir = os.path.join(get_project_base_directory(), "rag/res/deepdoc")
-            super().__init__(self.labels, domain, model_dir)
-        except Exception:
-            model_dir = snapshot_download(repo_id="InfiniFlow/deepdoc", local_dir=os.path.join(get_project_base_directory(), "rag/res/deepdoc"))
-            super().__init__(self.labels, domain, model_dir)
+try:
+    model_dir = os.path.join(get_project_base_directory(), "rag/res/deepdoc")
+    super().__init__(self.labels, domain, model_dir)
+except Exception:
+    model_dir = snapshot_download(
+        repo_id="InfiniFlow/deepdoc",
+        local_dir=os.path.join(get_project_base_directory(), "rag/res/deepdoc"),
+    )
+    super().__init__(self.labels, domain, model_dir)
 ```
 
 New string:
@@ -1239,18 +1251,20 @@ from .tokenizer import tag, tokenize
 Old string (verified exact):
 
 ```python
-    def __init__(self):
-        try:
-            super().__init__(self.labels, "tsr", os.path.join(get_project_base_directory(), "rag/res/deepdoc"))
-        except Exception:
-            super().__init__(
-                self.labels,
-                "tsr",
-                snapshot_download(
-                    repo_id="InfiniFlow/deepdoc",
-                    local_dir=os.path.join(get_project_base_directory(), "rag/res/deepdoc"),
-                ),
-            )
+def __init__(self):
+    try:
+        super().__init__(
+            self.labels, "tsr", os.path.join(get_project_base_directory(), "rag/res/deepdoc")
+        )
+    except Exception:
+        super().__init__(
+            self.labels,
+            "tsr",
+            snapshot_download(
+                repo_id="InfiniFlow/deepdoc",
+                local_dir=os.path.join(get_project_base_directory(), "rag/res/deepdoc"),
+            ),
+        )
 ```
 
 New string:
@@ -1426,7 +1440,9 @@ def extract_pdf_outlines(source):
                     if isinstance(node, list):
                         dfs(node, depth + 1)
                     else:
-                        outlines.append((node["/Title"], depth, pdf.get_destination_page_number(node) + 1))
+                        outlines.append(
+                            (node["/Title"], depth, pdf.get_destination_page_number(node) + 1)
+                        )
 
             dfs(pdf.outline, 0)
             return outlines
@@ -1477,7 +1493,13 @@ from sklearn.metrics import silhouette_score
 
 from common.constants import MAXIMUM_PAGE_NUMBER
 from common.file_utils import get_project_base_directory
-from deepdoc.vision import OCR, AscendLayoutRecognizer, LayoutRecognizer, Recognizer, TableStructureRecognizer
+from deepdoc.vision import (
+    OCR,
+    AscendLayoutRecognizer,
+    LayoutRecognizer,
+    Recognizer,
+    TableStructureRecognizer,
+)
 from rag.nlp import rag_tokenizer
 from rag.prompts.generator import vision_llm_describe_prompt
 from deepdoc.parser.utils import extract_pdf_outlines
@@ -1530,54 +1552,57 @@ This drops `xgboost`, `huggingface_hub.snapshot_download`, `pypdf.PdfReader` (on
 Old string (verified exact, full method):
 
 ```python
-    def __init__(self, **kwargs):
-        """
-        If you have trouble downloading HuggingFace models, -_^ this might help!!
+def __init__(self, **kwargs):
+    """
+    If you have trouble downloading HuggingFace models, -_^ this might help!!
 
-        For Linux:
-        export HF_ENDPOINT=https://hf-mirror.com
+    For Linux:
+    export HF_ENDPOINT=https://hf-mirror.com
 
-        For Windows:
-        Good luck
-        ^_-
+    For Windows:
+    Good luck
+    ^_-
 
-        """
+    """
 
-        self.ocr = OCR()
-        self.parallel_limiter = None
-        if settings.PARALLEL_DEVICES > 1:
-            self.parallel_limiter = [asyncio.Semaphore(1) for _ in range(settings.PARALLEL_DEVICES)]
+    self.ocr = OCR()
+    self.parallel_limiter = None
+    if settings.PARALLEL_DEVICES > 1:
+        self.parallel_limiter = [asyncio.Semaphore(1) for _ in range(settings.PARALLEL_DEVICES)]
 
-        layout_recognizer_type = os.getenv("LAYOUT_RECOGNIZER_TYPE", "onnx").lower()
-        if layout_recognizer_type not in ["onnx", "ascend"]:
-            raise RuntimeError("Unsupported layout recognizer type.")
+    layout_recognizer_type = os.getenv("LAYOUT_RECOGNIZER_TYPE", "onnx").lower()
+    if layout_recognizer_type not in ["onnx", "ascend"]:
+        raise RuntimeError("Unsupported layout recognizer type.")
 
-        if hasattr(self, "model_species"):
-            recognizer_domain = "layout." + self.model_species
-        else:
-            recognizer_domain = "layout"
+    if hasattr(self, "model_species"):
+        recognizer_domain = "layout." + self.model_species
+    else:
+        recognizer_domain = "layout"
 
-        if layout_recognizer_type == "ascend":
-            logging.debug("Using Ascend LayoutRecognizer")
-            self.layouter = AscendLayoutRecognizer(recognizer_domain)
-        else:  # onnx
-            logging.debug("Using Onnx LayoutRecognizer")
-            self.layouter = LayoutRecognizer(recognizer_domain)
-        self.tbl_det = TableStructureRecognizer()
+    if layout_recognizer_type == "ascend":
+        logging.debug("Using Ascend LayoutRecognizer")
+        self.layouter = AscendLayoutRecognizer(recognizer_domain)
+    else:  # onnx
+        logging.debug("Using Onnx LayoutRecognizer")
+        self.layouter = LayoutRecognizer(recognizer_domain)
+    self.tbl_det = TableStructureRecognizer()
 
-        self.updown_cnt_mdl = xgb.Booster()
-        # xgboost model is very small; using CPU explicitly
-        self.updown_cnt_mdl.set_param({"device": "cpu"})
-        logging.info("updown_cnt_mdl initialized on CPU")
-        try:
-            model_dir = os.path.join(get_project_base_directory(), "rag/res/deepdoc")
-            self.updown_cnt_mdl.load_model(os.path.join(model_dir, "updown_concat_xgb.model"))
-        except Exception:
-            model_dir = snapshot_download(repo_id="InfiniFlow/text_concat_xgb_v1.0", local_dir=os.path.join(get_project_base_directory(), "rag/res/deepdoc"))
-            self.updown_cnt_mdl.load_model(os.path.join(model_dir, "updown_concat_xgb.model"))
+    self.updown_cnt_mdl = xgb.Booster()
+    # xgboost model is very small; using CPU explicitly
+    self.updown_cnt_mdl.set_param({"device": "cpu"})
+    logging.info("updown_cnt_mdl initialized on CPU")
+    try:
+        model_dir = os.path.join(get_project_base_directory(), "rag/res/deepdoc")
+        self.updown_cnt_mdl.load_model(os.path.join(model_dir, "updown_concat_xgb.model"))
+    except Exception:
+        model_dir = snapshot_download(
+            repo_id="InfiniFlow/text_concat_xgb_v1.0",
+            local_dir=os.path.join(get_project_base_directory(), "rag/res/deepdoc"),
+        )
+        self.updown_cnt_mdl.load_model(os.path.join(model_dir, "updown_concat_xgb.model"))
 
-        self.page_from = 0
-        self.column_num = 1
+    self.page_from = 0
+    self.column_num = 1
 ```
 
 New string:
@@ -1627,50 +1652,58 @@ New string:
 Old string (verified exact, full method `_updown_concat_features`):
 
 ```python
-    def _updown_concat_features(self, up, down):
-        w = max(self.__char_width(up), self.__char_width(down))
-        h = max(self.__height(up), self.__height(down))
-        y_dis = self._y_dis(up, down)
-        LEN = 6
-        tks_down = rag_tokenizer.tokenize(down["text"][:LEN]).split()
-        tks_up = rag_tokenizer.tokenize(up["text"][-LEN:]).split()
-        tks_all = up["text"][-LEN:].strip() + (" " if re.match(r"[a-zA-Z0-9]+", up["text"][-1] + down["text"][0]) else "") + down["text"][:LEN].strip()
-        tks_all = rag_tokenizer.tokenize(tks_all).split()
-        fea = [
-            up.get("R", -1) == down.get("R", -1),
-            y_dis / h,
-            down["page_number"] - up["page_number"],
-            up["layout_type"] == down["layout_type"],
-            up["layout_type"] == "text",
-            down["layout_type"] == "text",
-            up["layout_type"] == "table",
-            down["layout_type"] == "table",
-            True if re.search(r"([。？！；!?;+)）]|[a-z]\.)$", up["text"]) else False,
-            True if re.search(r"[，：‘“、0-9（+-]$", up["text"]) else False,
-            True if re.search(r"(^.?[/,?;:\]，。；：’”？！》】）-])", down["text"]) else False,
-            True if re.match(r"[\(（][^\(\)（）]+[）\)]$", up["text"]) else False,
-            True if re.search(r"[，,][^。.]+$", up["text"]) else False,
-            True if re.search(r"[，,][^。.]+$", up["text"]) else False,
-            True if re.search(r"[\(（][^\)）]+$", up["text"]) and re.search(r"[\)）]", down["text"]) else False,
-            self._match_proj(down),
-            True if re.match(r"[A-Z]", down["text"]) else False,
-            True if re.match(r"[A-Z]", up["text"][-1]) else False,
-            True if re.match(r"[a-z0-9]", up["text"][-1]) else False,
-            True if re.match(r"[0-9.%,-]+$", down["text"]) else False,
-            up["text"].strip()[-2:] == down["text"].strip()[-2:] if len(up["text"].strip()) > 1 and len(down["text"].strip()) > 1 else False,
-            up["x0"] > down["x1"],
-            abs(self.__height(up) - self.__height(down)) / min(self.__height(up), self.__height(down)),
-            self._x_dis(up, down) / max(w, 0.000001),
-            (len(up["text"]) - len(down["text"])) / max(len(up["text"]), len(down["text"])),
-            len(tks_all) - len(tks_up) - len(tks_down),
-            len(tks_down) - len(tks_up),
-            tks_down[-1] == tks_up[-1] if tks_down and tks_up else False,
-            max(down["in_row"], up["in_row"]),
-            abs(down["in_row"] - up["in_row"]),
-            len(tks_down) == 1 and rag_tokenizer.tag(tks_down[0]).find("n") >= 0,
-            len(tks_up) == 1 and rag_tokenizer.tag(tks_up[0]).find("n") >= 0,
-        ]
-        return fea
+def _updown_concat_features(self, up, down):
+    w = max(self.__char_width(up), self.__char_width(down))
+    h = max(self.__height(up), self.__height(down))
+    y_dis = self._y_dis(up, down)
+    LEN = 6
+    tks_down = rag_tokenizer.tokenize(down["text"][:LEN]).split()
+    tks_up = rag_tokenizer.tokenize(up["text"][-LEN:]).split()
+    tks_all = (
+        up["text"][-LEN:].strip()
+        + (" " if re.match(r"[a-zA-Z0-9]+", up["text"][-1] + down["text"][0]) else "")
+        + down["text"][:LEN].strip()
+    )
+    tks_all = rag_tokenizer.tokenize(tks_all).split()
+    fea = [
+        up.get("R", -1) == down.get("R", -1),
+        y_dis / h,
+        down["page_number"] - up["page_number"],
+        up["layout_type"] == down["layout_type"],
+        up["layout_type"] == "text",
+        down["layout_type"] == "text",
+        up["layout_type"] == "table",
+        down["layout_type"] == "table",
+        True if re.search(r"([。？！；!?;+)）]|[a-z]\.)$", up["text"]) else False,
+        True if re.search(r"[，：‘“、0-9（+-]$", up["text"]) else False,
+        True if re.search(r"(^.?[/,?;:\]，。；：’”？！》】）-])", down["text"]) else False,
+        True if re.match(r"[\(（][^\(\)（）]+[）\)]$", up["text"]) else False,
+        True if re.search(r"[，,][^。.]+$", up["text"]) else False,
+        True if re.search(r"[，,][^。.]+$", up["text"]) else False,
+        True
+        if re.search(r"[\(（][^\)）]+$", up["text"]) and re.search(r"[\)）]", down["text"])
+        else False,
+        self._match_proj(down),
+        True if re.match(r"[A-Z]", down["text"]) else False,
+        True if re.match(r"[A-Z]", up["text"][-1]) else False,
+        True if re.match(r"[a-z0-9]", up["text"][-1]) else False,
+        True if re.match(r"[0-9.%,-]+$", down["text"]) else False,
+        up["text"].strip()[-2:] == down["text"].strip()[-2:]
+        if len(up["text"].strip()) > 1 and len(down["text"].strip()) > 1
+        else False,
+        up["x0"] > down["x1"],
+        abs(self.__height(up) - self.__height(down)) / min(self.__height(up), self.__height(down)),
+        self._x_dis(up, down) / max(w, 0.000001),
+        (len(up["text"]) - len(down["text"])) / max(len(up["text"]), len(down["text"])),
+        len(tks_all) - len(tks_up) - len(tks_down),
+        len(tks_down) - len(tks_up),
+        tks_down[-1] == tks_up[-1] if tks_down and tks_up else False,
+        max(down["in_row"], up["in_row"]),
+        abs(down["in_row"] - up["in_row"]),
+        len(tks_down) == 1 and rag_tokenizer.tag(tks_down[0]).find("n") >= 0,
+        len(tks_up) == 1 and rag_tokenizer.tag(tks_up[0]).find("n") >= 0,
+    ]
+    return fea
 ```
 
 New string: (delete entirely)
@@ -1678,109 +1711,113 @@ New string: (delete entirely)
 Old string (verified exact, `_concat_downward`'s dead tail — keep only the method's first two live lines):
 
 ```python
-    def _concat_downward(self, concat_between_pages=True):
-        self.boxes = Recognizer.sort_Y_firstly(self.boxes, 0)
-        return
+def _concat_downward(self, concat_between_pages=True):
+    self.boxes = Recognizer.sort_Y_firstly(self.boxes, 0)
+    return
 
-        # count boxes in the same row as a feature
-        for i in range(len(self.boxes)):
-            mh = self.mean_height[self.boxes[i]["page_number"] - 1]
-            self.boxes[i]["in_row"] = 0
-            j = max(0, i - 12)
-            while j < min(i + 12, len(self.boxes)):
-                if j == i:
-                    j += 1
-                    continue
-                ydis = self._y_dis(self.boxes[i], self.boxes[j]) / mh
-                if abs(ydis) < 1:
-                    self.boxes[i]["in_row"] += 1
-                elif ydis > 0:
-                    break
+    # count boxes in the same row as a feature
+    for i in range(len(self.boxes)):
+        mh = self.mean_height[self.boxes[i]["page_number"] - 1]
+        self.boxes[i]["in_row"] = 0
+        j = max(0, i - 12)
+        while j < min(i + 12, len(self.boxes)):
+            if j == i:
                 j += 1
-
-        # concat between rows
-        boxes = deepcopy(self.boxes)
-        blocks = []
-        while boxes:
-            chunks = []
-
-            def dfs(up, dp):
-                chunks.append(up)
-                i = dp
-                while i < min(dp + 12, len(boxes)):
-                    ydis = self._y_dis(up, boxes[i])
-                    smpg = up["page_number"] == boxes[i]["page_number"]
-                    mh = self.mean_height[up["page_number"] - 1]
-                    mw = self.mean_width[up["page_number"] - 1]
-                    if smpg and ydis > mh * 4:
-                        break
-                    if not smpg and ydis > mh * 16:
-                        break
-                    down = boxes[i]
-                    if not concat_between_pages and down["page_number"] > up["page_number"]:
-                        break
-
-                    if up.get("R", "") != down.get("R", "") and up["text"][-1] != "，":
-                        i += 1
-                        continue
-
-                    if re.match(r"[0-9]{2,3}/[0-9]{3}$", up["text"]) or re.match(r"[0-9]{2,3}/[0-9]{3}$", down["text"]) or not down["text"].strip():
-                        i += 1
-                        continue
-
-                    if not down["text"].strip() or not up["text"].strip():
-                        i += 1
-                        continue
-
-                    if up["x1"] < down["x0"] - 10 * mw or up["x0"] > down["x1"] + 10 * mw:
-                        i += 1
-                        continue
-
-                    if i - dp < 5 and up.get("layout_type") == "text":
-                        if up.get("layoutno", "1") == down.get("layoutno", "2"):
-                            dfs(down, i + 1)
-                            boxes.pop(i)
-                            return
-                        i += 1
-                        continue
-
-                    fea = self._updown_concat_features(up, down)
-                    if self.updown_cnt_mdl.predict(xgb.DMatrix([fea]))[0] <= 0.5:
-                        i += 1
-                        continue
-                    dfs(down, i + 1)
-                    boxes.pop(i)
-                    return
-
-            dfs(boxes[0], 1)
-            boxes.pop(0)
-            if chunks:
-                blocks.append(chunks)
-
-        # concat within each block
-        boxes = []
-        for b in blocks:
-            if len(b) == 1:
-                boxes.append(b[0])
                 continue
-            t = b[0]
-            for c in b[1:]:
-                t["text"] = t["text"].strip()
-                c["text"] = c["text"].strip()
-                if not c["text"]:
-                    continue
-                if t["text"] and re.match(r"[0-9\.a-zA-Z]+$", t["text"][-1] + c["text"][-1]):
-                    t["text"] += " "
-                t["text"] += c["text"]
-                t["x0"] = min(t["x0"], c["x0"])
-                t["x1"] = max(t["x1"], c["x1"])
-                t["page_number"] = min(t["page_number"], c["page_number"])
-                t["bottom"] = c["bottom"]
-                if not t["layout_type"] and c["layout_type"]:
-                    t["layout_type"] = c["layout_type"]
-            boxes.append(t)
+            ydis = self._y_dis(self.boxes[i], self.boxes[j]) / mh
+            if abs(ydis) < 1:
+                self.boxes[i]["in_row"] += 1
+            elif ydis > 0:
+                break
+            j += 1
 
-        self.boxes = Recognizer.sort_Y_firstly(boxes, 0)
+    # concat between rows
+    boxes = deepcopy(self.boxes)
+    blocks = []
+    while boxes:
+        chunks = []
+
+        def dfs(up, dp):
+            chunks.append(up)
+            i = dp
+            while i < min(dp + 12, len(boxes)):
+                ydis = self._y_dis(up, boxes[i])
+                smpg = up["page_number"] == boxes[i]["page_number"]
+                mh = self.mean_height[up["page_number"] - 1]
+                mw = self.mean_width[up["page_number"] - 1]
+                if smpg and ydis > mh * 4:
+                    break
+                if not smpg and ydis > mh * 16:
+                    break
+                down = boxes[i]
+                if not concat_between_pages and down["page_number"] > up["page_number"]:
+                    break
+
+                if up.get("R", "") != down.get("R", "") and up["text"][-1] != "，":
+                    i += 1
+                    continue
+
+                if (
+                    re.match(r"[0-9]{2,3}/[0-9]{3}$", up["text"])
+                    or re.match(r"[0-9]{2,3}/[0-9]{3}$", down["text"])
+                    or not down["text"].strip()
+                ):
+                    i += 1
+                    continue
+
+                if not down["text"].strip() or not up["text"].strip():
+                    i += 1
+                    continue
+
+                if up["x1"] < down["x0"] - 10 * mw or up["x0"] > down["x1"] + 10 * mw:
+                    i += 1
+                    continue
+
+                if i - dp < 5 and up.get("layout_type") == "text":
+                    if up.get("layoutno", "1") == down.get("layoutno", "2"):
+                        dfs(down, i + 1)
+                        boxes.pop(i)
+                        return
+                    i += 1
+                    continue
+
+                fea = self._updown_concat_features(up, down)
+                if self.updown_cnt_mdl.predict(xgb.DMatrix([fea]))[0] <= 0.5:
+                    i += 1
+                    continue
+                dfs(down, i + 1)
+                boxes.pop(i)
+                return
+
+        dfs(boxes[0], 1)
+        boxes.pop(0)
+        if chunks:
+            blocks.append(chunks)
+
+    # concat within each block
+    boxes = []
+    for b in blocks:
+        if len(b) == 1:
+            boxes.append(b[0])
+            continue
+        t = b[0]
+        for c in b[1:]:
+            t["text"] = t["text"].strip()
+            c["text"] = c["text"].strip()
+            if not c["text"]:
+                continue
+            if t["text"] and re.match(r"[0-9\.a-zA-Z]+$", t["text"][-1] + c["text"][-1]):
+                t["text"] += " "
+            t["text"] += c["text"]
+            t["x0"] = min(t["x0"], c["x0"])
+            t["x1"] = max(t["x1"], c["x1"])
+            t["page_number"] = min(t["page_number"], c["page_number"])
+            t["bottom"] = c["bottom"]
+            if not t["layout_type"] and c["layout_type"]:
+                t["layout_type"] = c["layout_type"]
+        boxes.append(t)
+
+    self.boxes = Recognizer.sort_Y_firstly(boxes, 0)
 ```
 
 New string:
@@ -1959,7 +1996,17 @@ def test_process_document_returns_normalized_result(tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")
     fake_parser = _FakeParser(
-        [{"page_number": 1, "layout_type": "title", "text": "Title", "x0": 0, "x1": 1, "top": 0, "bottom": 1}]
+        [
+            {
+                "page_number": 1,
+                "layout_type": "title",
+                "text": "Title",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            }
+        ]
     )
     engine = DeepDocEngine(parser=fake_parser)
 
@@ -1977,8 +2024,24 @@ def test_process_document_joins_page_markdown(tmp_path):
     pdf_path.write_bytes(b"%PDF-1.4")
     fake_parser = _FakeParser(
         [
-            {"page_number": 1, "layout_type": "text", "text": "one", "x0": 0, "x1": 1, "top": 0, "bottom": 1},
-            {"page_number": 2, "layout_type": "text", "text": "two", "x0": 0, "x1": 1, "top": 0, "bottom": 1},
+            {
+                "page_number": 1,
+                "layout_type": "text",
+                "text": "one",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            },
+            {
+                "page_number": 2,
+                "layout_type": "text",
+                "text": "two",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            },
         ]
     )
     engine = DeepDocEngine(parser=fake_parser)
@@ -1993,7 +2056,17 @@ def test_process_yields_page_results(tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")
     fake_parser = _FakeParser(
-        [{"page_number": 1, "layout_type": "text", "text": "hi", "x0": 0, "x1": 1, "top": 0, "bottom": 1}]
+        [
+            {
+                "page_number": 1,
+                "layout_type": "text",
+                "text": "hi",
+                "x0": 0,
+                "x1": 1,
+                "top": 0,
+                "bottom": 1,
+            }
+        ]
     )
     engine = DeepDocEngine(parser=fake_parser)
 
@@ -2018,7 +2091,7 @@ def test_missing_deepdoc_extra_raises_actionable_import_error(tmp_path, monkeypa
     real_import = builtins.__import__
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
-    with pytest.raises(ImportError, match='langparse\\[deepdoc\\]'):
+    with pytest.raises(ImportError, match="langparse\\[deepdoc\\]"):
         engine.process_document(pdf_path)
 ```
 
@@ -2056,7 +2129,9 @@ class DeepDocEngine(BasePDFEngine):
         **kwargs: Any,
     ):
         if device != "cpu":
-            raise ValueError(f"DeepDocEngine only supports device='cpu' in this version, got: {device!r}")
+            raise ValueError(
+                f"DeepDocEngine only supports device='cpu' in this version, got: {device!r}"
+            )
         self.device = device
         self.model_dir = model_dir
         self.download_dir = download_dir
@@ -2234,13 +2309,13 @@ PLANNED_ENGINES = {
 In `langparse/parsers/pdf_parser.py`, old string (verified exact):
 
 ```python
-        engine: Literal["simple", "mineru"] = None,
+engine: Literal["simple", "mineru"] = (None,)
 ```
 
 New string:
 
 ```python
-        engine: Literal["simple", "mineru", "deepdoc"] = None,
+engine: Literal["simple", "mineru", "deepdoc"] = (None,)
 ```
 
 - [ ] **Step 4: Add `deepdoc` config defaults and env vars**

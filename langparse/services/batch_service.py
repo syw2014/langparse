@@ -126,6 +126,8 @@ class BatchParseService:
                 "base_url",
                 "workbook_disambiguation",
                 "disambiguation",
+                "chunk_strategy",
+                "chunk_options",
             )
         }
         engine = self.parse_service.create_engine(engine_name, **engine_kwargs)

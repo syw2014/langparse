@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from langparse import __version__
+from langparse.chunkers.registry import available_chunkers
 from langparse.errors import classify_exception
 from langparse.progress import ProgressEvent
 from langparse.services.batch_service import BatchParseService
@@ -44,7 +45,7 @@ def build_parser():
     parse_cmd.add_argument("--model-source", default=None)
     parse_cmd.add_argument("--auto-install-runtime", action="store_true")
     parse_cmd.add_argument("--runtime-package", default=None)
-    parse_cmd.add_argument("--format", default="markdown")
+    parse_cmd.add_argument("--format", default="markdown", help="markdown, json, or workbook-json")
     parse_cmd.add_argument("--batch", action="store_true")
     parse_cmd.add_argument("--output", default=None)
     parse_cmd.add_argument("--output-dir", default=None)
@@ -57,6 +58,14 @@ def build_parser():
         action="store_true",
         help="semantically chunk the parsed document and include chunks in the output",
     )
+    parse_cmd.add_argument("--chunk-strategy", choices=available_chunkers(), default=None)
+    parse_cmd.add_argument(
+        "--chunk-size",
+        type=int,
+        default=None,
+        help="strategy size budget (lexical tokens for fixed-token, characters otherwise)",
+    )
+    parse_cmd.add_argument("--chunk-overlap", type=int, default=None)
     parse_cmd.add_argument(
         "--chunk-profile",
         choices=["retrieval", "analysis"],
@@ -242,6 +251,20 @@ def _run(args, parser) -> int:
         if value is not None and value is not False
     }
     chunk_kwargs = {"chunk_profile": args.chunk_profile} if args.chunk else {}
+    if any(
+        value is not None for value in (args.chunk_strategy, args.chunk_size, args.chunk_overlap)
+    ):
+        if not args.chunk:
+            parser.error("chunk strategy/size/overlap options require --chunk")
+        chunk_kwargs["chunk_strategy"] = args.chunk_strategy or "semantic"
+        chunk_kwargs["chunk_options"] = {
+            key: value
+            for key, value in {
+                "max_chunk_size": args.chunk_size,
+                "overlap": args.chunk_overlap,
+            }.items()
+            if value is not None
+        }
     if args.progress:
         parse_kwargs["progress_callback"] = _print_progress
 

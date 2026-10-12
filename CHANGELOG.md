@@ -7,12 +7,40 @@ the pre-release development history.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-10
+
+### Changed
+
+- Use a dedicated PyPI description with runnable examples, optional-extra installation,
+  Workbook Bundle queries, and absolute documentation links.
+- Correct outdated release wording in the repository README; parsing behavior is unchanged.
+
+## [0.1.0] - 2026-10-10
+
 ### Added
 
-- Optional immutable progress events for parsing and concurrent batches, with
-  PDF page/engine progress, Excel stages, callback failure isolation, and CLI
-  `--progress` output on stderr. Unknown progress remains unspecified; no new
-  core dependencies or persisted task service.
+- Workbook reference facts and conservative dependency queries; chart/image semantic blocks
+  with source evidence and partial-result diagnostics.
+- Versioned Workbook Bundle v1, queries, `workbook-json` CLI export and frozen compatibility fixture.
+- Fixed-token and sliding-window chunkers, registry and CLI options; repository Agent Skill.
+- Optional formula/name/table/visibility/dependency truth metrics and Bundle contract metrics.
+- Optional immutable progress events for PDF, Excel and concurrent batches; CLI `--progress`
+  writes to stderr, with callback failure isolation and no new core dependencies.
+
+### Fixed
+
+- Update five vulnerable optional dependencies and require pypdf >=6.19.0.
+- Classify typed timeout causes without misclassifying invalid timeout options.
+- Preserve drawing-reader loss and unresolved chart source diagnostics; unify repository Ruff gates.
+- Preserve quoted Sheet names, avoid quadratic scans for direct formula dependencies, and reject
+  Bundle inputs missing query fields.
+
+### Release scope
+
+- Core runtime dependencies remain empty. Format/model support is installed through extras.
+- Rich Excel results cover OOXML; formulas are retained without evaluation or external-file access.
+- Existing real samples provide regression evidence; independent business holdout remains open.
+- See [v0.1.0 release scope](docs/RELEASE_0.1.0.md) for supported paths and known limits.
 
 ## [0.1.0rc2] - 2026-09-08
 

@@ -342,9 +342,7 @@ block ranges.
 Assert:
 
 ```python
-assert [chunk.metadata["chunk_type"] for chunk in chunks] == [
-    "form_fields", "table_rows"
-]
+assert [chunk.metadata["chunk_type"] for chunk in chunks] == ["form_fields", "table_rows"]
 assert form_chunk.metadata["field_ids"]
 assert matrix_chunk.metadata["matrix_id"]
 assert text_chunk.metadata["text_id"]

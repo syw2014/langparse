@@ -778,9 +778,7 @@ def test_auto_falls_back_and_sanitizes_operational_failures(failure):
     case = ambiguity_case_fixture()
     adapter = ScriptedAdapter.failure(case, failure, secret="private cell body")
 
-    result = WorkbookRegionDisambiguator().resolve(
-        [case], WorkbookDisambiguation.auto(adapter)
-    )
+    result = WorkbookRegionDisambiguator().resolve([case], WorkbookDisambiguation.auto(adapter))
 
     resolution = result.resolutions[0]
     assert resolution.choice_id == case.fallback_choice_id
@@ -823,9 +821,7 @@ def test_required_collects_unresolved_cases_in_a_typed_error():
     adapter = ScriptedAdapter.abstained(case)
 
     with pytest.raises(RequiredWorkbookDisambiguationError) as caught:
-        WorkbookRegionDisambiguator().resolve(
-            [case], WorkbookDisambiguation.required(adapter)
-        )
+        WorkbookRegionDisambiguator().resolve([case], WorkbookDisambiguation.required(adapter))
 
     assert caught.value.case_ids == (case.case_id,)
     assert caught.value.diagnostics.model_calls[0]["outcome"] == "abstained"
@@ -998,9 +994,7 @@ In `tests/test_excel_model_modes.py`, save a real `.xlsx` sparse workbook. Patch
 ```python
 def test_excel_parser_does_not_swallow_required_disambiguation_failure(tmp_path):
     path = sparse_workbook(tmp_path)
-    parser = ExcelParser(
-        disambiguation=WorkbookDisambiguation.required(AbstainingAdapter())
-    )
+    parser = ExcelParser(disambiguation=WorkbookDisambiguation.required(AbstainingAdapter()))
 
     with pytest.raises(RequiredWorkbookDisambiguationError):
         parser.parse_result(path)
@@ -1065,8 +1059,7 @@ except Exception as exc:
     structure, diagnostics = assemble_baseline(snapshot)
     diagnostics.status = "partial"
     diagnostics.warnings.append(
-        "Semantic workbook assembly failed; retained raw-grid fallback: "
-        f"{type(exc).__name__}"
+        f"Semantic workbook assembly failed; retained raw-grid fallback: {type(exc).__name__}"
     )
 ```
 
@@ -1240,12 +1233,12 @@ def test_model_diagnostics_are_deterministic_and_json_serializable(tmp_path):
     first_adapter = SelectingAdapter(kind="text")
     second_adapter = SelectingAdapter(kind="text")
 
-    first = ExcelParser(
-        disambiguation=WorkbookDisambiguation.auto(first_adapter)
-    ).parse_result(path)
-    second = ExcelParser(
-        disambiguation=WorkbookDisambiguation.auto(second_adapter)
-    ).parse_result(path)
+    first = ExcelParser(disambiguation=WorkbookDisambiguation.auto(first_adapter)).parse_result(
+        path
+    )
+    second = ExcelParser(disambiguation=WorkbookDisambiguation.auto(second_adapter)).parse_result(
+        path
+    )
 
     first_json = ParseService().render_output(first, "json")
     second_json = ParseService().render_output(second, "json")

@@ -175,3 +175,20 @@ def test_incorrect_object_fact_reduces_precision_and_recall():
 
     assert metrics.object_fact_precision == 0.0
     assert metrics.object_fact_recall == 0.0
+
+
+def test_bundle_source_and_structure_contract_is_scored(tmp_path: Path):
+    from langparse.parsers.excel_parser import ExcelParser
+    from langparse.workbooks.quality.evaluator import evaluate_workbook_result
+
+    path = tmp_path / "table.xlsx"
+    _write_table(path)
+    expected = _load_expectation(tmp_path, path)
+    parsed = ExcelParser().parse_result(path)
+    score = evaluate_workbook_result(expected, parsed)
+    assert score.bundle_source_ref_completeness == 1.0
+    assert score.bundle_structure_recall == 1.0
+    assert score.bundle_roundtrip_stability == 1.0
+    parsed.structure.sheets[0].blocks[0].source_refs.clear()
+    score = evaluate_workbook_result(expected, parsed)
+    assert score.bundle_structure_recall == 0.0

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
 
 from openpyxl.utils import get_column_letter, range_boundaries
 
@@ -18,6 +19,7 @@ from langparse.workbooks.types import (
     LogicalTable,
     MatrixBlock,
     MatrixHeader,
+    SourceRef,
     TableContinuation,
     TextBlock,
     TextLine,
@@ -113,6 +115,18 @@ class WorkbookStructuralChunker:
                 sheet_snapshot.visibility if sheet_snapshot is not None else sheet_ir.visibility
             )
             chunk.metadata["hidden_row_numbers"] = sorted(referenced_rows & hidden_rows)
+            if self.policy.analysis_records:
+                lineage = workbook_ir.lineage
+                dependencies = []
+                for source in chunk.metadata["source_ranges"]:
+                    name, cell_range = source.rsplit("!", 1)
+                    for edge in (
+                        lineage.dependencies_of(SourceRef(name, cell_range)) if lineage else []
+                    ):
+                        payload = asdict(edge)
+                        if payload not in dependencies:
+                            dependencies.append(payload)
+                chunk.structured_payload["dependencies"] = dependencies
 
     def _validate_chunks(self, parsed: ParsedDocumentResult, chunks: list[Chunk]) -> None:
         workbook_ir = parsed.structure
@@ -141,7 +155,12 @@ class WorkbookStructuralChunker:
         for chunk in chunks:
             source_ranges = chunk.metadata["source_ranges"]
             for source_range in source_ranges:
-                _source_range_is_valid(workbook_ir.snapshot, source_range)
+                if chunk.metadata["chunk_type"] in {"chart", "image"}:
+                    from langparse.workbooks.objects import validate_object_source
+
+                    validate_object_source(workbook_ir.snapshot, source_range)
+                else:
+                    _source_range_is_valid(workbook_ir.snapshot, source_range)
             if chunk.metadata["chunk_type"] != "table_rows":
                 continue
             payload = chunk.structured_payload
@@ -167,6 +186,29 @@ class WorkbookStructuralChunker:
         block: WorkbookBlock,
         chunk_index_offset: int,
     ) -> list[Chunk]:
+        if block.kind in {"chart", "image"}:
+            from langparse.workbooks.objects import render_object
+
+            content = render_object(block)
+            metadata = document_metadata(parsed)
+            metadata.update(
+                {
+                    "chunk_type": block.kind,
+                    "chunk_index": chunk_index_offset,
+                    "sheet_name": sheet_name,
+                    "sheet_ordinal": sheet_ordinal,
+                    "source_ranges": [ref.key for ref in block.source_refs],
+                    "object_id": block.block_id,
+                    "oversized": self.length_function(content) > self.max_chunk_size,
+                }
+            )
+            return [
+                Chunk(
+                    content=content,
+                    metadata=metadata,
+                    structured_payload={"object": block.metadata["object"]},
+                )
+            ]
         if block.logical_table is not None:
             return self._chunk_logical_table(
                 parsed,

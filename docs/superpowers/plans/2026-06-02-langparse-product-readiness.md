@@ -435,12 +435,7 @@ def collect_parse_metrics(parsed: ParsedDocumentResult, elapsed_seconds: float) 
     page_count = len(parsed.pages)
     image_count = sum(len(page.images) for page in parsed.pages)
     table_count = sum(len(page.tables) for page in parsed.pages) or count_markdown_tables(markdown)
-    caption_count = sum(
-        1
-        for page in parsed.pages
-        for image in page.images
-        if image.get("caption")
-    )
+    caption_count = sum(1 for page in parsed.pages for image in page.images if image.get("caption"))
 
     return ParseMetrics(
         elapsed_seconds=round(elapsed_seconds, 4),
@@ -671,7 +666,9 @@ class BatchParseService:
 
         if worker_count == 1:
             items = [
-                self._run_one(path, output_dir, engine_name, fmt, skip_existing, fail_fast, **kwargs)
+                self._run_one(
+                    path, output_dir, engine_name, fmt, skip_existing, fail_fast, **kwargs
+                )
                 for path in paths
             ]
         else:
@@ -709,16 +706,38 @@ class BatchParseService:
             if not path.exists():
                 raise FileNotFoundError(f"File not found: {path}")
             if path.is_dir():
-                paths.extend(sorted(child for child in path.iterdir() if child.is_file() and child.suffix.lower() == ".pdf"))
+                paths.extend(
+                    sorted(
+                        child
+                        for child in path.iterdir()
+                        if child.is_file() and child.suffix.lower() == ".pdf"
+                    )
+                )
             else:
                 paths.append(path)
         return sorted(paths)
 
-    def _run_one(self, path: Path, output_dir: Path, engine_name: str, fmt: str, skip_existing: bool, fail_fast: bool, **kwargs) -> BatchItemResult:
+    def _run_one(
+        self,
+        path: Path,
+        output_dir: Path,
+        engine_name: str,
+        fmt: str,
+        skip_existing: bool,
+        fail_fast: bool,
+        **kwargs,
+    ) -> BatchItemResult:
         started_at = self._utc_now()
         output_path = output_dir / self._output_filename(path, fmt)
         if skip_existing and output_path.exists():
-            return BatchItemResult(source=str(path), status="skipped", output_path=str(output_path), engine=engine_name, started_at=started_at, finished_at=self._utc_now())
+            return BatchItemResult(
+                source=str(path),
+                status="skipped",
+                output_path=str(output_path),
+                engine=engine_name,
+                started_at=started_at,
+                finished_at=self._utc_now(),
+            )
 
         start = time.perf_counter()
         try:
@@ -728,17 +747,35 @@ class BatchParseService:
             output_path.write_text(rendered, encoding="utf-8")
             elapsed = time.perf_counter() - start
             metrics = collect_parse_metrics(parsed, elapsed)
-            return BatchItemResult(source=str(path), status="success", output_path=str(output_path), metrics=metrics, engine=engine_name, started_at=started_at, finished_at=self._utc_now())
+            return BatchItemResult(
+                source=str(path),
+                status="success",
+                output_path=str(output_path),
+                metrics=metrics,
+                engine=engine_name,
+                started_at=started_at,
+                finished_at=self._utc_now(),
+            )
         except Exception as exc:
             if fail_fast:
                 raise
             elapsed = time.perf_counter() - start
             classified = classify_exception(exc)
-            return BatchItemResult(source=str(path), status="failed", engine=engine_name, error_type=classified.error_type.value, error_message=classified.message, started_at=started_at, finished_at=self._utc_now())
+            return BatchItemResult(
+                source=str(path),
+                status="failed",
+                engine=engine_name,
+                error_type=classified.error_type.value,
+                error_message=classified.message,
+                started_at=started_at,
+                finished_at=self._utc_now(),
+            )
 
     def _build_summary(self, items: list[BatchItemResult]) -> dict:
         total_pages = sum((item.metrics.page_count if item.metrics else 0) for item in items)
-        total_elapsed = sum((item.metrics.elapsed_seconds if item.metrics else 0.0) for item in items)
+        total_elapsed = sum(
+            (item.metrics.elapsed_seconds if item.metrics else 0.0) for item in items
+        )
         return {
             "total_files": len(items),
             "success_count": sum(1 for item in items if item.status == "success"),
@@ -746,7 +783,9 @@ class BatchParseService:
             "skipped_count": sum(1 for item in items if item.status == "skipped"),
             "total_pages": total_pages,
             "total_elapsed_seconds": round(total_elapsed, 4),
-            "average_pages_per_second": round(total_pages / total_elapsed, 4) if total_elapsed > 0 else 0.0,
+            "average_pages_per_second": round(total_pages / total_elapsed, 4)
+            if total_elapsed > 0
+            else 0.0,
             "failed_sources": [item.source for item in items if item.status == "failed"],
         }
 
@@ -826,7 +865,9 @@ def test_quality_checks_pass_when_thresholds_met():
         image_count=1,
         page_marker_coverage=1.0,
     )
-    checks = QualityCheck(min_pages=3, min_chars=1000, min_tables=1, min_images=1, require_page_markers=True)
+    checks = QualityCheck(
+        min_pages=3, min_chars=1000, min_tables=1, min_images=1, require_page_markers=True
+    )
 
     result = run_quality_checks(metrics, checks)
 
@@ -926,11 +967,22 @@ def run_quality_checks(metrics: ParseMetrics, checks: QualityCheck) -> QualityCh
         failures.append("require_table_markdown")
     if checks.require_ocr_text and metrics.ocr_text_chars <= 0:
         failures.append("require_ocr_text")
-    if checks.require_multi_column_check and not metrics.multi_column_detected and metrics.reading_order_warnings == 0:
+    if (
+        checks.require_multi_column_check
+        and not metrics.multi_column_detected
+        and metrics.reading_order_warnings == 0
+    ):
         failures.append("require_multi_column_check")
-    if checks.require_captions_for_images and metrics.image_count > 0 and metrics.images_with_caption_ratio < 1.0:
+    if (
+        checks.require_captions_for_images
+        and metrics.image_count > 0
+        and metrics.images_with_caption_ratio < 1.0
+    ):
         failures.append("require_captions_for_images")
-    if checks.max_header_footer_repetition_ratio is not None and metrics.header_footer_removed_count == 0:
+    if (
+        checks.max_header_footer_repetition_ratio is not None
+        and metrics.header_footer_removed_count == 0
+    ):
         warnings.append("header_footer_filter_not_applied")
 
     return QualityCheckResult(passed=not failures, failures=failures, warnings=warnings)
@@ -977,13 +1029,17 @@ from langparse.services.benchmark_service import BenchmarkService
 
 
 class StubBatchService:
-    def run(self, inputs, engine_name="simple", output_dir="out", fmt="json", max_workers=1, **kwargs):
+    def run(
+        self, inputs, engine_name="simple", output_dir="out", fmt="json", max_workers=1, **kwargs
+    ):
         return BatchRunResult(
             items=[
                 BatchItemResult(
                     source=str(inputs[0]),
                     status="success",
-                    metrics=ParseMetrics(page_count=2, markdown_chars=2000, table_count=1, page_marker_coverage=1.0),
+                    metrics=ParseMetrics(
+                        page_count=2, markdown_chars=2000, table_count=1, page_marker_coverage=1.0
+                    ),
                     engine=engine_name,
                 )
             ]
@@ -1004,7 +1060,12 @@ def test_benchmark_service_loads_manifest_and_writes_reports(tmp_path):
                         "category": "paper",
                         "features": ["tables"],
                         "engine": "mineru",
-                        "checks": {"min_pages": 1, "min_chars": 10, "min_tables": 1, "require_page_markers": True},
+                        "checks": {
+                            "min_pages": 1,
+                            "min_chars": 10,
+                            "min_tables": 1,
+                            "require_page_markers": True,
+                        },
                     }
                 ]
             }
@@ -1012,7 +1073,9 @@ def test_benchmark_service_loads_manifest_and_writes_reports(tmp_path):
         encoding="utf-8",
     )
 
-    result = BenchmarkService(batch_service=StubBatchService()).run(manifest, output_dir=tmp_path / "reports")
+    result = BenchmarkService(batch_service=StubBatchService()).run(
+        manifest, output_dir=tmp_path / "reports"
+    )
 
     assert result["summary"]["total_samples"] == 1
     assert result["summary"]["quality_passed_count"] == 1
@@ -1049,7 +1112,15 @@ class BenchmarkService:
     def __init__(self, batch_service: BatchParseService | None = None):
         self.batch_service = batch_service or BatchParseService()
 
-    def run(self, manifest_path, output_dir="reports", engine_name: str | None = None, fmt: str = "json", max_workers: int = 1, **kwargs) -> dict:
+    def run(
+        self,
+        manifest_path,
+        output_dir="reports",
+        engine_name: str | None = None,
+        fmt: str = "json",
+        max_workers: int = 1,
+        **kwargs,
+    ) -> dict:
         manifest = self._load_manifest(manifest_path)
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1068,7 +1139,9 @@ class BenchmarkService:
             item = batch_result.items[0]
             quality = None
             if item.metrics is not None:
-                quality = run_quality_checks(item.metrics, self._quality_check_from_dict(sample.get("checks", {})))
+                quality = run_quality_checks(
+                    item.metrics, self._quality_check_from_dict(sample.get("checks", {}))
+                )
             rows.append(
                 {
                     "id": sample["id"],
@@ -1108,7 +1181,9 @@ class BenchmarkService:
             "quality_passed_count": sum(1 for row in quality_rows if row["quality"]["passed"]),
             "quality_failed_count": sum(1 for row in quality_rows if not row["quality"]["passed"]),
             "failed_samples": [row["id"] for row in rows if row["status"] == "failed"],
-            "quality_failed_samples": [row["id"] for row in quality_rows if not row["quality"]["passed"]],
+            "quality_failed_samples": [
+                row["id"] for row in quality_rows if not row["quality"]["passed"]
+            ],
             "pdf_quality_summary": self._pdf_quality_summary(rows),
         }
 
@@ -1119,7 +1194,9 @@ class BenchmarkService:
             "total_images": sum(item["image_count"] for item in metrics),
             "ocr_applied_count": sum(1 for item in metrics if item["ocr_applied"]),
             "reading_order_warning_count": sum(item["reading_order_warnings"] for item in metrics),
-            "header_footer_removed_count": sum(item["header_footer_removed_count"] for item in metrics),
+            "header_footer_removed_count": sum(
+                item["header_footer_removed_count"] for item in metrics
+            ),
         }
 
     def _write_jsonl(self, path: Path, rows: list[dict]) -> None:
@@ -1260,7 +1337,16 @@ def test_cli_main_batch_metrics_delegates_to_batch_service(monkeypatch):
     calls = []
 
     class FakeBatchService:
-        def run(self, inputs, engine_name="simple", output_dir="out", fmt="markdown", max_workers=None, skip_existing=False, **kwargs):
+        def run(
+            self,
+            inputs,
+            engine_name="simple",
+            output_dir="out",
+            fmt="markdown",
+            max_workers=None,
+            skip_existing=False,
+            **kwargs,
+        ):
             calls.append((inputs, engine_name, output_dir, fmt, max_workers, skip_existing, kwargs))
             return None
 
@@ -1292,7 +1378,15 @@ def test_cli_main_benchmark_delegates_to_benchmark_service(monkeypatch):
     calls = []
 
     class FakeBenchmarkService:
-        def run(self, manifest, output_dir="reports", engine_name=None, fmt="json", max_workers=1, **kwargs):
+        def run(
+            self,
+            manifest,
+            output_dir="reports",
+            engine_name=None,
+            fmt="json",
+            max_workers=1,
+            **kwargs,
+        ):
             calls.append((manifest, output_dir, engine_name, fmt, max_workers, kwargs))
             return {"summary": {"total_samples": 1}}
 
@@ -1561,8 +1655,8 @@ Modify `langparse/engines/pdf/simple.py` inside the page loop:
 Then update `PageResult`:
 
 ```python
-                    markdown_content=markdown_content,
-                    tables=tables,
+markdown_content = (markdown_content,)
+tables = (tables,)
 ```
 
 - [ ] **Step 5: Aggregate MinerU quality metadata**
@@ -1570,28 +1664,38 @@ Then update `PageResult`:
 Modify `langparse/engines/pdf/mineru.py` before returning `ParsedDocumentResult`:
 
 ```python
-        engine_specific_items = [page.metadata.get("engine_specific", {}) for page in pages]
-        quality_metadata = {
-            "ocr_applied": any(bool(item.get("ocr_applied")) for item in engine_specific_items),
-            "ocr_text_chars": sum(int(item.get("ocr_text_chars", 0) or 0) for item in engine_specific_items),
-            "multi_column_detected": any(bool(item.get("multi_column_detected")) for item in engine_specific_items),
-            "reading_order_warnings": sum(int(item.get("reading_order_warnings", 0) or 0) for item in engine_specific_items),
-            "header_footer_removed_count": sum(int(item.get("header_footer_removed_count", 0) or 0) for item in engine_specific_items),
-        }
+engine_specific_items = [page.metadata.get("engine_specific", {}) for page in pages]
+quality_metadata = {
+    "ocr_applied": any(bool(item.get("ocr_applied")) for item in engine_specific_items),
+    "ocr_text_chars": sum(
+        int(item.get("ocr_text_chars", 0) or 0) for item in engine_specific_items
+    ),
+    "multi_column_detected": any(
+        bool(item.get("multi_column_detected")) for item in engine_specific_items
+    ),
+    "reading_order_warnings": sum(
+        int(item.get("reading_order_warnings", 0) or 0) for item in engine_specific_items
+    ),
+    "header_footer_removed_count": sum(
+        int(item.get("header_footer_removed_count", 0) or 0) for item in engine_specific_items
+    ),
+}
 ```
 
 Update `ParsedDocumentResult.metadata`:
 
 ```python
-            metadata={
-                "device": runtime_config["device"],
-                "model_dir": runtime_config["model_dir"],
-                "download_dir": runtime_config["download_dir"],
-                "enable_ocr": runtime_config["enable_ocr"],
-                "model_policy": self.model_policy,
-                "model_source": self.model_source,
-                **quality_metadata,
-            },
+metadata = (
+    {
+        "device": runtime_config["device"],
+        "model_dir": runtime_config["model_dir"],
+        "download_dir": runtime_config["download_dir"],
+        "enable_ocr": runtime_config["enable_ocr"],
+        "model_policy": self.model_policy,
+        "model_source": self.model_source,
+        **quality_metadata,
+    },
+)
 ```
 
 - [ ] **Step 6: Run tests**

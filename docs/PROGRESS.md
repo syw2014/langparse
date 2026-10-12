@@ -1,10 +1,19 @@
 # LangParse 研发进度
 
-**版本**: 0.1.0rc2（候选版）
+**版本**: 0.1.0（GitHub 正式版本；PyPI 状态见发布工作流）
 **必需依赖**: 无（按格式安装 extras）
-**最后更新**: 2026-09-08
-**测试**: 813 passed，1 skipped；Ruff（`langparse tests scripts/verify_*.py`）lint
-`All checks passed!`，format `143 files already formatted`
+**最后更新**: 2026-10-10
+**验证范围**: 本轮按模块和具体用例回归，未运行全量测试；历史全量记录为
+2026-09-16 的 839 passed、1 skipped。本轮功能已合并，纳入 0.1.0。
+
+### 2026-10-10 问题修复
+
+- #9：名称、原生表、公式引用事实与血缘查询接入解析、分析 chunks 和质量指标；动态、外部及不支持引用保留诊断，不计算公式或读取外部文件。
+- #10：图表系列和跨 Sheet 来源、图片尺寸及锚点进入结构结果；损坏对象与无法解析的引用报告部分解析。图片语义增强仍按需扩展。
+- #11：[Workbook Bundle v1](WORKBOOK_BUNDLE.md) 提供版本化 JSON、查询、来源验证及 CLI `workbook-json`，包含冻结兼容样例和公开质量指标。
+- #4/#5：[分块策略](CHUNKING.md)、CLI 选择与注册表、[Agent Skill](../SKILLS.md) 及接入示例已实现。
+- 工程修复：超时分类采用异常类型与原因链；全仓 Ruff 门禁统一。核心依赖保持为空。
+- #7 独立业务 holdout 尚缺；#6 正式发布尚待验收与批准；#12 保持暂缓，#2/#3 按明确业务需要推进。
 
 > 本文档在 2026-07-30 按代码现状重写，并在 2026-09-02 依据实际业务价值
 > 重新明确产品定位：通用文档能力解决“易用、好用”，Excel 结构理解形成主要差异。
@@ -74,8 +83,7 @@ Excel 则不止提取文本，而是尽可能保留事实、恢复业务结构�
 包含回调故障隔离、并发通知及最终排序、失败/跳过/输出失败、阶段百分比与参数隔离测试。
 仓库公开 Excel 样本已实际验证单文件分块、两文件并发批处理和 CLI stdout JSON /
 stderr 进度分离。PDF 本轮通过模拟引擎测试，不代表重新验证模型推理或远程 MinerU 服务。
-`ruff check langparse tests` 和对应格式检查通过；仓库级检查仍有未改动的 examples /
-下载脚本中的 60 项 lint 问题及全局 17 个格式问题。该能力尚未发布。
+历史局部门禁已通过；全仓 lint/format 遗留问题已在 2026-10-10 修复。该能力纳入 0.1.0。
 
 ### Golden 验收与安装包收尾（2026-09-08）
 
@@ -172,11 +180,10 @@ langparse/
    相邻原生表、视觉分区、表单旁注、矩阵、重复打印页、跨 Sheet 延续、隐藏区域、公式、
    命名区域和图表事实，并以版本化 manifest、
    多维结构指标、真值 digest、不可变报告与 CLI 非零退出码阻止回归。已补充 6 份私有真实样本并冻结标注，发现的问题修复后全部通过回归。对外声明生产效果前，
-   仍需在未参与调参的代表性业务数据上验证放行阈值；公开合成 seed 不等于生产效果证明。公式、
-   命名区域和 Sheet 可见性目前只是 seed 中的语料锚点，尚未纳入 v1 指标，由 #9 补齐。
+   仍需在未参与调参的代表性业务数据上验证放行阈值；公开合成 seed 不等于生产效果证明。公式、名称、原生表、可见性和依赖关系已纳入 v2 指标；未提供真值时不评分。
 2. **P0：补齐更丰富的工作簿事实和结构**——优先评估富信息 `.xls/.xlsb`、图片/图表
-   语义 Block、命名区域及外部引用等真实业务缺口，保持事实层与语义层分离。
-3. **P0：稳定面向调用方的 Excel 消费契约**——提供版本化 bundle、明确的查询/导出
+   增强与未覆盖的引用形式等真实业务缺口，保持事实层与语义层分离。
+3. **P0：稳定面向调用方的 Excel 消费契约**——已提供版本化 bundle；持续维护明确的查询/导出
    路径和可操作诊断，让数据分析与 Agent 不必理解内部装配流程。
 4. **P1：持续降低通用工具集使用成本**——围绕安装体积、首个成功示例、错误提示、
    批处理和常用分块策略改进；独立 `FixedTokenChunker`、`SlidingWindowChunker`、
@@ -234,7 +241,7 @@ langparse/
      latency/cost/failure/privacy/rollback 的 operational evidence；这是部署验收门，不是
      当前复杂 Excel 功能缺失。
    - **可选未来扩展（不阻塞当前功能完成）**：局部截图/VLM、continuation/header hierarchy
-     的第二模型契约、富信息 `.xls/.xlsb` adapter、图片/图表语义 Block 和标准 bundle 输出。
+     的第二模型契约、富信息 `.xls/.xlsb` adapter 与图片语义增强。
 
 ### 通用工具集：已完成与待补工程明细
 
@@ -250,7 +257,7 @@ langparse/
    PDF 后端无法满足需求时才提升优先级。
 5. **标注语料 + 跨引擎量化对比**：定位为帮助用户在自己的语料上做工程选型的
    辅助能力，不作为产品叙事或近期主线。
-6. ✅ **已完成（2026-08-09）——OCR 兜底跨引擎一致性**：`ocr_applied`/`ocr_text_chars` 曾经在三个引擎里各表各的——`simple` 按"图片占比高+文本层薄"的启发式逐页判定；MinerU 转发它自己内部的判定结果；DeepDoc 因为无条件对每页跑 OCR，直接把文档级 `ocr_applied` 写死成 `True`、`ocr_text_chars` 算成全文本长度而非"真正靠 OCR 恢复的字符数"，导致 `quality.py` 的 `require_ocr_text` 质检和 `benchmark_service.py` 的 `ocr_applied_count` 对 DeepDoc 的产出完全失真（永远判定为"用了 OCR"）。现在 `DeepDocEngine` 另开一次 `pdfplumber` 读取，复用 `simple` 引擎同款的 `needs_ocr()` 启发式逐页独立判定（不改变 DeepDoc 内部实际跑 OCR 的时机），`render_pages()` 据此在页面级别补上这两个字段，文档级别按 MinerU 的 `any()`/`sum()` 方式汇总；新增的跨引擎测试用同一份合成的扫描页/原生数字页 fixture 驱动 simple 和 deepdoc，断言两者判定一致。MinerU 的判定结果仍然原样信任、不做二次校验，因为它来自我们不掌控内部逻辑的外部服务。已知局限：DeepDoc 内部对"原生文本层存在但乱码"（CID / 字体编码错乱）的页面也会走 OCR 重识别，这套外部启发式检测不到这个内部决策，这种窄场景下 `ocr_applied` 可能漏报为 `False`（最终文本输出不受影响，只是这个 metadata 信号在这种场景下不准）。另一个已知局限：`render_pages()` 的 `plain_text`（进而 `ocr_text_chars`）只累加表格/图片以外的正文片段，如果一个扫描页被 DeepDoc 判定为整页表格或图片，该页会报告 `ocr_applied=True` 但 `ocr_text_chars=0`——这不是本次改动引入的新问题（旧的硬编码逻辑同样有这个盲区），暂不修复，留作后续工作。
+6. ✅ **已完成（2026-08-09）——OCR 兜底跨引擎一致性**：`ocr_applied`/`ocr_text_chars` 曾经在三个引擎里各表各的——`simple` 按"图片占比高+文本层薄"的启发式逐页判定；MinerU 转发它自己内部的判定结果；DeepDoc 因为无条件对每页跑 OCR，直接把文档级 `ocr_applied` 写死成 `True`、`ocr_text_chars` 算成全文本长度而非"真正靠 OCR 恢复的字符数"，导致 `quality.py` 的 `require_ocr_text` 质检和 `benchmark_service.py` 的 `ocr_applied_count` 对 DeepDoc 的产出完全失真（永远判定为"用了 OCR"）。现在 `DeepDocEngine` 另开一次 `pdfplumber` 读取，复用 `simple` 引擎同款的 `needs_ocr()` 启发式逐页独立判定（不改变 DeepDoc 内部实际跑 OCR 的时机），`render_pages()` 据此在页面级别补上这两个字段，文档级别按 MinerU 的 `any()`/`sum()` 方式汇总；新增的跨引擎测试用同一份合成的扫描页/原生数字页 fixture 驱动 simple 和 deepdoc，断言两者判定一致。MinerU 的判定结果仍然原样信任、不做二次校验，因为它来自我们不掌控内部逻辑的外部服务。已知局限：DeepDoc 内部对"原生文本层存在但乱码"（CID / 字体编码错乱）的页面也会走 OCR 重识别，这套外部启发式检测不到这个内部决策，这种窄场景下 `ocr_applied` 可能漏报为 `False`（最终文本输出不受影响，只是这个 metadata 信号在这种场景下不准）。表格文字未进入 plain_text / OCR 字符计数的问题已于 2026-09-06 修复。
 
 ### 工程基建（不紧急）
 

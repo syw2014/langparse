@@ -326,17 +326,13 @@ Expected: FAIL because `ParseService` does not exist
 
 ```python
 class ParseService:
-    def expand_inputs(self, inputs):
-        ...
+    def expand_inputs(self, inputs): ...
 
-    def parse_file(self, file_path, engine_name="simple", **kwargs):
-        ...
+    def parse_file(self, file_path, engine_name="simple", **kwargs): ...
 
-    def parse_batch(self, inputs, engine_name="simple", **kwargs):
-        ...
+    def parse_batch(self, inputs, engine_name="simple", **kwargs): ...
 
-    def _build_document_from_result(self, parsed):
-        ...
+    def _build_document_from_result(self, parsed): ...
 ```
 
 - [ ] **Step 4: Move PDF document aggregation into the service layer**
@@ -421,7 +417,9 @@ def test_process_document_returns_normalized_result(monkeypatch, tmp_path):
     pdf_path.write_bytes(b"%PDF-1.4")
     engine = MinerUEngine(device="cpu", model_dir="/models")
     monkeypatch.setattr(engine, "_ensure_runtime", lambda: None)
-    monkeypatch.setattr(engine, "_run_mineru", lambda path: [{"page_number": 1, "markdown": "# Title"}])
+    monkeypatch.setattr(
+        engine, "_run_mineru", lambda path: [{"page_number": 1, "markdown": "# Title"}]
+    )
 
     parsed = engine.process_document(pdf_path)
 
@@ -547,8 +545,10 @@ def test_simple_engine_populates_plain_text_metadata(monkeypatch, tmp_path):
 
     class DummyPDF:
         pages = [DummyPage()]
+
         def __enter__(self):
             return self
+
         def __exit__(self, exc_type, exc, tb):
             return False
 
@@ -716,6 +716,7 @@ Expected: FAIL if `engine` kwargs remain duplicated or service wiring is incompl
 ```python
 if ext == ".pdf":
     from langparse.parsers.pdf_parser import PDFParser
+
     parser_engine = kwargs.pop("engine", "simple")
     parser = PDFParser(engine=parser_engine, **kwargs)
 ```

@@ -139,6 +139,16 @@ def build_parser():
     quality_cmd.add_argument(
         "--no-markdown", action="store_true", help="disable markdown summary output"
     )
+    quality_cmd.add_argument(
+        "--tuning-manifest",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help=(
+            "verify the evaluated holdout manifest shares no workbook with this tuning "
+            "manifest (repeatable); recorded in the report as split isolation provenance"
+        ),
+    )
     return parser
 
 
@@ -164,6 +174,7 @@ def _run(args, parser) -> int:
             args.manifest,
             output_dir=args.output_dir,
             markdown=not args.no_markdown,
+            tuning_manifests=tuple(args.tuning_manifest),
         )
         print(
             "langparse: workbook quality benchmark completed "

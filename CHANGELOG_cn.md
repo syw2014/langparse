@@ -6,6 +6,13 @@
 
 ## [未发布]
 
+### 新增
+
+- 工作簿质量数据集的 tuning/holdout 强制分离：`verify_split_isolation` 与
+  `benchmark-workbook-quality --tuning-manifest` 拒绝复用 tuning 内容或 tuning 源文件的
+  holdout 样本，并在报告与 run digest 中记录不含路径和单元格内容的分离 provenance
+  （数据集标识、digest 与样本数）。
+
 ## [0.1.1] - 2026-10-10
 
 ### 调整

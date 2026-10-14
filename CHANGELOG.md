@@ -7,6 +7,13 @@ the pre-release development history.
 
 ## [Unreleased]
 
+### Added
+
+- Enforced tuning/holdout separation for workbook quality datasets: `verify_split_isolation`
+  and `benchmark-workbook-quality --tuning-manifest` reject a holdout sample that reuses tuning
+  content or a tuning source file, and record privacy-safe split isolation provenance
+  (dataset identifiers, digests and sample counts) in the report and its run digest.
+
 ## [0.1.1] - 2026-10-10
 
 ### Changed

@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import uuid
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from langparse.workbooks.quality.evaluator import (
     evaluate_workbook_result,
 )
 from langparse.workbooks.quality.schema import load_workbook_quality_manifest
+from langparse.workbooks.quality.splits import verify_split_isolation
 
 
 class WorkbookQualityReportError(RuntimeError):
@@ -44,10 +46,18 @@ class WorkbookQualityBenchmarkService:
         *,
         output_dir: str | Path,
         markdown: bool = True,
+        tuning_manifests: Sequence[str | Path] = (),
     ) -> WorkbookQualityBenchmarkReport:
         manifest = load_workbook_quality_manifest(manifest_path)
         output_root = Path(output_dir).resolve()
         validate_output_dir_isolation(manifest.source_root, output_root)
+
+        split_isolation: dict[str, Any] | None = None
+        if tuning_manifests:
+            split_isolation = verify_split_isolation(
+                manifest,
+                tuple(load_workbook_quality_manifest(path) for path in tuning_manifests),
+            ).as_payload()
 
         sample_results: list[dict[str, Any]] = []
         for sample in manifest.samples:
@@ -93,6 +103,9 @@ class WorkbookQualityBenchmarkService:
             "artifact_options": {"markdown": markdown},
             "results": sample_results,
         }
+        if split_isolation is not None:
+            # Only present for verified holdout runs, so tuning run digests stay stable.
+            run_payload["split_isolation"] = split_isolation
         run_digest = _payload_digest(run_payload)
         summary = {
             "schema_version": 1,
@@ -110,6 +123,8 @@ class WorkbookQualityBenchmarkService:
             "status": "passed" if not gate_reasons else "failed",
             "run_digest": run_digest,
         }
+        if split_isolation is not None:
+            summary["split_isolation"] = split_isolation
         run_dir = output_root / run_digest.removeprefix("sha256:")
         _publish_report(run_dir, sample_results, summary, markdown=markdown)
         return WorkbookQualityBenchmarkReport(
@@ -220,6 +235,15 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
         f"- **Status**: {summary['status']}",
         f"- **Run Digest**: {summary['run_digest']}",
         f"- **Gate Reasons**: {', '.join(summary['gate_reasons']) or 'none'}",
+    ]
+    isolation = summary.get("split_isolation")
+    if isolation is not None:
+        references = ", ".join(
+            f"{reference['dataset_id']}@{reference['dataset_version']}"
+            for reference in isolation["tuning_datasets"]
+        )
+        lines.append(f"- **Split Isolation Verified Against**: {references}")
+    lines += [
         "",
         "## Metrics",
         "",

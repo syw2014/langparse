@@ -36,6 +36,26 @@ manifest/文件/执行错误返回 `2`。报告按 manifest 真值、样本哈�
 `split: holdout` 的私有 manifest，原始工作簿不进入仓库；公开报告只包含 sample ID、
 文件哈希和聚合/逐样本指标，不写入单元格值或标注内容。
 
+## tuning / holdout 分离
+
+`split` 字段只表达意图。跑私有 holdout 时用 `--tuning-manifest` 传入它必须保持互斥的
+tuning manifest（可重复），评测会在解析任何文件之前核对两边不共用同一份工作簿——既比
+内容哈希，也比解析后的源文件路径：
+
+```bash
+langparse benchmark-workbook-quality private/holdout-manifest.json \
+  --tuning-manifest samples/workbook_quality/public-manifest.json \
+  --output-dir reports/workbook-quality-holdout
+```
+
+被评测 manifest 不是 `split: holdout`、参照 manifest 不是 `split: tuning`、同一 tuning
+数据集重复传入，或任何样本跨 split 复用，都直接报错退出 `2`，不会产出报告。
+
+校验通过时报告写入 `split_isolation` provenance：holdout 的 dataset ID/版本/digest 与样本
+数，以及每个参照 tuning 数据集的 ID/版本/digest 与样本数。这段 provenance 只含标识符与
+计数，不含路径或单元格内容，并参与 run digest，所以换一套 tuning 参照就是另一次运行。
+未传 `--tuning-manifest` 时报告不含该字段，既有 tuning 基线 digest 保持不变。
+
 如需修改公开 fixture，请编辑 `build_seed.py` 中的人工真值并重新生成：
 
 ```bash
